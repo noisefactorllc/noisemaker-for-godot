@@ -53,6 +53,43 @@ float getWeight(int dx, int dy, int kernelType) {
 	}
 }
 
+// Contour: mark a level-crossing where sign(c - level) differs from any of the 4
+// cardinal neighbors (Photoshop Trace Contour). Returns a binary vec3: 1.0 =
+// background (white), 0.0 = contour line (dark). Sync reference 7207d92b.
+vec3 contourConv(vec2 uv, vec2 texelSize, vec3 centerRGB, float lvl, bool useLuma) {
+	vec3 northRGB = texture(inputTex, uv + vec2(0.0,  1.0) * texelSize).rgb;
+	vec3 southRGB = texture(inputTex, uv + vec2(0.0, -1.0) * texelSize).rgb;
+	vec3 eastRGB  = texture(inputTex, uv + vec2( 1.0, 0.0) * texelSize).rgb;
+	vec3 westRGB  = texture(inputTex, uv + vec2(-1.0, 0.0) * texelSize).rgb;
+
+	if (useLuma) {
+		float centerL = dot(centerRGB, LUMA);
+		float centerSign = sign(centerL - lvl);
+		bool crossing = centerSign != sign(dot(northRGB, LUMA) - lvl) ||
+		                centerSign != sign(dot(southRGB, LUMA) - lvl) ||
+		                centerSign != sign(dot(eastRGB, LUMA) - lvl)  ||
+		                centerSign != sign(dot(westRGB, LUMA) - lvl);
+		return vec3(crossing ? 0.0 : 1.0);
+	}
+
+	float signR = sign(centerRGB.r - lvl);
+	float signG = sign(centerRGB.g - lvl);
+	float signB = sign(centerRGB.b - lvl);
+
+	bool crossR = signR != sign(northRGB.r - lvl) || signR != sign(southRGB.r - lvl) ||
+	              signR != sign(eastRGB.r - lvl)  || signR != sign(westRGB.r - lvl);
+	bool crossG = signG != sign(northRGB.g - lvl) || signG != sign(southRGB.g - lvl) ||
+	              signG != sign(eastRGB.g - lvl)  || signG != sign(westRGB.g - lvl);
+	bool crossB = signB != sign(northRGB.b - lvl) || signB != sign(southRGB.b - lvl) ||
+	              signB != sign(eastRGB.b - lvl)  || signB != sign(westRGB.b - lvl);
+
+	return vec3(
+		crossR ? 0.0 : 1.0,
+		crossG ? 0.0 : 1.0,
+		crossB ? 0.0 : 1.0
+	);
+}
+
 // applyBlend — verbatim from WGSL.
 // WGSL select(false_val, true_val, cond) -> cond ? true_val : false_val (operands reversed).
 vec4 applyBlend(vec4 edge, vec4 orig, int mode) {
@@ -89,33 +126,38 @@ void main() {
 	vec3 conv = vec3(0.0);
 	float centerWeight = 0.0;
 
-	for (int dy = -3; dy <= 3; dy = dy + 1) {
-		for (int dx = -3; dx <= 3; dx = dx + 1) {
-			if (abs(dx) > radius || abs(dy) > radius) { continue; }
-			if (dx == 0 && dy == 0) { continue; }
+	if (kernelType == 2) {
+		// Contour: level-crossing trace, not a weighted convolution.
+		conv = contourConv(uv, texelSize, origColor.rgb, level / 100.0, useLuma);
+	} else {
+		for (int dy = -3; dy <= 3; dy = dy + 1) {
+			for (int dx = -3; dx <= 3; dx = dx + 1) {
+				if (abs(dx) > radius || abs(dy) > radius) { continue; }
+				if (dx == 0 && dy == 0) { continue; }
 
-			float w = getWeight(dx, dy, kernelType);
-			if (w == 0.0) { continue; }
+				float w = getWeight(dx, dy, kernelType);
+				if (w == 0.0) { continue; }
 
-			vec2 offset = vec2(float(dx), float(dy)) * texelSize;
-			vec3 s = texture(inputTex, uv + offset).rgb;
+				vec2 offset = vec2(float(dx), float(dy)) * texelSize;
+				vec3 s = texture(inputTex, uv + offset).rgb;
 
-			if (useLuma) {
-				conv = conv + vec3(dot(s, LUMA)) * w;
-			} else {
-				conv = conv + s * w;
+				if (useLuma) {
+					conv = conv + vec3(dot(s, LUMA)) * w;
+				} else {
+					conv = conv + s * w;
+				}
+
+				centerWeight = centerWeight - w;
 			}
-
-			centerWeight = centerWeight - w;
 		}
-	}
 
-	// Center sample
-	vec3 centerSample = origColor.rgb;
-	if (useLuma) {
-		centerSample = vec3(dot(centerSample, LUMA));
+		// Center sample
+		vec3 centerSample = origColor.rgb;
+		if (useLuma) {
+			centerSample = vec3(dot(centerSample, LUMA));
+		}
+		conv = conv + centerSample * centerWeight;
 	}
-	conv = conv + centerSample * centerWeight;
 
 	// Amount
 	conv = conv * (amount / 50.0);
