@@ -109,6 +109,33 @@ of macros — until then, follow this.
 - Samplers are linear + clamp-to-edge by default. `texture(t, uv)` with uv outside `[0,1]`
   clamps; match the reference's wrap where it tiles.
 
+⚠️ **Rotation-matrix handedness is the one exception to "port raw WGSL, no per-effect
+  flip."** Effects that rotate a sample offset by a signed angle (spin/swirl-style
+  distortion — not simple translation/sampling, which the rule above still governs
+  correctly) need the **GLSL golden's rotation expansion**, not WGSL's raw one, even
+  though WGSL and Godot are both top-left/no-per-effect-flip pipelines. The reference's
+  GLSL commonly writes rotation as `mat2(co,-s,s,co) * v`, which is the **theta-negated**
+  form of the naive-looking WGSL expansion `vec2(co*v.x - s*v.y, s*v.x + co*v.y)` (GLSL
+  `mat2` is column-major: `mat2(co,-s,s,co)` has columns `(co,-s)`,`(s,co)`, i.e. matrix
+  `[[co,s],[-s,co]]` — the WGSL raw form at angle `-theta`). Some WGSL sources even carry
+  extensive doctrine comments (`filter/spinBlur`, `filter/pondRipples`, reference commit
+  a330fb83) arguing the raw form is screen-correct for WebGPU once its present-flip
+  applies — **that argument does not transfer to Godot**: `filter/pondRipples` (verified
+  via its `outFromCenter` (pure radial — passed under either convention) vs
+  `aroundCenter` (pure rotation — only passed under the GLSL/mat2 form, max-abs-diff 1 vs
+  a structural ssim-0.80 failure under raw) split) and `filter/spinBlur` (raw convention
+  "passed" a loose ad-hoc tolerance at first, but that test was later shown to be nearly
+  blind to handedness — spinBlur averages samples across a theta-symmetric tap arc, which
+  is provably invariant to a *global* handedness sign flip modulo a small per-pixel
+  jitter term, so it can't distinguish the two conventions; switching to the GLSL/mat2
+  form tightened its residual from max-abs-diff 11–15 down to 1) both empirically need
+  the GLSL/mat2 expansion on Godot's `RenderingDevice` pipeline. If you port a new
+  rotation-based effect: **use the GLSL golden's expansion for the rotation itself**
+  (translate/position math elsewhere in the same shader still follows the normal raw-WGSL
+  rule), and validate with a DSL program that isolates pure rotation from any radial/
+  translation component if the effect has one — an averaged/blended rotation (like a
+  multi-tap blur) can silently mask a handedness bug the way spinBlur's first pass did.
+
 ## Compile-time defines
 
 `NOISE_TYPE`, `LOOP_OFFSET`, `LOOP_A_OFFSET`, … are injected by the runtime as integer
