@@ -130,7 +130,7 @@ func _is_surface_arg(arg) -> bool:
 	if not (arg is Dictionary):
 		return false
 	var k = arg.get("kind")
-	return k == "temp" or k == "output" or k == "source" or k == "feedback" or k == "xyz" or k == "vel" or k == "rgba"
+	return k == "temp" or k == "output" or k == "source" or k == "feedback" or k == "vol" or k == "geo" or k == "xyz" or k == "vel" or k == "rgba" or k == "pipeline"
 
 func _dim_references_param(dim) -> bool:
 	return dim is Dictionary and (dim.has("param") or dim.has("screenDivide"))
@@ -689,6 +689,8 @@ func _map_input(pass_obj: Dictionary, uniform_name, tex_ref, current_input, curr
 		var ak = arg.get("kind") if arg is Dictionary else null
 		if ak == "temp":
 			pass_obj["inputs"][uniform_name] = _texture_map.get("node_%s_out" % arg["index"])
+		elif ak == "pipeline" and (arg.get("name") == "inputTex" or arg.get("name") == "inputColor"):
+			pass_obj["inputs"][uniform_name] = current_input if current_input != null else arg.get("name")
 		elif ak == "output" or ak == "source" or ak == "vol" or ak == "geo" or ak == "xyz" or ak == "vel" or ak == "rgba":
 			pass_obj["inputs"][uniform_name] = "none" if arg.get("name") == "none" else "global_" + arg["name"]
 		elif arg is String:

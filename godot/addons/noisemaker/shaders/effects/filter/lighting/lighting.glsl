@@ -7,15 +7,31 @@
 // No-layout effect: the backend synthesizes the Params UBO and injects
 // `#define normalStrength data[..]`, `#define diffuseColor data[..].xyz`, etc. for
 // every named uniform (colors/vec3 pack as 3 contiguous components), so we use the
-// bare reference names directly. Input bound at set 0, binding 1. Dimensions come
+// bare reference names directly. Inputs bound at set 0, binding 1.. in pass.inputs
+// order (inputTex, heightMap — see effects/filter/lighting.json). Dimensions come
 // from textureSize (matching the WGSL textureDimensions). gl_FragCoord is
 // top-left/+0.5 like the WGSL @position — NO Y-flip.
+//
+// heightMap (surface, default "inputTex"): a separate normal-source texture. Its
+// default resolves to the pass's own input (reference/Godot expander `pipeline`-kind
+// surface-arg fallback — reference commit ad984822), so existing programs that never
+// mention heightMap render identically to before. getHeight() remaps by heightMap's
+// OWN textureSize (via fullResolution/tileOffset, both bare engine names) rather than
+// reusing inputTex's texSize/uv directly, since a user-wired heightMap can be a
+// different size than inputTex.
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
+layout(set = 0, binding = 2) uniform sampler2D heightMap;
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 frag;
 
 float getLuminosity(vec3 color) {
 	return dot(color, vec3(0.299, 0.587, 0.114));
+}
+
+float getHeight(vec2 uv) {
+	vec2 mapSize = vec2(textureSize(heightMap, 0));
+	vec2 localUV = (uv * fullResolution - tileOffset) / mapSize;
+	return getLuminosity(texture(heightMap, localUV).rgb);
 }
 
 // Surface normal from the luminosity height-field via 3x3 Sobel.
@@ -47,7 +63,7 @@ vec3 calculateNormal(vec2 uv, vec2 texelSize) {
 	float dx = 0.0;
 	float dy = 0.0;
 	for (int i = 0; i < 9; i++) {
-		float height = getLuminosity(texture(inputTex, uv + offsets[i]).rgb);
+		float height = getHeight(uv + offsets[i]);
 		dx += height * sobel_x[i];
 		dy += height * sobel_y[i];
 	}
