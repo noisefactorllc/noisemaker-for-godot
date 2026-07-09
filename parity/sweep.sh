@@ -23,7 +23,7 @@ tol_for() {
 		spiral) echo "8 0.99" ;;     # AA dFdx/dFdy sub-texel taps over a steep atan/spiral warp round to neighbor texels under Metal vs WebGL2 (10 px, 0.015%); core warp bit-exact
 		bulge) echo "5 0.99" ;;      # AA dFdx/dFdy taps at the mirror-wrap UV discontinuity diverge GL vs Vulkan (3 px, 0.0046%); core bulge bit-exact
 		degauss) echo "5 0.99" ;;    # cos/sin->floor/fract displacement at image-edge wrap rounds to neighbor texels Metal vs WebGL2 (3 px, 0.0046%)
-		refract) echo "5 0.99" ;;    # refraction UV lands on a texel boundary, NEAREST picks a neighbor (1 px, 0.0015%); core refract bit-exact
+		refract) echo "7.001 0.99" ;; # refraction UV lands on a texel boundary, NEAREST picks a different neighbor (3 px, 0.0046%); core refract bit-exact. Tolerance widened 5->7.001 by the mirror-wrap fix (reference 7194deaf): real reflection shifts boundary-tie pixel positions slightly — same NEAREST cross-backend hazard, not a new bug
 		*)      echo "2.001 0.98" ;;  # 2.001 = epsilon-tolerant "<=2" (compare.py float round-trip)
 	esac
 }

@@ -220,7 +220,10 @@ void main() {
 	}
 
 	if (wrap == 0) {
-		// mirror (default) - no change
+		// mirror (default). Reference fix (commit 7194deaf): the old "no change" branch
+		// was a no-op bug — mirror never actually reflected. GLSL mod() is floored, so
+		// this matches the fixed reference exactly.
+		uv = abs(mod(uv + 1.0, 2.0) - 1.0);
 	} else if (wrap == 1) {
 		// repeat
 		uv = fract(uv);

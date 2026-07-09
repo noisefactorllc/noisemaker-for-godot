@@ -253,7 +253,12 @@ void main() {
 	st.x += cos(refLen * CR_TAU) * refAmt;
 	st.y += sin(refLen * CR_TAU) * refAmt;
 
-	if (wrap == 1) {
+	if (wrap == 0) {
+		// mirror. Reference fix (commit 7194deaf): cellRefract had NO mirror branch at
+		// all (silently fell through with no wrap applied) — this now applies real
+		// mirror reflection, matching refract's mirror branch and the fixed reference.
+		st = abs(mod(st + 1.0, 2.0) - 1.0);
+	} else if (wrap == 1) {
 		st = fract(st);
 	}
 
