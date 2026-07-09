@@ -25,6 +25,7 @@ tol_for() {
 		degauss) echo "5 0.99" ;;    # cos/sin->floor/fract displacement at image-edge wrap rounds to neighbor texels Metal vs WebGL2 (3 px, 0.0046%)
 		refract) echo "7.001 0.99" ;; # refraction UV lands on a texel boundary, NEAREST picks a different neighbor (3 px, 0.0046%); core refract bit-exact. Tolerance widened 5->7.001 by the mirror-wrap fix (reference 7194deaf): real reflection shifts boundary-tie pixel positions slightly — same NEAREST cross-backend hazard, not a new bug
 		scatterAniso) echo "10.001 0.999" ;; # anisotropic mode's lumGradient Sobel + gradLen>1e-5 branch is boundary-sensitive; 2 px (0.003%) tip over a threshold tie cross-GPU, core scatter bit-exact (see scatter/scatterClumped, unaffected)
+		oilPaint|oilPaintFresco|oilPaintSponge) echo "130.001 0.999" ;; # oilFlatten's 8-sector Kuwahara picks the lowest-variance sector; at a variance/octant TIE a sub-ULP cross-GPU rounding difference can flip which sector wins for a pixel, jumping its output to a different sector's mean (discontinuous by construction, not a resampling blur) -- 1-19 px out of 65536 (<=0.03%) across three param sets, SSIM 0.9999+ throughout
 		*)      echo "2.001 0.98" ;;  # 2.001 = epsilon-tolerant "<=2" (compare.py float round-trip)
 	esac
 }
