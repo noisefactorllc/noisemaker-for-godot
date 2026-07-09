@@ -824,7 +824,7 @@ func render(graph: Dictionary, normalized_time: float = 0.25) -> void:
 				execute_pass(p)
 				_update_frame_bindings(p)
 				if rc > 1:
-					_swap_iteration_buffers(p)
+					_adopt_iteration_bindings(p)
 		_end_frame()
 	rd.submit()
 	rd.sync()
@@ -850,7 +850,7 @@ func render_samples(graph: Dictionary, total_frames: int, sample_every: int) -> 
 				execute_pass(p)
 				_update_frame_bindings(p)
 				if rc > 1:
-					_swap_iteration_buffers(p)
+					_adopt_iteration_bindings(p)
 		_end_frame()
 		# Submit/sync each frame: keeps command buffers small (a 40-iteration nsPressure
 		# solve over hundreds of accumulated frames would otherwise overflow one buffer) and
@@ -923,21 +923,25 @@ func _repeat_count(p: Dictionary) -> int:
 				return max(1, int(floor(float(v))))
 	return 1
 
-# reference §10.6 swapIterationBuffers: between iterations of a repeated pass, swap the
-# surface RECORD read<->write and mirror the frame maps FROM the swapped record (so the
-# next iteration reads the texel just written). Distinct from §10.2/§10.7.
-func _swap_iteration_buffers(p: Dictionary) -> void:
+# reference §10.6 adoptIterationBindings (formerly swapIterationBuffers -- reference
+# commits d3453b55, af9298ad): between iterations of a repeated pass, ADOPT the
+# frame-local ping-pong bindings that _update_frame_bindings() already advanced for
+# this iteration into the cross-frame surface record, so end-of-frame persistence and
+# the surface read/write fallback stay consistent. Do NOT recompute the swap from the
+# surface record here: a preceding non-repeat pass (e.g. a seed pass) advances only
+# the frame-local maps, so the surface record can be stale on the first iteration, and
+# re-deriving from it would clobber the correct binding.
+func _adopt_iteration_bindings(p: Dictionary) -> void:
 	for k in p.get("outputs", {}):
 		var t := str(p["outputs"][k])
 		if not _pingpong.has(t):
 			continue
 		var bare: String = _pingpong[t]
 		var rec: Dictionary = _surfaces[bare]
-		var tmp = rec["read"]
-		rec["read"] = rec["write"]
-		rec["write"] = tmp
-		_frame_read[bare] = rec["read"]
-		_frame_write[bare] = rec["write"]
+		if _frame_read.has(bare):
+			rec["read"] = _frame_read[bare]
+		if _frame_write.has(bare):
+			rec["write"] = _frame_write[bare]
 
 # reference/04 §10 step 4 / BeginFrame: seed each surface's read/write bindings from its
 # record at the start of the frame.
@@ -965,8 +969,8 @@ func _update_frame_bindings(p: Dictionary) -> void:
 
 # End-of-frame swap (reference §10.7): state surfaces persist their final frame bindings
 # (the sim continues from the latest buffers — NO toggle); display surfaces toggle
-# read<->write. (Per-iteration swap for repeat>1 passes is staged — no current program
-# uses repeat.)
+# read<->write. (Per-iteration binding adoption for repeat>1 passes: see
+# _adopt_iteration_bindings — reactionDiffusion's `repeat: "iterations"` solver pass.)
 func _end_frame() -> void:
 	for bare in _surfaces:
 		var rec: Dictionary = _surfaces[bare]
