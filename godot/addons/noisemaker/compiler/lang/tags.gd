@@ -14,10 +14,15 @@ const VALID_NAMESPACES := [
 	"render", "points", "synth3d", "filter3d", "user",
 ]
 
-# Valid effect tag ids (reference TAG_DEFINITIONS keys).
+# Valid effect tag ids (reference TAG_DEFINITIONS keys). The 16 tags from "agents"
+# onward were curated into the reference in commit 9ec71b0a (tag validity enforcement
+# + cleanup of ad-hoc/mistyped tags already in use by effects).
 const VALID_TAGS := [
 	"color", "distort", "edges", "geometric", "lens",
 	"noise", "transform", "util", "sim", "3d", "audio",
+	"agents", "antialiasing", "blend", "blur", "fractal",
+	"geometry", "glitch", "image", "mesh", "midi", "palette",
+	"pattern", "pixel", "text", "tiling", "video",
 ]
 
 # The always-available built-in namespace (functions need no search directive).
