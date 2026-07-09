@@ -14,9 +14,10 @@ This is the project's existing **"continuous solvers diverge cross-backend"** pr
 documented for `reactionDiffusion`, see `reference/08-math-primitives-parity.md`) confirmed for the
 chaotic *agent flow*, now pinned to one operation.
 
-(There is also a *second, much milder* class — ~13 effects — that drifts ≤1–2 LSB on <0.2 % of pixels
-at NEAREST-resampling / discontinuity boundaries and is SSIM-gated in `parity/sweep.sh`; it is **not**
-structural chaos. See "Scope" below. Everything outside these two classes is `max-diff 0`.)
+(There is also a *second, much milder* class — ~18 effects — that drifts a handful of LSB on <0.03 %
+of pixels at NEAREST-resampling / discontinuity / discrete-selection boundaries and is SSIM-gated in
+`parity/sweep.sh`; it is **not** structural chaos. See "Scope" below. Everything outside these two
+classes is `max-diff 0`.)
 
 ---
 
@@ -103,11 +104,15 @@ is the mechanism:
 **Structurally divergent (the chaos gate):** chaotic agent flows only (`points/flow`; the
 `target.dsl` north-star through it).
 
-**A second, milder class** (~13 effects, SSIM-gated with documented per-program tolerances in
+**A second, milder class** (~18 effects, SSIM-gated with documented per-program tolerances in
 `parity/sweep.sh`): NEAREST coord-resampling tie-breaks (`rotate`/`uvRemap`/`distortion`),
-`step()`/contrast convolutions over noise (`shadow`/`edge`/`newton`), and AA derivative taps
-(`pinch`/`crt`) drift ≤1–2 LSB on <0.2 % of pixels — faithful ports where cross-device fp rounding
-lands on the far side of a boundary. Not structural chaos; a frozen frame still tracks the golden.
+`step()`/contrast convolutions over noise (`shadow`/`edge`/`newton`), AA derivative taps
+(`pinch`/`crt`), discrete argmin/threshold selection (`oilPaint`'s 8-sector Kuwahara pick,
+`hatch`'s coloredPencil stroke-mask step, `reliefPlaster`), and nonlinear amplification of the usual
+sub-LSB residual (`chrome`'s sine tone curve) drift a handful of LSB on <0.03 % of pixels — faithful
+ports where cross-device fp rounding lands on the far side of a boundary (or, for the discrete-
+selection cases, flips which of several candidates a `<`/argmin picks). Not structural chaos; a
+frozen frame still tracks the golden.
 
 **Everything else is `max-diff 0`** (verified): the navierStokes solver in isolation, the entire
 deposit / diffuse / blend path, agent spawn, and all non-chaotic stateful sims at their stable regimes.

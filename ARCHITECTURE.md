@@ -24,7 +24,7 @@ gives the graph **two producers**:
   `addons/noisemaker/compiler/` (`lang/`: lexer→parser→validator→effect-registry; `graph/`:
   expander→orchestrator). `Orchestrator.new(EffectRegistry.new()).build_graph(source)` emits the
   normalized graph with no reference/Node/network. Gated stage-by-stage against the reference
-  (`parity/check_*.mjs`, **158/158**) and byte-identical to (b) — rendering either graph yields the
+  (`parity/check_*.mjs`, **214/214**) and byte-identical to (b) — rendering either graph yields the
   same PNG.
 - **(b) Golden / offline (parity only)** — `tools/export-graph.mjs` runs the *unchanged reference*
   `compileGraph` and serialises the graph to JSON. Used only to verify (a); it imports the reference
@@ -100,10 +100,11 @@ the shader is cached per (program, define-set). Input textures bind as combined
   `parity/export-and-render.mjs` (reused from the Unity port; needs Playwright + Chrome).
 - `parity/compare.py` — max-abs-diff + SSIM with per-program tolerance (reused verbatim).
 
-**Status (2026-06-21, Apple M4/Metal):** the in-engine compiler passes all six gates
-(`parity/check_{lex,parse,validate,expand,graph,registry}.mjs`) at **158/158**; the 2D + agent
-catalog passes `parity/sweep.sh` (last recorded **93/93, 2 chaos-gated skips**), most within 1/255
-(SSIM ≈ 1.0). The harness is how each further port gets verified — see `parity/README.md`.
+**Status (2026-07-09, Apple M4/Metal, synced to reference `b7c1bc36`):** the in-engine compiler passes
+all six gates (`parity/check_{lex,parse,validate,expand,graph,registry}.mjs`) at **214/214**; the 2D +
+agent catalog passes `parity/sweep.sh` (last recorded **200/200, 3 skips** — 2 chaos-gated,
+navierStokes tested separately via timed sampling), most within 1-2/255 (SSIM ≈ 1.0). The harness is
+how each further port gets verified — see `parity/README.md`.
 
 ## Still staged
 

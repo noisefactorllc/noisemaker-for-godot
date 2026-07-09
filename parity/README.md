@@ -20,7 +20,7 @@ runs Godot with an off-screen window (`--position 5000,5000`).
 NM_REFERENCE_ROOT=/path/to/noisemaker GODOT=/path/to/Godot bash parity/run.sh noise
 #   -> [PASS] noise: max-abs-diff=1.000 ... ssim=0.99996
 
-# the whole catalog (per-program tolerance map inside; last recorded 93/93, 2 chaos-gated skips)
+# the whole catalog (per-program tolerance map inside; last recorded 200/200, 3 skips -- 2 chaos-gated, navierStokes tested separately)
 NM_REFERENCE_ROOT=... GODOT=... bash parity/sweep.sh
 
 # stateful sims (navierStokes, feedback): sample a 30 s / 5 s evolution, not a frozen frame
@@ -64,11 +64,11 @@ NM_REFERENCE_ROOT=... GODOT=... node parity/check_validate.mjs                  
 NM_REFERENCE_ROOT=... GODOT=... node parity/check_expand.mjs                                # render passes
 NM_REFERENCE_ROOT=... GODOT=... node parity/check_graph.mjs                                 # normalized graph
 NM_REFERENCE_ROOT=... GODOT=... node parity/check_registry.mjs                              # effect registry
-#   -> e.g. "GRAPH PARITY: 158/158 pass"
+#   -> e.g. "GRAPH PARITY: 214/214 pass"
 ```
 
-Corpus: **158 DSL programs** (`parity/programs/` 148 + `parity/corpus/` 10). All six gates pass
-158/158 (registry: ops 182/182, enums, aliases, 544 effect keys — 5/5 surfaces). The candidate dumps
+Corpus: **214 DSL programs** (`parity/programs/` 204 + `parity/corpus/` 10). All six gates pass
+214/214 (registry: ops 204/204, enums, aliases, 610 effect keys — 5/5 surfaces). The candidate dumps
 are the `_*_dump.gd` scripts under `../godot/addons/noisemaker/compiler/`; the oracles are
 `../tools/dump-*.mjs`.
 

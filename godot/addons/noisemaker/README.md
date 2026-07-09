@@ -151,7 +151,7 @@ effect-registry → expander → orchestrator/normalize, all under `compiler/`) 
 Graph** (`passes / programs / textures / renderSurface`) → `nm_backend.gd` executes the passes on
 `RenderingDevice` (fullscreen blits, MRT, points/billboard deposit, ping-pong double-buffering,
 repeat loops) into linear `rgba16f`/`rgba32f` surfaces, then presents the render surface. The compiler
-is parity-verified 158/158 against the reference; see the repo's `ARCHITECTURE.md` and
+is parity-verified 214/214 against the reference; see the repo's `ARCHITECTURE.md` and
 `docs/GRAPH-JSON-SCHEMA.md`.
 
 ## License
