@@ -24,6 +24,7 @@ tol_for() {
 		bulge) echo "5 0.99" ;;      # AA dFdx/dFdy taps at the mirror-wrap UV discontinuity diverge GL vs Vulkan (3 px, 0.0046%); core bulge bit-exact
 		degauss) echo "5 0.99" ;;    # cos/sin->floor/fract displacement at image-edge wrap rounds to neighbor texels Metal vs WebGL2 (3 px, 0.0046%)
 		refract) echo "7.001 0.99" ;; # refraction UV lands on a texel boundary, NEAREST picks a different neighbor (3 px, 0.0046%); core refract bit-exact. Tolerance widened 5->7.001 by the mirror-wrap fix (reference 7194deaf): real reflection shifts boundary-tie pixel positions slightly — same NEAREST cross-backend hazard, not a new bug
+		spinBlur|spinBlurCentered) echo "17.001 0.995" ;; # 32-tap rotated-sample accumulation: each tap independently NEAREST-boundary-sensitive, so the per-tap cross-GPU rounding hazard (same class as rotate/uvRemap) compounds slightly over the sum (observed max-diff 11-15 across two param sets; diff histogram decays smoothly with no structural/bimodal split, and the image is visually identical -- ruling out a rotation-handedness bug, not just a resampling one)
 		*)      echo "2.001 0.98" ;;  # 2.001 = epsilon-tolerant "<=2" (compare.py float round-trip)
 	esac
 }
