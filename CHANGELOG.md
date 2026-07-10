@@ -13,7 +13,7 @@ This is pre-1.0, WIP software — see the README's status banner.
 - **Self-contained render path:** `tools/render_graph.gd --dsl <file>` builds the graph in-engine and
   renders it; `tools/present.gd` composes the DSL beside the rendered canvas.
 - **Compiler parity gates** (`parity/check_{lex,parse,validate,expand,graph,registry}.mjs`): each stage
-  diffed against the reference over the (now 214-DSL) corpus — all **214/214** (registry 5/5 surfaces).
+  diffed against the reference over the (now 230-DSL) corpus — all **230/230** (registry 5/5 surfaces).
 - **Integration docs:** addon README (`godot/addons/noisemaker/README.md`), `parity/README.md`, this
   changelog.
 - Agents/points capability in the executor: MRT, procedural points/billboard deposit (`ONE,ONE`
@@ -34,6 +34,27 @@ This is pre-1.0, WIP software — see the README's status banner.
   empirically established (spinBlur's own doctrine comment had this backwards; see PORTING-GUIDE.md's
   "Coordinate & sampling parity" section for the full writeup and the isolate-rotation-from-radial
   validation technique).
+- **Synced to reference `36e7f3f5`** (from `b7c1bc36`): 5 new Photoshop-parity `filter` effects —
+  strokes (directional brush-stroke smear engine: Angled/Sprayed/Dark Strokes, Sumi-e, Smudge Stick;
+  two passes, stkSmear + stkPost unsharp), craquelure (cracked-plaster groove relief via Voronoi F1/F2
+  + S8 bevel shading), mosaicTiles (wavy grouted ceramic tiles / Stylize Tiles via a runtime `mode`
+  branch), patchwork (needlepoint raised-square relief with an analytic per-side bevel, not S8 —
+  reuses filter/extrude's center-anchored-grid and cellAvgColor3x3 precedent), and lensFlare (additive
+  ghost-chain lens flare, purely unrolled element tables, four lens types) — plus `lowPoly` extended
+  with `borderWidth` (stained-glass cell "leading") and `lightIntensity` (radial center brightening),
+  both exact no-ops at their zero defaults. Rotation doctrine applied and re-validated per-effect
+  rather than assumed: strokes' rotate2D (fixed 45/135-degree fields) needed the GLSL/mat2 convention,
+  confirmed bit-exact-class on all three fixed-angle modes; craquelure/mosaicTiles/patchwork/lensFlare
+  turned out to have **no** rotation matrix at all despite superficially resembling the rotation-heavy
+  class (Voronoi-cell math, axis-aligned grid math, and mirror-symmetric shape primitives respectively)
+  — each effect's own WGSL/GLSL source headers were checked individually rather than trusting the
+  broad "likely rotation-heavy" heuristic. New SSIM-gated tolerances (both <0.03% of pixels, ≥0.999,
+  mechanism-traced in `parity/sweep.sh`): strokesSprayed's per-tap hash jitter landing bilinear taps on
+  sub-pixel boundary ties, and strokesSmudge's `atan2`-based edge-following angle destabilizing at the
+  Sobel gradient's near-zero singularity (same class as the pre-existing hatchPencil entry). Fixed one
+  new-effect porting bug: lensFlare's local `aspectRatio` collided with the engine-injected reserved
+  bare name of the same name (glslang "array size must be a positive integer"); renamed to `ar`
+  (PORTING-GUIDE.md's reserved-name-collision section, now with a second worked example).
 
 ### Changed
 - Render-graph executor consolidated into a single `runtime/nm_backend.gd`.

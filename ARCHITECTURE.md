@@ -100,9 +100,9 @@ the shader is cached per (program, define-set). Input textures bind as combined
   `parity/export-and-render.mjs` (reused from the Unity port; needs Playwright + Chrome).
 - `parity/compare.py` — max-abs-diff + SSIM with per-program tolerance (reused verbatim).
 
-**Status (2026-07-09, Apple M4/Metal, synced to reference `b7c1bc36`):** the in-engine compiler passes
-all six gates (`parity/check_{lex,parse,validate,expand,graph,registry}.mjs`) at **214/214**; the 2D +
-agent catalog passes `parity/sweep.sh` (last recorded **200/200, 3 skips** — 2 chaos-gated,
+**Status (2026-07-10, Apple M4/Metal, synced to reference `36e7f3f5`):** the in-engine compiler passes
+all six gates (`parity/check_{lex,parse,validate,expand,graph,registry}.mjs`) at **230/230**; the 2D +
+agent catalog passes `parity/sweep.sh` (last recorded **216/216, 3 skips** — 2 chaos-gated,
 navierStokes tested separately via timed sampling), most within 1-2/255 (SSIM ≈ 1.0). The harness is
 how each further port gets verified — see `parity/README.md`.
 

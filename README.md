@@ -83,13 +83,14 @@ absolute path.
 
 ## What works today
 
-- The **whole 2D effect catalog** (`synth` / `filter` / `mixer` / `classicNoisedeck`, ~175 effects,
-  including 21 Photoshop-parity filters: parallax, unsharp mask, high pass, median, morphology,
+- The **whole 2D effect catalog** (`synth` / `filter` / `mixer` / `classicNoisedeck`, ~180 effects,
+  including 26 Photoshop-parity filters: parallax, unsharp mask, high pass, median, morphology,
   directional/spin blur, scatter, wind, pond ripples, extrude, halftone, stipple, oil paint,
-  watercolor, plastic wrap, relief, photocopy, stamp, chrome, and hatch), plus the agent sims,
-  **renders**. The parity sweep passes **200/200** programs: most land within 1-2/255 (SSIM ≈ 1.0);
-  ~18 are SSIM-gated for sub-pixel resampling / discontinuity / discrete-selection drift. See
-  **[STATUS.md](STATUS.md)**.
+  watercolor, plastic wrap, relief, photocopy, stamp, chrome, hatch, strokes, craquelure, mosaic
+  tiles, patchwork, and lens flare — plus low poly extended with stained-glass borders/light), plus
+  the agent sims, **renders**. The parity sweep passes **216/216** programs: most land within 1-2/255
+  (SSIM ≈ 1.0); ~20 are SSIM-gated for sub-pixel resampling / discontinuity / discrete-selection
+  drift. See **[STATUS.md](STATUS.md)**.
 - **Particle/agent sims and fluid (navier–stokes)** render and match the reference.
 - **Chaotic** particle-and-fluid programs render correctly, but as a *different instance* of the same
   chaos — they match in look and behavior, not pixel-for-pixel (tiny GPU rounding differences get

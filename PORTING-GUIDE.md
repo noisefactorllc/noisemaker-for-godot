@@ -65,7 +65,12 @@ WGSL declares a **local variable OR a helper function parameter** with one of th
 (or a param name), **rename it** (e.g. `aspectRatio`→`ar`, `resolution`→`res`, `offset`→
 `palOffset`, helper param `time`→`timeArg`) — a pure symbol rename, no behavior change (the
 HLSL ports do the same). The bare name must remain only at the `main()` use sites where the
-`#define` must resolve.
+`#define` must resolve. Not hypothetical: `filter/lensFlare`'s reference source computes its
+own `let aspectRatio = …` local *and* passes it as a helper parameter of the same name
+(`flareAxis(…, aspectRatio: f32)`) — hit exactly this glslang error on first compile; fixed by
+the `aspectRatio`→`ar` rename above, recomputed explicitly from `fullResolution.x/
+fullResolution.y` rather than trusting the engine's own (numerically-equal-here, but not
+guaranteed-equal-in-general) bare `aspectRatio` value.
 
 ⚠️⚠️ **Single-letter params `x`/`y` (and any 1-char name) are the nastiest:** `#define x
 data[3].x` rewrites *every* `.x` swizzle (`st.x` → `st.data[3].x`) and re-scans into other
