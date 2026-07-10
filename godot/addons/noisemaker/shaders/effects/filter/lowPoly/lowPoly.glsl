@@ -3,12 +3,18 @@
 // Voronoi-based low-polygon art style: deterministic per-cell seed points, nearest
 // Voronoi cell over a 3x3 neighborhood, filled with the input color sampled at the
 // seed position. Modes: 0 flat, 1 edges (F2-F1 darkening), 2 distance2, 3 distance3.
+// borderWidth (0=off) adds thick edgeColor "leading" along cell boundaries on top
+// of whatever mode draws, reusing the edges mode's F2-F1 metric; lightIntensity
+// (0=off) adds radial brightening from the image center. Both gate on `> 0.0` so
+// they are exact byte-for-byte no-ops at their zero defaults — together with a
+// dark edgeColor these give Photoshop Stained Glass parity.
 // Final: rgb = mix(original.rgb, result, alpha); alpha passed through.
 //
 // No-layout effect (no reference uniformLayout): the backend injects the Params UBO
-// + `#define scale …`/`seed`/`mode`/`edgeStrength`/`edgeColor`/`alpha`/`speed` and
-// engine globals (time, tileOffset, fullResolution), so bare names are used at the
-// main() use sites. Input texture bound at set 0, binding 1 (pass.inputs order).
+// + `#define scale …`/`seed`/`mode`/`edgeStrength`/`edgeColor`/`borderWidth`/
+// `lightIntensity`/`alpha`/`speed` and engine globals (time, tileOffset,
+// fullResolution), so bare names are used at the main() use sites. Input texture
+// bound at set 0, binding 1 (pass.inputs order).
 //
 // pcg/hash2 are this effect's OWN PRNG — inlined VERBATIM under renamed symbols
 // (lp_pcg/lp_hash2) rather than pulling include/nm_core.glsl. WGSL select(a,b,cond)
@@ -121,6 +127,31 @@ void main() {
 		float raw = clamp(selectedDist * n, 0.0, 1.0);
 		float distField = pow(raw, mix(0.5, 3.0, edgeStrength));
 		result = cellColor.rgb * distField;
+	}
+
+	// Thick cell borders (Stained Glass "leading"): a border band of edgeColor
+	// along cell boundaries, drawn IN ADDITION to whatever mode already produced
+	// above. Reuses the same F2-F1 (secondDist - minDist) cell-distance metric
+	// the "edges" mode uses; width is a percentage of the nominal cell radius
+	// (0.5 / n). borderWidth == 0 skips this block entirely, so it is an exact
+	// byte-for-byte no-op.
+	if (borderWidth > 0.0) {
+		float cellRadius = 0.5 / n;
+		float borderHalfWidth = (borderWidth / 100.0) * cellRadius;
+		float distToEdge = (secondDist - minDist) * 0.5;
+		float borderMask = 1.0 - smoothstep(0.0, borderHalfWidth, distToEdge);
+		result = mix(result, edgeColor, borderMask);
+	}
+
+	// Radial light from the image center (Photoshop Stained Glass "Light
+	// Intensity"). Reuses auv/aspect from the grid setup above so the light is
+	// centered on the whole image (not a tile). lightIntensity == 0 skips this
+	// block, leaving result untouched: exact no-op.
+	if (lightIntensity > 0.0) {
+		vec2 lightCenter = vec2(aspect * 0.5, 0.5);
+		float centerDist = distance(auv, lightCenter);
+		float lightFalloff = max(0.0, 1.0 - centerDist * 1.4);
+		result *= 1.0 + (lightIntensity / 100.0) * lightFalloff;
 	}
 
 	// Alpha blend with original
