@@ -5,6 +5,47 @@ This is pre-1.0, WIP software — see the README's status banner.
 
 ## [Unreleased]
 
+### Crystallized against reference `75507112` (content-pinned; SHA unstable)
+
+A **full parity re-verification** of the 26 Photoshop-parity artistic filters, not an incremental
+sync. Upstream squashed the artistic-filter batch into a single amended-in-place commit and did a
+release-readiness pass that *changed effects already ported*, so history correlation is dead: the
+reference is pinned by **content** (a `git archive 75507112` snapshot), every effect and every
+enum/define-selected mode re-minted from that snapshot and graded bit-exact, nothing trusted from
+prior rounds. Result: effect×mode ledger **268 fixtures → 221 PASS / 40 NEAR / 0 FAIL / 7 SKIP**;
+single-frame sweep **249/249, 4 skipped**; compiler gates green (lex/parse/validate/expand 230/230,
+graph 263/263, registry 209 ops / 625 keys). Reference untouched, nothing pushed.
+
+- **Re-ported drifted algorithms** (params matched by name; shader bodies had diverged in upstream's
+  release pass): `strokes` (old hash-jitter comb → capsule/bristle `brushStrokeField` + coherent
+  `strokeVariation` run-length + 4-neighbour-cross-min sumi-e; 5/5 modes), `photocopy`, `chrome`
+  (self-distortion scale 0.03 → 0.5, a real strength bug), `wind`, `mosaicTiles` (both modes, reworked
+  displaced-sample gap fill), `plasticWrap` (Blinn specular), `halftone` (single `angle` → five
+  per-ink CMYK rotated-screen angles + full color path), `lensFlare` (per-lensType ghost-element
+  table transcription), `spinBlur` (jitter formula), `median` (3-pass approximation → single-pass
+  **exact quickselect**, radius 1/2/3 = 3×3/5×5/7×7).
+- **Extended effects to current reference:** `texture` +10 material modes (regular…speckle, smooth
+  quintic gradient fields; modes 0–4 preserved byte-identical), `dither` + `errorDiffusion` type
+  (block Floyd-Steinberg), `emboss` + `gray` style + `colorAmount` (color default pinned), `edge` +
+  `contourSide`, `plasticWrap` + `lightDirection` vec3.
+- **Fixed a define-vs-uniform parity class** across `pondRipples` (style/wrap), `relief`, `scatter`,
+  `morphology` (shape), `stipple` (mode), `extrude` (type/depthSource), `wind` (method): the port
+  declared a compile-time-baked selector as a runtime `uniform`, so — because parity renders the
+  reference's own graph, which serializes `define`s and never these as `uniforms` — the shader
+  silently ran the *default* branch for every non-default mode. A mechanical registry-wide scan
+  (0 mismatches after the fix) and a new PORTING-GUIDE.md section prevent recurrence. Also corrected
+  several defaults baked into the reference graph (directionalBlur distance 20→60, photocopy darkness
+  50→75, unsharpMask amount 60→220, scatter radius 5→12, wind strength/threshold).
+- **Reverted `grain`:** upstream rolled back the round-1 grain-types feature to the pinned
+  alpha/pause-only original (tile-aware bicubic value noise). The three grain-mode fixtures no longer
+  even compile against the reference — the definitive revert signal — and were removed.
+- **Full mode-matrix coverage:** ~37 new per-(effect, mode) fixtures mirroring upstream's
+  `test_artistic_effect_release.mjs` enumeration, so every enum/define mode (not just defaults) has a
+  minted golden. Chaos-gate routing corrected: `agentsPoints` and the `target`/`targetO0` north-star
+  now SKIP with a `docs/CHAOS-GATE.md` reference (non-chaotic `agentsNoOklab` control stays bit-exact);
+  `navTargetParams` moved to timed sampling. Registry effect count reconciled at **209** (one manifest
+  key is not a registry effect).
+
 ### Added
 - **In-engine DSL→graph compiler** (`godot/addons/noisemaker/compiler/`): a complete GDScript port of
   the reference compiler — `lang/` (lexer → parser → validator → effect-registry) and `graph/`
