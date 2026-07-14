@@ -20,9 +20,12 @@
 // effects/filter/lensFlare.json / the reference definition.js for the full
 // per-parameter and per-lensType description.
 //
-// lensType is a plain RUNTIME int uniform (choices, no compile-time `define`),
-// so it arrives as a float component in the packed UBO — cast int(lensType) at
-// comparison sites (established idiom, e.g. filter/hatch's direction).
+// LENS_TYPE is a compile-time define injected by the runtime (definition.js
+// globals.lensType.define), same mechanism as filter/oilPaint's mode / filter/
+// hatch's mode / filter/strokes' mode / filter/texture's mode: baking it lets
+// the compiler strip the other lens types' dead ghost-chain branches instead of
+// evaluating all of them per pixel, and is required for parity — the reference
+// itself declares lensType as `define: "LENS_TYPE"`, not a runtime uniform.
 //
 // The reversed-edge smoothstep idiom in circleGhost/softCircleGhost/ringGhost/
 // hexGhost (smoothstep(hi, lo, x) with hi > lo) is UNDEFINED per the GLSL/WGSL
@@ -45,6 +48,10 @@
 // bit-for-bit rather than relying on the engine's own aspectRatio value) -
 // established idiom, e.g. filter/hatch's direction/int-cast precedent and
 // PORTING-GUIDE's own aspectRatio->ar example.
+#ifndef LENS_TYPE
+#define LENS_TYPE 0
+#endif
+
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 frag;
@@ -141,22 +148,20 @@ void main() {
 
 	vec3 flare = vec3(0.0);
 
-	int lensTypeI = int(lensType);
-
 	// Core glow (all lens types).
 	flare += vec3(coreGlow(d0));
 
 	// Anamorphic streak (all lens types; doubled for moviePrime).
 	float streakVal = anamorphicStreak(delta0);
-	if (lensTypeI == 3) {
-		streakVal *= 2.0;
-	}
+#if LENS_TYPE==3
+	streakVal *= 2.0;
+#endif
 	flare += vec3(streakVal);
 
 	// 6-point star: zoom50_300 and moviePrime only.
-	if (lensTypeI == 0 || lensTypeI == 3) {
-		flare += vec3(sixPointStar(delta0, d0));
-	}
+#if LENS_TYPE==0 || LENS_TYPE==3
+	flare += vec3(sixPointStar(delta0, d0));
+#endif
 
 	// Rainbow halo ring at t=1.0 (all lens types).
 	vec2 aMirror = flareAxis(flarePos, mirrorPos, 1.0, ar);
@@ -165,56 +170,56 @@ void main() {
 
 	// Ghost chain: table selected by lensType.
 	vec2 g = vec2(0.0);
-	if (lensTypeI == 0 || lensTypeI == 3) {
-		// zoom50_300 (also the base table for moviePrime): 6 ghosts, the largest
-		// (t=1.55) rendered hollow for classic-look variety.
-		g = flareAxis(flarePos, mirrorPos, 0.25, ar);
-		flare += vec3(1.00, 0.85, 0.60) * circleGhost(length(p - g), 0.06) * 0.35;
+#if LENS_TYPE==0 || LENS_TYPE==3
+	// zoom50_300 (also the base table for moviePrime): 6 ghosts, the largest
+	// (t=1.55) rendered hollow for classic-look variety.
+	g = flareAxis(flarePos, mirrorPos, 0.25, ar);
+	flare += vec3(1.00, 0.85, 0.60) * circleGhost(length(p - g), 0.06) * 0.35;
 
-		g = flareAxis(flarePos, mirrorPos, 0.4, ar);
-		flare += vec3(0.40, 0.90, 0.85) * circleGhost(length(p - g), 0.10) * 0.25;
+	g = flareAxis(flarePos, mirrorPos, 0.4, ar);
+	flare += vec3(0.40, 0.90, 0.85) * circleGhost(length(p - g), 0.10) * 0.25;
 
-		g = flareAxis(flarePos, mirrorPos, 0.6, ar);
-		flare += vec3(0.65, 0.40, 0.95) * circleGhost(length(p - g), 0.045) * 0.45;
+	g = flareAxis(flarePos, mirrorPos, 0.6, ar);
+	flare += vec3(0.65, 0.40, 0.95) * circleGhost(length(p - g), 0.045) * 0.45;
 
-		g = flareAxis(flarePos, mirrorPos, 0.85, ar);
-		flare += vec3(0.45, 0.90, 0.50) * circleGhost(length(p - g), 0.14) * 0.18;
+	g = flareAxis(flarePos, mirrorPos, 0.85, ar);
+	flare += vec3(0.45, 0.90, 0.50) * circleGhost(length(p - g), 0.14) * 0.18;
 
-		g = flareAxis(flarePos, mirrorPos, 1.2, ar);
-		flare += vec3(1.00, 0.55, 0.20) * circleGhost(length(p - g), 0.08) * 0.30;
+	g = flareAxis(flarePos, mirrorPos, 1.2, ar);
+	flare += vec3(1.00, 0.55, 0.20) * circleGhost(length(p - g), 0.08) * 0.30;
 
-		g = flareAxis(flarePos, mirrorPos, 1.55, ar);
-		flare += vec3(0.40, 0.55, 1.00) * ringGhost(length(p - g), 0.20) * 0.12;
-	} else if (lensTypeI == 1) {
-		// prime35: 4 tight hexagon ghosts.
-		g = flareAxis(flarePos, mirrorPos, 0.3, ar);
-		flare += vec3(1.00, 0.80, 0.55) * hexGhost(p - g, 0.04) * 0.35;
+	g = flareAxis(flarePos, mirrorPos, 1.55, ar);
+	flare += vec3(0.40, 0.55, 1.00) * ringGhost(length(p - g), 0.20) * 0.12;
+#elif LENS_TYPE==1
+	// prime35: 4 tight hexagon ghosts.
+	g = flareAxis(flarePos, mirrorPos, 0.3, ar);
+	flare += vec3(1.00, 0.80, 0.55) * hexGhost(p - g, 0.04) * 0.35;
 
-		g = flareAxis(flarePos, mirrorPos, 0.55, ar);
-		flare += vec3(0.85, 0.85, 0.92) * hexGhost(p - g, 0.055) * 0.30;
+	g = flareAxis(flarePos, mirrorPos, 0.55, ar);
+	flare += vec3(0.85, 0.85, 0.92) * hexGhost(p - g, 0.055) * 0.30;
 
-		g = flareAxis(flarePos, mirrorPos, 0.8, ar);
-		flare += vec3(0.95, 0.70, 0.50) * hexGhost(p - g, 0.065) * 0.25;
+	g = flareAxis(flarePos, mirrorPos, 0.8, ar);
+	flare += vec3(0.95, 0.70, 0.50) * hexGhost(p - g, 0.065) * 0.25;
 
-		g = flareAxis(flarePos, mirrorPos, 1.3, ar);
-		flare += vec3(0.80, 0.85, 0.95) * hexGhost(p - g, 0.08) * 0.20;
-	} else {
-		// prime105: 3 large soft circles.
-		g = flareAxis(flarePos, mirrorPos, 0.45, ar);
-		flare += vec3(0.92, 0.85, 0.78) * softCircleGhost(length(p - g), 0.12) * 0.25;
+	g = flareAxis(flarePos, mirrorPos, 1.3, ar);
+	flare += vec3(0.80, 0.85, 0.95) * hexGhost(p - g, 0.08) * 0.20;
+#else
+	// prime105: 3 large soft circles.
+	g = flareAxis(flarePos, mirrorPos, 0.45, ar);
+	flare += vec3(0.92, 0.85, 0.78) * softCircleGhost(length(p - g), 0.12) * 0.25;
 
-		g = flareAxis(flarePos, mirrorPos, 0.9, ar);
-		flare += vec3(0.85, 0.88, 0.95) * softCircleGhost(length(p - g), 0.16) * 0.20;
+	g = flareAxis(flarePos, mirrorPos, 0.9, ar);
+	flare += vec3(0.85, 0.88, 0.95) * softCircleGhost(length(p - g), 0.16) * 0.20;
 
-		g = flareAxis(flarePos, mirrorPos, 1.5, ar);
-		flare += vec3(0.95, 0.88, 0.80) * softCircleGhost(length(p - g), 0.20) * 0.15;
-	}
+	g = flareAxis(flarePos, mirrorPos, 1.5, ar);
+	flare += vec3(0.95, 0.88, 0.80) * softCircleGhost(length(p - g), 0.20) * 0.15;
+#endif
 
 	vec3 outFlare = flare * tint * (brightness / 100.0);
-	if (lensTypeI == 3) {
-		// moviePrime: cooler overall tint multiplier on top of the user's tint.
-		outFlare *= vec3(0.9, 0.95, 1.1);
-	}
+#if LENS_TYPE==3
+	// moviePrime: cooler overall tint multiplier on top of the user's tint.
+	outFlare *= vec3(0.9, 0.95, 1.1);
+#endif
 
 	frag = vec4(clamp(src.rgb + outFlare, 0.0, 1.0), src.a);
 }

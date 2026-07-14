@@ -11,8 +11,7 @@ layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 frag;
 
 void main() {
-	vec2 texSize = vec2(textureSize(inputTex, 0));
-	vec2 uv = gl_FragCoord.xy / texSize;
+	vec2 uv = gl_FragCoord.xy / resolution;
 	vec4 src = texture(inputTex, uv);
 	vec4 blur = texture(blurTex, uv);
 	vec3 diff = src.rgb - blur.rgb;
