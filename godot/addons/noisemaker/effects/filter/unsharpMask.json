@@ -11,7 +11,7 @@
   "globals": {
     "amount": {
       "type": "float",
-      "default": 60,
+      "default": 220,
       "uniform": "amount",
       "min": 0,
       "max": 500,

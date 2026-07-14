@@ -149,7 +149,7 @@ vec3 hatchColor(vec2 gc, vec2 uv, vec3 src, float theta, float stretchAmt, float
 		float texture2 = mix(s, fbm(gc / (stretchAmt * 0.6) + 41.0), 0.5);
 		float level = mix(texture2, toneGate, abs(toneGate * 2.0 - 1.0));
 		level = clamp(level + pb * 0.15, 0.0, 1.0);
-		return tonemap2(1.0 - level, inkColor, paperColor);
+		return tonemap2(level, inkColor, paperColor);
 	}
 	if (MODE == 4) {
 		// Crosshatch (color-preserving).
