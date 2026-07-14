@@ -17,14 +17,20 @@
 // driven by luminance-modulated fBm clump noise).
 //
 // No-layout effect: the backend synthesizes the Params UBO and injects
-// `#define mode data[..]`, `#define cellSize data[..]`, `#define grainSize
-// data[..]`, `#define density data[..]`, `#define paperColor data[..].xyz`,
-// `#define seed data[..]`. mode/seed are ints, cast int(...) at use sites. Input
-// at set 0, binding 1. Single texture, texSize-space (no fullResolution remap —
-// matches WGSL, no tiling concept). Every noise/hash helper is built from GLSL's
-// floor/fract, which — like WGSL's — are floor-based (not truncated) for negative
-// inputs, so the negative positions the rotation can produce need no separate
-// floored-mod wrap.
+// `#define cellSize data[..]`, `#define grainSize data[..]`, `#define density
+// data[..]`, `#define paperColor data[..].xyz`, `#define seed data[..]`. seed is
+// an int, cast int(...) at use sites. MODE is a compile-time define injected by
+// the runtime (definition.js globals.mode.define) — matches the reference's own
+// compiled graph, which bakes `mode` into `defines.MODE`, never into `uniforms`.
+// Input at set 0, binding 1. Single texture, texSize-space (no fullResolution
+// remap — matches WGSL, no tiling concept). Every noise/hash helper is built from
+// GLSL's floor/fract, which — like WGSL's — are floor-based (not truncated) for
+// negative inputs, so the negative positions the rotation can produce need no
+// separate floored-mod wrap.
+#ifndef MODE
+#define MODE 0
+#endif
+
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 frag;
@@ -109,7 +115,7 @@ void main() {
 	float alpha = texture(inputTex, uv).a;
 	vec3 result;
 
-	if (int(mode) == 0) {
+	if (MODE == 0) {
 		// Pointillize.
 		vec2 p = globalCoord / cellSize;
 		vec4 cell = voronoiCell(p, 0.9, float(int(seed)));
@@ -121,14 +127,14 @@ void main() {
 		float aa = fwidth(d) * 1.5;
 		float inside = smoothstep(radius + aa, radius - aa, d);
 		result = mix(paperColor, seedColor, inside);
-	} else if (int(mode) == 1 || int(mode) == 2 || int(mode) == 3) {
+	} else if (MODE == 1 || MODE == 2 || MODE == 3) {
 		// Mezzotint dots/lines/strokes.
 		vec2 gc = globalCoord;
-		if (int(mode) == 3) {
+		if (MODE == 3) {
 			gc = rotate2D(gc, 45.0);
 		}
 		vec2 noiseP;
-		if (int(mode) == 1) {
+		if (MODE == 1) {
 			noiseP = gc / grainSize;
 		} else {
 			// Y keeps the coarse scale, X the fine scale, so streaks run

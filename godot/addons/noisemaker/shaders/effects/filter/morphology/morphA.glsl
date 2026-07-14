@@ -9,13 +9,18 @@
 // max, erode (1) = min.
 //
 // No-layout effect: the backend synthesizes the Params UBO and injects
-// `#define mode data[..]`, `#define radius data[..]`, `#define shape data[..]` as
-// bare (float-valued) names. mode/shape are ints with `choices` in the JSON but
-// arrive as raw floats here (Godot's synthesized layout has no integer path) — cast
-// with int(...) at comparison sites (matches this port's established boolean/enum
-// idiom, e.g. filter/grain's `int(pause) > 0`); the reference GLSL's
+// `#define mode data[..]`, `#define radius data[..]` as bare (float-valued) names.
+// mode is an int with `choices` in the JSON but arrives as a raw float here (Godot's
+// synthesized layout has no integer path); the reference GLSL's
 // `mix(hi, lo, float(mode))` blend already reads as a float both sides (mode/erode
-// are exactly 0.0/1.0), so it needs no cast — kept verbatim.
+// are exactly 0.0/1.0), so it needs no cast — kept verbatim. SHAPE is a compile-time
+// define injected by the runtime (definition.js globals.shape.define) — matches the
+// reference's own compiled graph, which bakes `shape` into `defines.SHAPE`, never
+// into `uniforms`.
+#ifndef SHAPE
+#define SHAPE 0
+#endif
+
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 frag;
@@ -26,7 +31,7 @@ void main() {
 	vec2 texel = 1.0 / texSize;
 	vec4 acc = texture(inputTex, uv);
 
-	if (int(shape) == 1) {
+	if (SHAPE == 1) {
 		// Round: full disc structuring element, capped at radius 12 so the
 		// worst case (625 taps) stays bounded regardless of the radius max.
 		float r = min(radius, 12.0);

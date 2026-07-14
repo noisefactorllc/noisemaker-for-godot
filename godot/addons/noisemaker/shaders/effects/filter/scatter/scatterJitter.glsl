@@ -9,10 +9,16 @@
 // pixel in a block shares the same random offset).
 //
 // No-layout effect: the backend synthesizes the Params UBO and injects
-// `#define radius data[..]`, `#define mode data[..]`, `#define seed data[..]` as
-// bare (float-valued) names — mode/seed are ints with choices/range but arrive as
-// raw floats here; cast with int(...) at comparison/arithmetic sites (this port's
-// established idiom for no-layout int params). Input at set 0, binding 1.
+// `#define radius data[..]`, `#define seed data[..]` as bare (float-valued)
+// names — seed is an int with a range but arrives as a raw float here; cast
+// with int(...) at comparison/arithmetic sites. MODE is a compile-time define
+// injected by the runtime (definition.js globals.mode.define) — matches the
+// reference's own compiled graph, which bakes `mode` into `defines.MODE`,
+// never into `uniforms`. Input at set 0, binding 1.
+#ifndef MODE
+#define MODE 0
+#endif
+
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 frag;
@@ -48,17 +54,22 @@ void main() {
 	vec2 texSize = vec2(textureSize(inputTex, 0));
 	vec2 uv = gl_FragCoord.xy / texSize;
 
+	// Seed with the global (tile-aware) coordinate, not gl_FragCoord.xy alone,
+	// so the scatter field is continuous across CLI render tiles instead of
+	// restarting at each tile's local origin.
+	vec2 globalCoord = gl_FragCoord.xy + tileOffset;
+
 	// Clumped mode: quantize the hash coordinate to 3px blocks BEFORE hashing so
 	// every pixel in a block shares the same random offset.
-	vec2 hashCoord = gl_FragCoord.xy;
-	if (int(mode) == 4) {
-		hashCoord = floor(gl_FragCoord.xy / 3.0) * 3.0;
+	vec2 hashCoord = globalCoord;
+	if (MODE == 4) {
+		hashCoord = floor(globalCoord / 3.0) * 3.0;
 	}
 
 	vec2 rnd = hash22(hashCoord + float(int(seed)) * 101.7) - 0.5;
 	vec2 offset = rnd * 2.0 * radius;
 
-	if (int(mode) == 3) {
+	if (MODE == 3) {
 		// Anisotropic: project the offset onto the direction perpendicular to
 		// the local luminance gradient (edge-following smear).
 		vec2 grad = lumGradient(uv);
@@ -76,9 +87,9 @@ void main() {
 	vec4 samp = texture(inputTex, sampleUV);
 
 	vec4 result = samp;
-	if (int(mode) == 1) {
+	if (MODE == 1) {
 		result = min(src, samp);
-	} else if (int(mode) == 2) {
+	} else if (MODE == 2) {
 		result = max(src, samp);
 	}
 

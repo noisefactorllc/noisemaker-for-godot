@@ -17,11 +17,18 @@
 // band around the threshold contour and per-pixel hash grain).
 //
 // No-layout effect: the backend synthesizes the Params UBO and injects
-// `#define mode data[..]`, `#define detail data[..]`, `#define lightAngle
-// data[..]`, `#define balance data[..]`, `#define graininess data[..]`,
-// `#define inkColor data[..].xyz`, `#define paperColor data[..].xyz`. mode is
-// an int with choices, cast int(...) at use sites. Inputs at set 0, binding
+// `#define detail data[..]`, `#define lightAngle data[..]`, `#define balance
+// data[..]`, `#define graininess data[..]`, `#define inkColor data[..].xyz`,
+// `#define paperColor data[..].xyz`. MODE is a compile-time define injected
+// by the runtime (definition.js globals.mode.define) — matches the
+// reference's own compiled graph, which bakes `mode` into `defines.MODE`,
+// never into `uniforms` (confirmed via tools/export-graph.mjs output), same
+// mechanism as filter/oilPaint and filter/hatch. Inputs at set 0, binding
 // 1.. in pass.inputs order (inputTex, blurTex).
+#ifndef MODE
+#define MODE 0
+#endif
+
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(set = 0, binding = 2) uniform sampler2D blurTex;
 layout(location = 0) in vec2 v_uv;
@@ -62,7 +69,7 @@ void main() {
 	float strength = detail * 0.2;
 	vec3 outColor = vec3(0.0);
 
-	if (int(mode) == 1) {
+	if (MODE == 1) {
 		// Plaster: hard blobby height plateau, inverted (dark source = raised),
 		// glossy (squared) shade.
 		float hhC = 1.0 - smoothstep(0.35, 0.65, hC);
@@ -71,7 +78,7 @@ void main() {
 		float shade = reliefShade(hhC, hhR, hhT, strength, lightAngle);
 		float glossy = pow(shade, 2.0);
 		outColor = tonemap2(mix(hhC, glossy, 0.75), inkColor, paperColor);
-	} else if (int(mode) == 2) {
+	} else if (MODE == 2) {
 		// Note Paper: binary threshold cutout with a beveled contour band and
 		// grain.
 		float threshold = balance / 100.0;
@@ -85,7 +92,7 @@ void main() {
 		vec3 beveled = clamp(sheet * mix(0.6, 1.4, shade), vec3(0.0), vec3(1.0));
 		vec3 sheetOut = mix(sheet, beveled, edge);
 
-		vec2 globalCoord = gl_FragCoord.xy;
+		vec2 globalCoord = gl_FragCoord.xy + tileOffset;
 		float grain = (hash12(floor(globalCoord)) - 0.5) * (graininess / 100.0) * 0.15;
 
 		outColor = clamp(sheetOut + vec3(grain), vec3(0.0), vec3(1.0));

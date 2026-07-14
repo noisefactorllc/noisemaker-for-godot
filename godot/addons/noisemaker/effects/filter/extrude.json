@@ -13,7 +13,7 @@
     "type": {
       "type": "int",
       "default": 0,
-      "uniform": "extrudeType",
+      "define": "EXTRUDE_TYPE",
       "choices": {
         "blocks": 0,
         "pyramids": 1
@@ -37,7 +37,7 @@
     "depthSource": {
       "type": "int",
       "default": 0,
-      "uniform": "depthSource",
+      "define": "DEPTH_SOURCE",
       "choices": {
         "luminance": 0,
         "random": 1

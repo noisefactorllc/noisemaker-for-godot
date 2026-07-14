@@ -9,16 +9,26 @@
 // cells are center-anchored (not origin-anchored) so the same visual cell hashes
 // identically regardless of image size.
 //
-// DSL param "type" is renamed to shader uniform "extrudeType" in the reference
-// (definition.js note: `type` collides with a WGSL reserved keyword and is
-// overloaded elsewhere) — carried through verbatim via the JSON's `uniform` field.
-// No-layout effect: the backend synthesizes the Params UBO and injects
-// `#define extrudeType data[..]`, `#define size data[..]`, `#define depth data[..]`,
-// `#define depthSource data[..]`, `#define solidFront data[..]`. extrudeType/
-// depthSource are ints with choices, solidFront a boolean — all arrive as raw
-// floats; cast int(...) at use sites (established idiom). Input at set 0, binding
-// 1. Single texture, texSize-space throughout (no aspect correction — the grid
-// operates directly in pixel space, matching both WGSL and GLSL).
+// DSL param "type" is bound to the compile-time define "EXTRUDE_TYPE" in the
+// reference (definition.js note: `type` collides with a WGSL reserved keyword and
+// is overloaded elsewhere, so the shader-side identifier is renamed) — matches the
+// reference's own compiled graph, which bakes `type` into `defines.EXTRUDE_TYPE`
+// and `depthSource` into `defines.DEPTH_SOURCE`, never into `uniforms`. EXTRUDE_TYPE
+// and DEPTH_SOURCE are compile-time defines injected by the runtime (definition.js
+// globals.type.define / globals.depthSource.define), same mechanism as
+// filter/oilPaint and filter/hatch. No-layout effect: the backend synthesizes the
+// Params UBO and injects `#define size data[..]`, `#define depth data[..]`,
+// `#define solidFront data[..]`. solidFront is a boolean, arrives as a raw float;
+// cast int(...) at use sites (established idiom). Input at set 0, binding 1. Single
+// texture, texSize-space throughout (no aspect correction — the grid operates
+// directly in pixel space, matching both WGSL and GLSL).
+#ifndef EXTRUDE_TYPE
+#define EXTRUDE_TYPE 0
+#endif
+#ifndef DEPTH_SOURCE
+#define DEPTH_SOURCE 0
+#endif
+
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 frag;
@@ -61,7 +71,7 @@ vec4 cellAvgColor3x3(vec2 centerPx, vec2 texSize) {
 }
 
 float cellHeight(vec2 cellC, vec2 cellIdxF, vec2 texSize) {
-	if (int(depthSource) == 1) {
+	if (DEPTH_SOURCE == 1) {
 		// Hash the cell index directly - both backends' fragment positions are
 		// content-Y-up in this runtime, so the center-anchored cell indices are
 		// already identical cross-backend for the same visual cell.
@@ -158,7 +168,7 @@ void main() {
 		float h = cellHeight(cellC, cellIdxF, texSize);
 		float s = 1.0 + h * (depth / 100.0) * 0.4;
 
-		if (int(extrudeType) == 1) {
+		if (EXTRUDE_TYPE == 1) {
 			// pyramids: priority is s alone (no flat-top tier).
 			vec2 apex = imgCenter + (cellC - imgCenter) * s;
 			int tri = pyramidTriHit(P, cellC, apex, halfCell);
@@ -199,7 +209,7 @@ void main() {
 		// boundary, so it never shows up as a visible crack.
 		vec2 cellC = imgCenter + (floor((P - imgCenter) / size) + 0.5) * size;
 		outColor = cellAvgColor3x3(cellC, texSize);
-	} else if (int(extrudeType) == 1) {
+	} else if (EXTRUDE_TYPE == 1) {
 		vec2 apex = imgCenter + (bestCenterPx - imgCenter) * bestS;
 		vec2 topC = bestCenterPx + TOP_SIGN * vec2(0.0, halfCell.y);
 		vec2 botC = bestCenterPx - TOP_SIGN * vec2(0.0, halfCell.y);
