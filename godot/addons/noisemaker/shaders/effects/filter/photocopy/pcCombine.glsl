@@ -1,14 +1,21 @@
 #version 450
 // filter/photocopy, program "pcCombine" — ported verbatim from
-// wgsl/pcCombine.wgsl. Pass 3 of 3: band = lum(src) - lum(blur) is the
-// difference-of-Gaussians edge signal — positive on the light side of an
-// edge, negative on the dark side. edgeInk keeps only the negative (dark)
-// side, gained by `darkness`. A midtone-dropout term suppresses ink entirely
-// in bright source regions so only edges over darker material show ink; a
-// separate term adds solid ink in deep shadows regardless of edge content.
-// Total ink is clamped to 1 and tonemapped as tonemap2(1-ink, inkColor,
-// paperColor). DoG is isotropic (no directional light, no rotation, no
-// fragment-coordinate-derived vectors) — no Y-compensation question here.
+// wgsl/pcCombine.wgsl. Pass 3 of 3: two independent ink contributions,
+// combined with max() so neither term has to carry the whole image alone.
+//
+// 1. Edge ink: band = lum(src) - lum(blur) is the difference-of-Gaussians
+//    signal. abs(band) inks BOTH sides of an edge (a thin double-line
+//    contour, the characteristic photocopier edge artifact), gained by
+//    `darkness` via edgeGain = mix(4, 18, darkness/100).
+// 2. Tonal ink: toneInk = 1 - smoothstep(toneLo, toneHi, lumSrc) fills the
+//    source's own mid-dark regions with solid ink directly, independent of
+//    edge content. toneHi = mix(0.35, 0.68, darkness/100) tracks `darkness`;
+//    toneLo = toneHi - 0.26 is a fixed-width falling ramp below it.
+//
+// ink = clamp(max(edgeInk, toneInk), 0, 1), tonemapped as tonemap2(1-ink,
+// inkColor, paperColor). DoG is isotropic (no directional light, no
+// rotation, no fragment-coordinate-derived vectors) — no Y-compensation
+// question here.
 //
 // No-layout effect: the backend synthesizes the Params UBO and injects
 // `#define darkness data[..]`, `#define inkColor data[..].xyz`, `#define
@@ -37,11 +44,14 @@ void main() {
 	float lumBlur = lum(blur.rgb);
 	float band = lumSrc - lumBlur;
 
-	float gain = mix(2.0, 10.0, darkness / 100.0);
-	float edgeInk = clamp(-band * gain, 0.0, 1.0);
+	float edgeGain = mix(4.0, 18.0, darkness / 100.0);
+	float edgeInk = clamp(abs(band) * edgeGain, 0.0, 1.0);
 
-	float ink = edgeInk * (1.0 - smoothstep(0.4, 0.75, lumSrc));
-	ink = clamp(ink + (1.0 - smoothstep(0.06, 0.12, lumSrc)), 0.0, 1.0);
+	float toneHi = mix(0.35, 0.68, darkness / 100.0);
+	float toneLo = toneHi - 0.26;
+	float toneInk = 1.0 - smoothstep(toneLo, toneHi, lumSrc);
+
+	float ink = clamp(max(edgeInk, toneInk), 0.0, 1.0);
 
 	vec3 outColor = tonemap2(1.0 - ink, inkColor, paperColor);
 	frag = vec4(outColor, src.a);

@@ -19,7 +19,7 @@
     },
     "darkness": {
       "type": "float",
-      "default": 50,
+      "default": 75,
       "uniform": "darkness",
       "min": 0,
       "max": 100

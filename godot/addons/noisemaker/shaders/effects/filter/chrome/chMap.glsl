@@ -40,7 +40,7 @@ void main() {
 	float hT = lum(texture(blurTex, uv + vec2(0.0, texel.y)).rgb);
 	vec2 grad = vec2(hR - hL, hT - hB);
 
-	vec2 uv2 = uv + grad * (distortion / 100.0) * 0.03;
+	vec2 uv2 = uv + grad * (distortion / 100.0) * 0.5;
 	float h2 = lum(texture(blurTex, uv2).rgb);
 
 	float cycles = mix(1.0, 7.0, detail / 100.0);

@@ -1,95 +1,115 @@
 #version 450
-// filter/wind (program "wind") — ported verbatim from wgsl/wind.wgsl (its
-// direct-uv/no-remap sampling; cross-checked against glsl/wind.glsl for the
-// globalCoord = gl_FragCoord + tileOffset hash-seed convention). Directional
-// streak filter (Photoshop Wind: Wind/Blast/Stagger). Each pixel marches upwind
-// up to L=4+strength/100*60 samples looking for the brightest sample exceeding
-// its own luminance by threshold/100, then paints a decayed (blast: no decay),
-// per-scanline-segment-randomized echo of that sample back onto itself via
-// max(src, streak).
+// filter/wind (program "wind") — ported verbatim from wgsl/wind.wgsl (cross-checked
+// against glsl/wind.glsl). Soft horizontal trails from bright image structure: every
+// fragment integrates brighter samples along its upwind scanline with a smooth
+// luminance gate (no threshold chatter) and distance-taper weights, then blends the
+// weighted-average trail color back over itself via max(src, streak). Wind tapers
+// quickly, Blast carries a broad dense trail, Stagger adds a continuous per-row phase
+// so adjacent scanlines separate without band edges — no per-segment hash
+// randomization anywhere in this version.
+//
+// METHOD is a compile-time define injected by the runtime (definition.js
+// globals.method.define), same mechanism as filter/oilPaint / filter/hatch: wrapping
+// the wind/blast/stagger dispatch in #if blocks lets the compiler drop the
+// unreachable decay/taper/density/gain arms for the compiled variant.
 //
 // Y-convention note: horizontal-only march, no directional/rotational geometry
-// crosses the Y axis, so a Y-origin mismatch cannot mirror the output geometry
-// (see the WGSL/GLSL header comments) — the only Y-sensitivity is the hash seed
-// (stagger band-parity, runScale), ported using gl_FragCoord.xy directly
-// (top-left, matching WGSL's pos.xy) per this port's established no-per-effect-
-// flip convention (PORTING-GUIDE golden rule 1).
+// crosses the Y axis, so a Y-origin mismatch cannot mirror the output geometry — the
+// only Y-sensitivity is the stagger phase (continuous sin(globalCoord.y)), ported
+// using gl_FragCoord.xy directly (top-left, matching WGSL's pos.xy) per this port's
+// established no-per-effect-flip convention (PORTING-GUIDE golden rule 1).
 //
-// No-layout effect: the backend synthesizes the Params UBO and injects
-// `#define method data[..]`, `#define direction data[..]`, `#define strength
-// data[..]`, `#define threshold data[..]`. method/direction are ints with
-// choices; arrive as raw floats, cast int(...) at use sites (established idiom).
-// Input at set 0, binding 1.
+// No-layout effect: the backend synthesizes the Params UBO and injects `#define
+// direction data[..]`, `#define strength data[..]`, `#define threshold data[..]`.
+// direction is an int with choices; arrives as a raw float, cast int(...) at the use
+// site (established idiom). Input at set 0, binding 1.
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 frag;
 
-#define METHOD_BLAST 1
-#define METHOD_STAGGER 2
+#ifndef METHOD
+#define METHOD 1
+#endif
 
-const int MAX_STEPS = 64;
+const int MAX_STEPS = 128;
+const float STEP_PX = 1.0;
+const float MAX_REACH = 128.0;
 
-float hash12(vec2 p) {
-	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-	p3 += dot(p3, p3.yzx + 33.33);
-	return fract((p3.x + p3.y) * p3.z);
+float lum(vec3 c) {
+	return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
-
-float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
 void main() {
 	vec2 texSize = vec2(textureSize(inputTex, 0));
 	vec2 uv = gl_FragCoord.xy / texSize;
 	vec2 globalCoord = gl_FragCoord.xy + tileOffset;
-
 	vec4 src = texture(inputTex, uv);
-	float lumBase = lum(src.rgb);
 
-	float L = 4.0 + strength / 100.0 * 60.0;
-
-	// fromLeft (0): wind blows left->right, streaks trail right, so the upwind
-	// search direction (toward the bright source) is -x.
-	float marchDir = (int(direction) == 0) ? -1.0 : 1.0;
-
-	// Stagger: alternate 4px-tall row bands offset their march start by L/2 so
-	// adjacent bands sample different parts of the upwind scanline.
-	float staggerStart = 0.0;
-	if (int(method) == METHOD_STAGGER) {
-		float band = floor(globalCoord.y / 4.0);
-		if (mod(band, 2.0) >= 1.0) {
-			staggerStart = L * 0.5;
-		}
+	float amount = clamp(strength / 100.0, 0.0, 1.0);
+	if (amount <= 0.0) {
+		frag = src;
+		return;
 	}
 
-	vec3 bestColor = vec3(0.0);
-	float bestLum = -1.0;
-	float bestStep = 0.0;
-	bool found = false;
+	float reach = MAX_REACH * amount;
+	float marchDir = (int(direction) == 0) ? -1.0 : 1.0;
+	float staggerPhase = 0.0;
+#if METHOD == 2
+	// Slow, continuous scanline phase: recognizably staggered without discontinuous
+	// four-pixel bands or a per-row random field.
+	staggerPhase = (0.5 + 0.5 * sin(globalCoord.y * 0.22)) * min(12.0, reach * 0.18);
+#endif
+
+	vec3 accumColor = vec3(0.0);
+	float accumWeight = 0.0;
+	float baseLum = lum(src.rgb);
+	float edge = threshold / 100.0;
 
 	for (int i = 1; i <= MAX_STEPS; i++) {
-		if (float(i) > L) { break; }
-		float marchStep = staggerStart + float(i);
-		vec2 sampleUV = clamp((gl_FragCoord.xy + vec2(marchDir * marchStep, 0.0)) / texSize, 0.0, 1.0);
-		vec3 sampleColor = texture(inputTex, sampleUV).rgb;
-		float sampleLum = lum(sampleColor);
-		if (sampleLum > lumBase + threshold / 100.0 && sampleLum > bestLum) {
-			bestLum = sampleLum;
-			bestColor = sampleColor;
-			bestStep = float(i);
-			found = true;
-		}
+		float distancePx = float(i) * STEP_PX;
+		if (distancePx > reach) { break; }
+
+		float sampleDistance = distancePx + staggerPhase;
+		vec2 sampleUV = clamp(
+			(gl_FragCoord.xy + vec2(marchDir * sampleDistance, 0.0)) / texSize,
+			0.0, 1.0);
+		vec3 candidate = texture(inputTex, sampleUV).rgb;
+
+		float contrast = lum(candidate) - baseLum - edge;
+		float activation = smoothstep(0.0, 0.08, contrast);
+		float alongRun = distancePx / max(reach, 1.0);
+#if METHOD == 1
+		float decayRate = 0.8;
+#elif METHOD == 2
+		float decayRate = 2.0;
+#else
+		float decayRate = 3.4;
+#endif
+#if METHOD == 1
+		float taperStart = 0.82;
+#else
+		float taperStart = 0.72;
+#endif
+		float endTaper = 1.0 - smoothstep(taperStart, 1.0, alongRun);
+		float weight = activation * exp(-decayRate * alongRun) * endTaper;
+		accumColor += candidate * weight;
+		accumWeight += weight;
 	}
 
-	float decay = (int(method) == METHOD_BLAST) ? 1.0 : exp(-3.0 * bestStep / L);
-
-	// Per-scanline-segment random run length: every pixel in the same
-	// L-pixel-wide segment of a scanline shares one random scale factor, so
-	// streaks break into randomized runs instead of a uniform wash. +17.0 is an
-	// arbitrary decorrelation constant, not a uniform.
-	float runScale = hash12(vec2(floor(globalCoord.y), floor(globalCoord.x / L)) + 17.0);
-
-	float alpha = found ? decay * runScale : 0.0;
-	vec3 streak = bestColor * alpha;
+	vec3 integrated = accumColor / max(accumWeight, 0.00001);
+#if METHOD == 1
+	float densityRate = 0.12;
+#else
+	float densityRate = 0.16;
+#endif
+	float density = 1.0 - exp(-accumWeight * densityRate);
+#if METHOD == 1
+	float methodGain = 1.0;
+#else
+	float methodGain = 0.88;
+#endif
+	float blendAmount = clamp(density * amount * methodGain, 0.0, 1.0);
+	vec3 streak = mix(src.rgb, integrated, blendAmount);
 
 	frag = vec4(max(src.rgb, streak), src.a);
 }
