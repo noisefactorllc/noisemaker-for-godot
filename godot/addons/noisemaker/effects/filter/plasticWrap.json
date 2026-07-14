@@ -31,6 +31,11 @@
       "uniform": "smoothness",
       "min": 0,
       "max": 100
+    },
+    "lightDirection": {
+      "type": "vec3",
+      "default": [-0.4, 0.6, 0.7],
+      "uniform": "lightDirection"
     }
   },
   "passes": [
