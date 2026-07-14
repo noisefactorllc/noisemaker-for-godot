@@ -13,7 +13,7 @@
       "type": "float",
       "default": 30,
       "uniform": "amount",
-      "min": -100,
+      "min": 0,
       "max": 100,
       "zero": 0
     },
@@ -27,7 +27,7 @@
     "style": {
       "type": "int",
       "default": 2,
-      "uniform": "style",
+      "define": "STYLE",
       "choices": {
         "aroundCenter": 0,
         "outFromCenter": 1,
@@ -37,7 +37,7 @@
     "wrap": {
       "type": "int",
       "default": 0,
-      "uniform": "wrap",
+      "define": "WRAP",
       "choices": {
         "mirror": 0,
         "repeat": 1,

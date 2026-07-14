@@ -1,7 +1,7 @@
 #version 450
-// filter/pondRipples (program "pondRipples") — ported from wgsl/pondRipples.wgsl,
-// its RAW rotation expansion (see doctrine note below; final post-a330fb83-revert
-// state — same pattern as filter/spinBlur, already validated in this port).
+// filter/pondRipples (program "pondRipples") — ported from wgsl/pondRipples.wgsl
+// EXCEPT for rotation handedness, where this file uses the GLSL golden's
+// convention instead (see doctrine note below).
 // Concentric ring distortion around the fixed image center (0.5,0.5) — no
 // user-facing center param, unlike spinBlur (Photoshop ZigZag: Around Center /
 // Out From Center / Pond Ripples styles). r = aspect-corrected distance from
@@ -12,25 +12,37 @@
 // adds w to the radius at constant angle; style 2 (pondRipples) splits w evenly
 // across both.
 //
-// Rotation handedness: raw-convention expansion (co*p.x - s*p.y, s*p.x + co*p.y)
-// — do NOT hand-compensate. The GLSL golden's `mat2(co,-s,s,co)*dir` is
-// algebraically the same rotation at -angle (mat2 is column-major: columns
-// (co,-s),(s,co) => matrix [[co,s],[-s,co]]); per PORTING-GUIDE golden rule 1 and
-// this port's single-global-present-flip doctrine (already validated on
-// filter/spinBlur, which has the identical raw-vs-mat2 relationship), the raw
-// WGSL form ported here is the screen-correct match for the webgl2 golden.
+// Rotation handedness: this file uses the GLSL golden's `mat2(co,-s,s,co)*dir`
+// expansion (co*dir.x+s*dir.y, -s*dir.x+co*dir.y), NOT WGSL's raw form — see the
+// EMPIRICAL FINDING comment at the rotation site below for the isolation test
+// (style:outFromCenter vs style:aroundCenter) that established this.
 //
 // No-layout effect: the backend synthesizes the Params UBO and injects
-// `#define amount data[..]`, `#define ridges data[..]`, `#define style data[..]`,
-// `#define wrap data[..]`, `#define antialias data[..]`. ridges/style/wrap are
-// ints, antialias a boolean — all arrive as raw floats; cast int(...) at use
-// sites (established idiom). `aspectRatio` is a reserved engine name (PORTING-
-// GUIDE hazard) — renamed to `ar` throughout (WGSL local var AND this file has no
-// helper taking it as a param). Input at set 0, binding 1. Single texture, no
-// fullResolution remap needed (matches WGSL, which has no tiling concept).
+// `#define amount data[..]`, `#define ridges data[..]`, `#define antialias data[..]`
+// (real per-pass uniforms). STYLE and WRAP are compile-time defines (globals.style/
+// wrap.define in the JSON, matching the reference exactly) baked into the compiled
+// program variant (see the graph pass's program name, e.g.
+// "pondRipples__STYLE_0__WRAP_0") — bare uppercase identifiers, NOT uniform reads.
+// This matters: a reference-produced graph never emits a runtime "style"/"wrap"
+// uniform value at all (they're define-only upstream), so declaring them as
+// `uniform:` here would silently fall back to this JSON's default (2/0) for every
+// non-default style/wrap requested — exactly the bug this comment now documents
+// against regressing. ridges is a real uniform int; antialias a real uniform bool —
+// both arrive as raw floats, cast int(...) at use sites (established idiom).
+// `aspectRatio` is a reserved engine name (PORTING-GUIDE hazard) — renamed to `ar`
+// throughout (WGSL local var AND this file has no helper taking it as a param).
+// Input at set 0, binding 1. Single texture, no fullResolution remap needed
+// (matches WGSL, which has no tiling concept).
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 frag;
+
+#ifndef STYLE
+#define STYLE 2
+#endif
+#ifndef WRAP
+#define WRAP 0
+#endif
 
 #define PI 3.14159265359
 
@@ -47,21 +59,33 @@ void main() {
 	// Clamp the damping term at 0 so corners beyond r=1 (aspect ratios
 	// wider/taller than ~1.73:1) don't invert phase and amplify instead of
 	// damping.
-	float w = sin(phase) * (amount / 100.0) * 0.05 * max(0.0, 1.0 - r);
+	float damping = max(0.0, 1.0 - r);
+	float w;
+	if (amount <= 30.0) {
+		// Preserve the original 0..30 response, including the exact shipped
+		// default expression at amount=30.
+		w = sin(phase) * (amount / 100.0) * 0.05 * damping;
+	} else {
+		// Continue smoothly from the original default slope, then accelerate
+		// toward a 2.0 gain at amount=100 (twice the previous maximum).
+		float x = (amount - 30.0) / 70.0;
+		float amountGain = 0.3 + 0.7 * x + x * x;
+		w = sin(phase) * amountGain * 0.05 * damping;
+	}
 
 	float rotDelta = 0.0;
 	float rDelta = 0.0;
-	if (int(style) == 0) {
-		// aroundCenter
-		rotDelta = w;
-	} else if (int(style) == 1) {
-		// outFromCenter
-		rDelta = w;
-	} else {
-		// pondRipples: both at half strength
-		rotDelta = w * 0.5;
-		rDelta = w * 0.5;
-	}
+#if STYLE == 0
+	// aroundCenter
+	rotDelta = w;
+#elif STYLE == 1
+	// outFromCenter
+	rDelta = w;
+#else
+	// pondRipples: both at half strength
+	rotDelta = w * 0.5;
+	rDelta = w * 0.5;
+#endif
 
 	vec2 dir = vec2(0.0);
 	if (r > 0.0) {
@@ -92,16 +116,16 @@ void main() {
 	uv += 0.5;
 
 	// Apply wrap mode (floored-mod; GLSL mod() is already floored)
-	if (int(wrap) == 0) {
-		// mirror
-		uv = abs(mod(uv + 1.0, 2.0) - 1.0);
-	} else if (int(wrap) == 1) {
-		// repeat
-		uv = mod(uv, 1.0);
-	} else {
-		// clamp
-		uv = clamp(uv, 0.0, 1.0);
-	}
+#if WRAP == 0
+	// mirror
+	uv = abs(mod(uv + 1.0, 2.0) - 1.0);
+#elif WRAP == 1
+	// repeat
+	uv = mod(uv, 1.0);
+#else
+	// clamp
+	uv = clamp(uv, 0.0, 1.0);
+#endif
 
 	if (int(antialias) != 0) {
 		vec2 dx = dFdx(uv);

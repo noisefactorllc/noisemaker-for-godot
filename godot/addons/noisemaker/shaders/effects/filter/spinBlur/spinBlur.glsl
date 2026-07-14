@@ -80,7 +80,14 @@ void main() {
 	// in this runtime today — see PORTING-GUIDE — so this is a no-op now, kept for
 	// forward compatibility with tiled rendering).
 	vec2 globalCoord = gl_FragCoord.xy + tileOffset;
-	float jitter = (hash12(globalCoord) - 0.5) * angularStep;
+	// Mirror-invariant jitter coordinate (GLSL golden): fold y around the vertical
+	// midline so corresponding pixels above/below center share a jitter value —
+	// matches the reference's symmetric-jitter correction. texSize.y stands in for
+	// fullResolution.y (equal today; see the file header's texSize-vs-fullResolution
+	// note). GLSL's jitter carries no sign flip (WGSL negates its own — that's a
+	// compensation for WGSL's raw rotation convention, which this file does not use).
+	vec2 jitterCoord = vec2(globalCoord.x, abs(globalCoord.y - texSize.y * 0.5));
+	float jitter = (hash12(jitterCoord) - 0.5) * angularStep;
 
 	vec4 sum = vec4(0.0);
 	for (int i = 0; i < N; i++) {
