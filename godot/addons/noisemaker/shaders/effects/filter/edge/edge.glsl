@@ -18,6 +18,11 @@
 // `kernel` is macro-expanded to `data[N].x` before compilation — no MSL symbol named
 // `kernel` ever exists, so the bare reference name is correct and safe.
 //
+// contourSide (lower/upper) selects which side of a level crossing the contour
+// kernel (kernelType==2) traces — a one-directional crossing test, not a
+// symmetric any-sign-change test. Kernel radius is scaled by renderScale
+// (capped at 256) to stay consistent under tiled / large-format export.
+//
 // PARITY TOLERANCE (logged per PORTING-GUIDE §"Per-effect checklist" 5):
 //   edge is a contrast-AMPLIFYING convolution: it scales the neighbor-difference sum by
 //   amount/50 (=2.0 at the default amount=100) over a 5x5/7x7 window. The standalone
@@ -53,10 +58,11 @@ float getWeight(int dx, int dy, int kernelType) {
 	}
 }
 
-// Contour: mark a level-crossing where sign(c - level) differs from any of the 4
+// Contour: mark only the selected side of a level crossing against the 4
 // cardinal neighbors (Photoshop Trace Contour). Returns a binary vec3: 1.0 =
-// background (white), 0.0 = contour line (dark). Sync reference 7207d92b.
-vec3 contourConv(vec2 uv, vec2 texelSize, vec3 centerRGB, float lvl, bool useLuma) {
+// background (white), 0.0 = contour line (dark). `upperSide` selects which
+// side of the level the traced region sits on (contourSide global).
+vec3 contourConv(vec2 uv, vec2 texelSize, vec3 centerRGB, float lvl, bool useLuma, bool upperSide) {
 	vec3 northRGB = texture(inputTex, uv + vec2(0.0,  1.0) * texelSize).rgb;
 	vec3 southRGB = texture(inputTex, uv + vec2(0.0, -1.0) * texelSize).rgb;
 	vec3 eastRGB  = texture(inputTex, uv + vec2( 1.0, 0.0) * texelSize).rgb;
@@ -64,24 +70,27 @@ vec3 contourConv(vec2 uv, vec2 texelSize, vec3 centerRGB, float lvl, bool useLum
 
 	if (useLuma) {
 		float centerL = dot(centerRGB, LUMA);
-		float centerSign = sign(centerL - lvl);
-		bool crossing = centerSign != sign(dot(northRGB, LUMA) - lvl) ||
-		                centerSign != sign(dot(southRGB, LUMA) - lvl) ||
-		                centerSign != sign(dot(eastRGB, LUMA) - lvl)  ||
-		                centerSign != sign(dot(westRGB, LUMA) - lvl);
+		bool centerOnSide = upperSide ? centerL >= lvl : centerL < lvl;
+		bool crossing = centerOnSide && (upperSide
+			? dot(northRGB, LUMA) < lvl || dot(southRGB, LUMA) < lvl ||
+			  dot(eastRGB, LUMA) < lvl  || dot(westRGB, LUMA) < lvl
+			: dot(northRGB, LUMA) >= lvl || dot(southRGB, LUMA) >= lvl ||
+			  dot(eastRGB, LUMA) >= lvl  || dot(westRGB, LUMA) >= lvl);
 		return vec3(crossing ? 0.0 : 1.0);
 	}
 
-	float signR = sign(centerRGB.r - lvl);
-	float signG = sign(centerRGB.g - lvl);
-	float signB = sign(centerRGB.b - lvl);
+	bvec3 centerOnSide = upperSide ? greaterThanEqual(centerRGB, vec3(lvl))
+	                                : lessThan(centerRGB, vec3(lvl));
 
-	bool crossR = signR != sign(northRGB.r - lvl) || signR != sign(southRGB.r - lvl) ||
-	              signR != sign(eastRGB.r - lvl)  || signR != sign(westRGB.r - lvl);
-	bool crossG = signG != sign(northRGB.g - lvl) || signG != sign(southRGB.g - lvl) ||
-	              signG != sign(eastRGB.g - lvl)  || signG != sign(westRGB.g - lvl);
-	bool crossB = signB != sign(northRGB.b - lvl) || signB != sign(southRGB.b - lvl) ||
-	              signB != sign(eastRGB.b - lvl)  || signB != sign(westRGB.b - lvl);
+	bool crossR = centerOnSide.r && (upperSide
+		? northRGB.r < lvl || southRGB.r < lvl || eastRGB.r < lvl || westRGB.r < lvl
+		: northRGB.r >= lvl || southRGB.r >= lvl || eastRGB.r >= lvl || westRGB.r >= lvl);
+	bool crossG = centerOnSide.g && (upperSide
+		? northRGB.g < lvl || southRGB.g < lvl || eastRGB.g < lvl || westRGB.g < lvl
+		: northRGB.g >= lvl || southRGB.g >= lvl || eastRGB.g >= lvl || westRGB.g >= lvl);
+	bool crossB = centerOnSide.b && (upperSide
+		? northRGB.b < lvl || southRGB.b < lvl || eastRGB.b < lvl || westRGB.b < lvl
+		: northRGB.b >= lvl || southRGB.b >= lvl || eastRGB.b >= lvl || westRGB.b >= lvl);
 
 	return vec3(
 		crossR ? 0.0 : 1.0,
@@ -117,7 +126,9 @@ void main() {
 	vec4 origColor = texture(inputTex, uv);
 
 	int kernelType = int(kernel);        // WGSL: i32(u.kernel)
-	int radius = int(size) + 1;          // WGSL: i32(u.size)+1; 0->1, 1->2, 2->3
+	// Scale the kernel radius by renderScale so edge width stays consistent under
+	// tiled / large-format (non-unit-scale) export; capped at 256.
+	int radius = min(int((size + 1.0) * renderScale), 256);
 	int blendMode = int(blend);          // WGSL: i32(u.blend)
 	bool doInvert = invert > 0.5;        // WGSL: u.invert > 0.5
 	bool useLuma = channel > 0.5;        // WGSL: u.channel > 0.5
@@ -128,7 +139,7 @@ void main() {
 
 	if (kernelType == 2) {
 		// Contour: level-crossing trace, not a weighted convolution.
-		conv = contourConv(uv, texelSize, origColor.rgb, level / 100.0, useLuma);
+		conv = contourConv(uv, texelSize, origColor.rgb, level / 100.0, useLuma, contourSide > 0.5);
 	} else {
 		for (int dy = -3; dy <= 3; dy = dy + 1) {
 			for (int dx = -3; dx <= 3; dx = dx + 1) {
