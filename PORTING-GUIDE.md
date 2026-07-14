@@ -148,6 +148,25 @@ of macros — until then, follow this.
 shader (`if (NOISE_TYPE == 3) {…}`); do not declare or hardcode them. When a helper takes
 an `int` parameter, narrow at the call site (`int(NOISE_TYPE)`) — value is always integral.
 
+## `define:` vs `uniform:` must match the reference exactly
+
+An effect-definition JSON global that the reference declares `define: "X"` (compile-time,
+baked into the graph's program name/defines) must be ported as `define` too — **not**
+`uniform`. This is not a style choice: `parity/run.sh` and the parity harness generally
+render off a graph produced by the *reference* compiler (`tools/export-graph.mjs`), and a
+`define`-only global never gets serialized into that graph's `pass.uniforms` at all — a
+global ported as `uniform` on this side then has nothing to read from the golden's graph
+and silently falls back to this port's own JSON default on *every* pass, regardless of what
+the DSL actually requested. The failure signature is characteristic: the *default* value of
+that global passes (it happens to match by coincidence), while every fixture that sets it to
+a non-default choice fails — easy to misdiagnose as an algorithm bug in the non-default
+branch when the branch is never actually selected. Confirmed root cause for
+`filter/pondRipples`'s `style`/`wrap` (aroundCenter/outFromCenter never took effect) and
+`filter/mosaicTiles`'s `mode`. A registry-wide mechanical scan (compare `define`-vs-`uniform`
+presence per global, reference JS vs this port's JSON, for every effect) is the fast way to
+catch every instance of this at once rather than one accidental-pass at a time; re-run it
+after any batch of effect-definition edits.
+
 ## macOS / Metal gotchas
 
 - Godot cross-compiles SPIR-V→MSL on macOS. A function or variable named for an **MSL
