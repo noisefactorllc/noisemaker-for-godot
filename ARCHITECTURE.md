@@ -1,4 +1,4 @@
-# noisemaker-godot — Architecture
+# Noisemaker for Godot — Architecture
 
 A parallel port of the Noisemaker shader engine to Godot 4.7 / `RenderingDevice` GLSL.
 Goal: **live procedural texture from the Polymorphic DSL, pixel-identical to the JS
@@ -17,7 +17,7 @@ graph = { passes[], programs{}, textures{}, allocations{}, renderSurface, ... }
 ```
 
 Everything downstream of the graph (texture pooling, double-buffering, pass execution,
-presentation) is backend work; everything upstream is pure data logic. noisemaker-godot
+presentation) is backend work; everything upstream is pure data logic. Noisemaker for Godot
 gives the graph **two producers**:
 
 - **(a) Live / in-engine (production)** — the GDScript compiler under
@@ -39,7 +39,7 @@ A `RenderingDevice`-based executor. **All reference effects are render-pass base
 scatter + repeat loops), so we mirror the **WebGL2 GPGPU model** with fullscreen fragment
 draws rather than compute dispatches.
 
-| Reference | noisemaker-godot |
+| Reference | Noisemaker for Godot |
 |---|---|
 | `resources.js` liveness + linear-scan pool | `compiler/graph/resources.gd` (`allocate_resources`, runs inside `Orchestrator.build_graph`) + `compiler/graph/dim.gd`. Surfaces are then allocated per-texId in `nm_backend.gd::allocate_textures`. (No `texture_pool.gd`.) |
 | `pipeline.js` surfaces (`o0..o7`, geo, vol) | `nm_backend.gd` allocates `global_*` surfaces as `RDTexture`s, with **ping-pong double-buffering** for state/feedback surfaces (`_pingpong`). |

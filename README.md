@@ -1,4 +1,4 @@
-# noisemaker-godot
+# Noisemaker for Godot
 
 > Run **Noisemaker**'s procedural visuals inside **Godot 4**.
 
@@ -16,7 +16,7 @@ render(o0)
 That little language is Noisemaker's **DSL** (a domain-specific language for visuals). The original
 engine runs in the browser at [noisedeck.app](https://noisedeck.app).
 
-**noisemaker-godot** runs that same engine *inside Godot 4* — the same programs and the same ~180
+**Noisemaker for Godot** runs that same engine *inside Godot 4* — the same programs and the same ~180
 effects, rendered on Godot's own GPU pipeline. Use it to make textures, materials, and animated
 backgrounds from code, with no image files.
 
@@ -103,7 +103,7 @@ Coverage table, parity numbers, and the full "chaos" explanation: **[STATUS.md](
 ## How it works
 
 Noisemaker turns a DSL program into a **render graph** — a normalized list of GPU passes. That graph
-is the shared seam every Noisemaker port targets. noisemaker-godot ports the whole compiler to
+is the shared seam every Noisemaker port targets. Noisemaker for Godot ports the whole compiler to
 GDScript (so it runs in-engine) and executes the graph on Godot's `RenderingDevice`.
 
 → **[ARCHITECTURE.md](ARCHITECTURE.md)** (how it maps onto Godot) ·

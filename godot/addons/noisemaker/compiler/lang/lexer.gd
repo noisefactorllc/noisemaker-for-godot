@@ -1,6 +1,6 @@
 # lexer.gd — DSL tokenizer. Port of the REFERENCE shaders/src/lang/lexer.js (reference/01 §1),
-# cross-checked against noisemaker-hlsl Compiler/Lang/Lexer.cs. Sources: upstream noisemaker +
-# noisemaker-hlsl ONLY.
+# cross-checked against noisemaker-unity Compiler/Lang/Lexer.cs. Sources: upstream noisemaker +
+# noisemaker-unity ONLY.
 #
 # PARITY-CRITICAL (reference/01 §1.4): 1-based line/col; col counts code units; tabs=1; '\n'
 # resets col=1/line++. Rule order is load-bearing: comments, o/s refs, vol BEFORE vel (3rd char

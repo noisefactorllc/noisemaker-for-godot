@@ -1,6 +1,6 @@
 # parser.gd — recursive-descent parser for the Polymorphic DSL. Port of the REFERENCE
-# shaders/src/lang/parser.js (cross-checked vs noisemaker-hlsl Parser.cs). Sources: upstream
-# noisemaker + noisemaker-hlsl ONLY.
+# shaders/src/lang/parser.js (cross-checked vs noisemaker-unity Parser.cs). Sources: upstream
+# noisemaker + noisemaker-unity ONLY.
 #
 # Consumes the lexer's token stream (Token instances) and returns the Program AST as nested
 # Dictionaries (heterogeneous, JSON-diffable). Constant arithmetic is folded at parse time; osc /

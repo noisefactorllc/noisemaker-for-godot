@@ -1,5 +1,5 @@
 # palette_expansion.gd — legacy classicNoisedeck palette expansion. Port of the REFERENCE
-# shaders/src/runtime/palette-expansion.js. Sources: upstream noisemaker + noisemaker-hlsl ONLY.
+# shaders/src/runtime/palette-expansion.js. Sources: upstream noisemaker + noisemaker-unity ONLY.
 #
 # Maps a 1-based palette index to the concrete cosine-palette uniforms (offset/amp/freq/phase/mode)
 # that classicNoisedeck shaders expect. The expander calls expand_palette() for type:"palette"

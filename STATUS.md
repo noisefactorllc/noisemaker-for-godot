@@ -1,4 +1,4 @@
-# noisemaker-godot — status & parity
+# Noisemaker for Godot — status & parity
 
 *Last verified 2026-07-14 on Apple M4 / Metal, **content-pinned** to the reference at commit
 `75507112`. That SHA is UNSTABLE — upstream amends the artistic-filter batch in place and rebases it,

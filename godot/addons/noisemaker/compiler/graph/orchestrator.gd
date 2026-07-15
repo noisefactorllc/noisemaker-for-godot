@@ -1,7 +1,7 @@
 # orchestrator.gd — ties the compiler pipeline into a normalized render graph. Port of the REFERENCE
 # shaders/src/runtime/compiler.js compileGraph() + tools/export-graph.mjs normalizeGraph() (the shape
 # the backend loader consumes, docs/GRAPH-JSON-SCHEMA.md). Sources: upstream noisemaker +
-# noisemaker-hlsl ONLY.
+# noisemaker-unity ONLY.
 #
 # build_graph(source, options) runs lex -> parse -> validate -> expand -> allocate_resources, wraps
 # the result (id=hashSource, source, passes, programs, allocations, textures, renderSurface), then

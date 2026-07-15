@@ -1,4 +1,4 @@
-# Noisemaker → Godot Port — Implementation Plan
+# Noisemaker for Godot — Implementation Plan
 
 > **STATUS (2026-06-21) — this is the original phased plan, kept for history; the build has moved
 > past it.** Phases 0–6 are substantially complete: the live in-engine GDScript compiler shipped under
@@ -86,7 +86,7 @@ noisemaker-godot/
 - [ ] Copy `tools/{export-graph.mjs,convert-definitions.mjs,package.json}`; edit `convert-definitions.mjs` output root → `godot/addons/noisemaker/effects`. Edit nothing in `export-graph.mjs` (it's reference-driven).
 - [ ] Copy `parity/{compare.py,programs/*.dsl}` verbatim.
 - [ ] Copy `docs/GRAPH-JSON-SCHEMA.md`; append a "Godot formats" note (`rgba16f`→`R16G16B16A16_SFLOAT`, `rgba32f`→`R32G32B32A32_SFLOAT`, `rgba8`→`R8G8B8A8_UNORM`, all linear).
-- [ ] Write `godot/project.godot` (name `noisemaker-godot`, `forward_plus`, autoload none) and `godot/addons/noisemaker/plugin.cfg`.
+- [ ] Write `godot/project.godot` (name `Noisemaker for Godot`, `forward_plus`, autoload none) and `godot/addons/noisemaker/plugin.cfg`.
 - [ ] Write `.gitignore` (`.godot/`, `parity/out/`, `node_modules/`).
 - [ ] **Verify:** `Godot --path godot --headless --quit` imports the project clean (exit 0).
 - [ ] **Commit** `scaffold: project tree + reused agnostic assets` (omit Co-Authored-By per project convention).

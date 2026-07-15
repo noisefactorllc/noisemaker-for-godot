@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to noisemaker-godot. Versions track `godot/addons/noisemaker/plugin.cfg`.
+All notable changes to Noisemaker for Godot. Versions track `godot/addons/noisemaker/plugin.cfg`.
 This is pre-1.0, WIP software — see the README's status banner.
 
 ## [Unreleased]

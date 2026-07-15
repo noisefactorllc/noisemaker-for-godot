@@ -1,4 +1,4 @@
-# Noisemaker → Godot-GLSL Shader Porting Guide
+# Noisemaker for Godot — GLSL Shader Porting Guide
 
 The rulebook for porting a Noisemaker effect shader to Godot `RenderingDevice` GLSL
 **pixel-identically**. Derived from the reference specs (`reference/07`, `reference/08`)

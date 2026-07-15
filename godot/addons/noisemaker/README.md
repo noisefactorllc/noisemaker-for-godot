@@ -1,4 +1,4 @@
-# Noisemaker (Godot addon)
+# Noisemaker for Godot
 
 Live procedural textures from the Noisemaker **Polymorphic DSL**, compiled to a render graph and
 executed on Godot's low-level `RenderingDevice` — aiming to be pixel-identical to the JS/WebGL2

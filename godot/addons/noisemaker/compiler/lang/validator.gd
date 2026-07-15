@@ -1,6 +1,6 @@
 # validator.gd — semantic validator for the Polymorphic DSL. Port of the REFERENCE
-# shaders/src/lang/validator.js (cross-checked vs noisemaker-hlsl Validator.cs). Sources: upstream
-# noisemaker + noisemaker-hlsl ONLY.
+# shaders/src/lang/validator.js (cross-checked vs noisemaker-unity Validator.cs). Sources: upstream
+# noisemaker + noisemaker-unity ONLY.
 #
 # validate(ast) -> {plans, diagnostics, render, vars, searchNamespaces, trailingComments?}. It
 # flattens each chain statement into a list of steps with temp surfaces, resolves every argument

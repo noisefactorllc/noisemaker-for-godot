@@ -1,6 +1,6 @@
 # tags.gd — effect tags, namespaces, and IO functions. Port of the REFERENCE
 # shaders/src/runtime/tags.js (the stable parts the compiler consumes). Sources: upstream
-# noisemaker + noisemaker-hlsl ONLY.
+# noisemaker + noisemaker-unity ONLY.
 #
 # The parser needs is_valid_namespace() + VALID_NAMESPACES (search-directive validation); the
 # validator additionally needs the IO functions + built-in namespace. Runtime namespace

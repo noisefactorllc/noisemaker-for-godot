@@ -1,6 +1,6 @@
 # Parity harness
 
-How noisemaker-godot is verified against the JS/WebGL2 reference engine. Two independent layers:
+How Noisemaker for Godot is verified against the JS/WebGL2 reference engine. Two independent layers:
 
 1. **Pixel parity** — render the Godot candidate and diff it against a reference GPU golden.
 2. **Compiler parity** — diff the in-engine GDScript compiler's output against the reference compiler,
