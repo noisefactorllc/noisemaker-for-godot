@@ -1,6 +1,6 @@
 # expander.gd — expands the logical graph (validator plans) into a render graph (passes). Port of
-# the REFERENCE shaders/src/runtime/expander.js (cross-checked vs noisemaker-unity Expander.cs).
-# Sources: upstream noisemaker + noisemaker-unity ONLY.
+# the REFERENCE shaders/src/runtime/expander.js (cross-checked vs noisemaker-for-unity Expander.cs).
+# Sources: upstream noisemaker + noisemaker-for-unity ONLY.
 #
 # expand(compilation_result, options) -> {passes, errors, programs, textureSpecs, renderSurface}.
 # Threads the current 2D/3D/geo/agent input texture through each chain, expands each effect def's

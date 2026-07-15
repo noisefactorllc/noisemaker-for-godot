@@ -1,6 +1,6 @@
 # enums.gd — stdEnums tree + dynamic enum registry. Port of the REFERENCE shaders/src/lang/
-# std_enums.js + enums.js (cross-checked vs noisemaker-unity Enums.cs). Sources: upstream
-# noisemaker + noisemaker-unity ONLY. Values verified against std_enums.js.
+# std_enums.js + enums.js (cross-checked vs noisemaker-for-unity Enums.cs). Sources: upstream
+# noisemaker + noisemaker-for-unity ONLY. Values verified against std_enums.js.
 #
 # The enum tree maps dotted member paths (e.g. ["oscKind","sine"]) to integer leaves. A SUBTREE
 # is a plain Dictionary {name: node}; a LEAF is {"type":"Number","value":int} (so a `type` key

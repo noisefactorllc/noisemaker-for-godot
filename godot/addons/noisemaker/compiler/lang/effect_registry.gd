@@ -1,7 +1,7 @@
 # effect_registry.gd — effect + op registry. Port of the REFERENCE load-time registration in
 # renderer/canvas.js registerEffectWithRuntime() (with runtime/registry.js, lang/ops.js,
 # lang/paramAliases.js, lang/effectAliases.js, lang/enums.js). Sources: upstream noisemaker +
-# noisemaker-unity ONLY.
+# noisemaker-for-unity ONLY.
 #
 # For every effect definition JSON under res://addons/noisemaker/effects/<ns>/<func>.json this
 # builds the same structures the reference canvas builds when it registers effects at load:

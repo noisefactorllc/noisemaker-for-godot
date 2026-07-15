@@ -34,7 +34,7 @@
 ## File Structure
 
 ```
-noisemaker-godot/
+noisemaker-for-godot/
 ├─ README.md                      # project overview (mirror hlsl README)
 ├─ ARCHITECTURE.md                # the validated design (mirror hlsl ARCHITECTURE)
 ├─ PORTING-GUIDE.md               # WGSL → Godot-GLSL rulebook (mirror hlsl PORTING-GUIDE)
@@ -92,7 +92,7 @@ noisemaker-godot/
 - [ ] **Commit** `scaffold: project tree + reused agnostic assets` (omit Co-Authored-By per project convention).
 
 ### Task 0.2: Verify the reused Node tooling runs against the reference
-- [ ] Run `NM_REFERENCE_ROOT=/path/to/noisemaker node tools/export-graph.mjs parity/programs/solid.dsl parity/out/solid.graph.json` from `noisemaker-godot/`.
+- [ ] Run `NM_REFERENCE_ROOT=/path/to/noisemaker node tools/export-graph.mjs parity/programs/solid.dsl parity/out/solid.graph.json` from `noisemaker-for-godot/`.
 - [ ] **Verify:** `solid.graph.json` exists and matches `docs/GRAPH-JSON-SCHEMA.md` (one effect pass + blit, `renderSurface:"o0"`, a `global_o0` texture spec).
 - [ ] Run `node tools/convert-definitions.mjs` → populates `godot/addons/noisemaker/effects/<ns>/*.json`. Spot-check `synth/solid.json` and `synth/noise.json` against their `definition.js`.
 - [ ] **Commit** `tools: verify golden graph + effect-definition JSON generation`.

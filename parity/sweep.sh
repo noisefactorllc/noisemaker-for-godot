@@ -7,8 +7,8 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GODOT="${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}"
 LEDGER_PATH="${LEDGER_PATH:-parity/ledger.json}"
-RESULTS="$(mktemp -t noisemaker-godot-ledger.XXXXXX)"
-BATCH_MANIFEST="$(mktemp -t noisemaker-godot-batch.XXXXXX)"
+RESULTS="$(mktemp -t noisemaker-for-godot-ledger.XXXXXX)"
+BATCH_MANIFEST="$(mktemp -t noisemaker-for-godot-batch.XXXXXX)"
 trap 'rm -f "$RESULTS" "$BATCH_MANIFEST"' EXIT
 record_result() {
 	printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" >> "$RESULTS"

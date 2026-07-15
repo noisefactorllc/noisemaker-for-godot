@@ -1,6 +1,6 @@
 # diagnostics.gd — diagnostic codes + default messages. Port of the REFERENCE
-# shaders/src/lang/diagnostics.js (cross-checked vs noisemaker-unity Diagnostics.cs). Sources:
-# upstream noisemaker + noisemaker-unity ONLY.
+# shaders/src/lang/diagnostics.js (cross-checked vs noisemaker-for-unity Diagnostics.cs). Sources:
+# upstream noisemaker + noisemaker-for-unity ONLY.
 #
 # The validator COLLECTS diagnostics (it does not throw, except missing-search) and builds each
 # record itself (shape {code, message, severity, [location], [identifier]} — see validator.gd). This
