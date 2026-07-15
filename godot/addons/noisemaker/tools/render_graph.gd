@@ -6,6 +6,7 @@
 #   --dsl <abs.dsl>     build the graph IN-ENGINE via the GDScript compiler (self-contained; no
 #                       reference / export-graph.mjs). This is the production path.
 #   --graph <abs.json>  read a pre-normalized graph JSON (e.g. a reference golden, for parity diffing).
+#   --batch-manifest <abs.json>  render every request in one Godot application launch.
 #
 #   Godot --path godot --script res://addons/noisemaker/tools/render_graph.gd \
 #         --position 5000,5000 -- (--dsl <abs.dsl> | --graph <abs.json>) --out <abs.png> --size 256
@@ -18,6 +19,7 @@ func _init() -> void:
 	var a := OS.get_cmdline_user_args()
 	var graph_path := ""
 	var dsl_path := ""
+	var batch_manifest_path := ""
 	var out_path := ""
 	var size := 256
 	var run_seconds := 0       # >0 => timed-sampling mode for stateful sims
@@ -25,6 +27,8 @@ func _init() -> void:
 	var i := 0
 	while i < a.size():
 		match a[i]:
+			"--batch-manifest":
+				batch_manifest_path = a[i + 1]; i += 2
 			"--graph":
 				graph_path = a[i + 1]; i += 2
 			"--dsl":
@@ -39,14 +43,45 @@ func _init() -> void:
 				sample_every_sec = int(a[i + 1]); i += 2
 			_:
 				i += 1
+	if batch_manifest_path != "":
+		_run_batch(batch_manifest_path)
+		return
 	if (graph_path == "" and dsl_path == "") or out_path == "":
-		printerr("usage: -- (--dsl <dsl> | --graph <json>) --out <png> [--size 256] [--run-seconds N --sample-every S]")
+		printerr("usage: -- (--dsl <dsl> | --graph <json>) --out <png> [--size 256] [--run-seconds N --sample-every S] | --batch-manifest <json>")
 		quit(1); return
+	var ok := _render_request(graph_path, dsl_path, out_path, size, run_seconds, sample_every_sec)
+	quit(0 if ok else 1)
 
+
+func _run_batch(manifest_path: String) -> void:
+	var src := FileAccess.get_file_as_string(manifest_path)
+	var manifest = JSON.parse_string(src)
+	if not (manifest is Dictionary) or not (manifest.get("entries", null) is Array):
+		printerr("bad batch manifest: ", manifest_path)
+		quit(1); return
+	var all_ok := true
+	for request in manifest["entries"]:
+		if not (request is Dictionary):
+			printerr("bad batch request in: ", manifest_path)
+			all_ok = false
+			continue
+		var ok := _render_request(
+			str(request.get("graph", "")), str(request.get("dsl", "")),
+			str(request.get("out", "")), int(request.get("size", 256)),
+			int(request.get("run_seconds", 0)), int(request.get("sample_every", 5)))
+		print("NM_BATCH name=", request.get("name", "unknown"), " ok=", ok)
+		all_ok = all_ok and ok
+	quit(0 if all_ok else 1)
+
+
+func _render_request(graph_path: String, dsl_path: String, out_path: String, size: int, run_seconds: int, sample_every_sec: int) -> bool:
+	if (graph_path == "" and dsl_path == "") or out_path == "":
+		printerr("bad render request: graph/dsl and out are required")
+		return false
 	var rd := RenderingServer.create_local_rendering_device()
 	if rd == null:
 		printerr("RD_NULL: RenderingDevice unavailable (run non-headless, with a window)")
-		quit(1); return
+		return false
 
 	var graph
 	if dsl_path != "":
@@ -54,7 +89,7 @@ func _init() -> void:
 		var src := FileAccess.get_file_as_string(dsl_path)
 		if src == "":
 			printerr("cannot read dsl: ", dsl_path)
-			quit(1); return
+			return false
 		var reg := EffectRegistry.new()
 		reg.load_all()
 		graph = Orchestrator.new(reg).build_graph(src)
@@ -62,12 +97,12 @@ func _init() -> void:
 		var f := FileAccess.open(graph_path, FileAccess.READ)
 		if f == null:
 			printerr("cannot read graph: ", graph_path)
-			quit(1); return
+			return false
 		graph = JSON.parse_string(f.get_as_text())
 		f.close()
 	if typeof(graph) != TYPE_DICTIONARY:
 		printerr("bad graph: ", graph_path if graph_path != "" else dsl_path)
-		quit(1); return
+		return false
 
 	var Backend = preload("res://addons/noisemaker/runtime/nm_backend.gd")
 	var backend = Backend.new()
@@ -88,8 +123,8 @@ func _init() -> void:
 			all_ok = all_ok and sok
 			print("NM_SAMPLE t=", sec, " out=", sp, " ok=", sok)
 		print("NM_RENDERED_SAMPLES n=", imgs.size(), " surface=", backend.render_surface_tex)
-		quit(0 if all_ok else 1); return
+		return all_ok
 	backend.render(graph)
 	var ok = backend.save_surface_png(out_path)
 	print("NM_RENDERED out=", out_path, " surface=", backend.render_surface_tex, " ok=", ok)
-	quit(0 if ok else 1)
+	return ok

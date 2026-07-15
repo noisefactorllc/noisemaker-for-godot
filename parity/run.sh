@@ -25,9 +25,17 @@ CAND="$ROOT/parity/out/$NAME.candidate.png"
 [ -f "$GRAPH" ] || { echo "missing graph: $GRAPH (run: node tools/export-graph.mjs --file parity/programs/$NAME.dsl $GRAPH)"; exit 2; }
 [ -f "$GOLD" ]  || { echo "missing golden: $GOLD (run the reference harness)"; exit 2; }
 
-"$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
-	--position 5000,5000 -- --graph "$GRAPH" --out "$CAND" --size "$SIZE" 2>&1 \
-	| grep -E "NM_RENDERED|RD_NULL|SCRIPT ERROR|shader |missing|error" || true
+if [ "${SKIP_RENDER:-0}" != "1" ]; then
+	rm -f "$CAND"
+	set +e
+	render_log=$("$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
+		--position 5000,5000 -- --graph "$GRAPH" --out "$CAND" --size "$SIZE" 2>&1)
+	render_rc=$?
+	set -e
+	printf '%s\n' "$render_log" | grep -E "NM_RENDERED|RD_NULL|SCRIPT ERROR|shader |missing|error" || true
+	[ "$render_rc" -eq 0 ] || { echo "FAIL: Godot renderer exited $render_rc for $NAME"; exit 1; }
+fi
+[ -f "$CAND" ] || { echo "FAIL: Godot renderer produced no candidate for $NAME"; exit 1; }
 
 "$PY" "$ROOT/parity/compare.py" "$GOLD" "$CAND" \
 	--name "$NAME" --tolerance "$TOL" --ssim-min "$SSIM" \
