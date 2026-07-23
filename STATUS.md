@@ -5,6 +5,10 @@
 so history correlation is dead; the reference is pinned by CONTENT (a `git archive 75507112` snapshot),
 not by tracking a branch. The sources of truth are `parity/sweep.sh` and `parity/check_*.mjs`.*
 
+*Incrementally synced 2026-07-23 to reference `349e9909` for the one port-affecting change in that
+range — `filter/pondRipples` gained a `speed` control (10/10 fixtures PASS, incl. two new animated
+ones). The catalogue-wide numbers below are still the `75507112` figures; they were not re-swept.*
+
 This file holds the detailed coverage and parity numbers. For what the project is and how to use it,
 see the [README](README.md).
 

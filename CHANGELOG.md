@@ -5,6 +5,35 @@ This is pre-1.0, WIP software — see the README's status banner.
 
 ## [Unreleased]
 
+### Synced to reference `349e9909` — `filter/pondRipples` gains `speed`
+
+Incremental sync, not a re-crystallization: the only port-affecting change upstream since the
+`75507112` content pin is a new `speed` control on `filter/pondRipples`. Everything else in the
+range is docs, dependency bumps, or reference-only engine work (see below).
+
+- **`filter/pondRipples`: new `speed` param** (int, `-5..5`, default `0`). The phase term becomes
+  `r*ridges*2*PI - time*2*PI*speed`, so integer speeds shift the wave by whole cycles per
+  normalized time loop and the animation is loop-seamless in either direction (positive travels
+  outward, negative inward). `time` needs no JSON entry — it is an engine-provided global already
+  present in the synthesized no-layout UBO header (`data[0].z`). Definition JSON regenerated with
+  `tools/convert-definitions.mjs`; the shader is hand-maintained and was edited to match.
+- **Parity:** 10/10 pondRipples fixtures PASS at max-abs-diff 1.000 / ssim 0.99996 — the eight
+  pre-existing style/wrap/amount fixtures plus two new ones covering animation in both directions
+  (`pondRipplesSpeed`, `pondRipplesSpeedNeg`). The `speed=0` goldens re-mint **byte-identically**,
+  confirming the addition is a true no-op at the default; the `speed≠0` fixtures differ from their
+  `speed=0` counterparts by max-abs-diff 239 (reference) / 238 (Godot), so they genuinely exercise
+  the new path rather than passing vacuously.
+- **Gotcha worth keeping:** a stale committed graph JSON will now mis-render this effect. The DSL
+  chain `noise(...).pondRipples(...)` puts `noise`'s own `speed: 25` in scope; previously
+  pondRipples declared no `speed` global so the value was inert, but once it does, the reference
+  expander resolves the pass uniform to pondRipples' **own default (0)** and shadows the inherited
+  value. Graphs exported before this change still carry `speed: 25` and render an animated frame
+  against a static golden (observed: max-abs-diff 148). Re-export graph JSON alongside goldens.
+- Not ported: upstream's `asyncInit` overlay-recompile fix (`renderer/canvas.js`,
+  `runtime/compiler.js`, `runtime/pipeline.js`). Those overlays are CPU-canvas products with no GPU
+  program behind them, and the live-recompile path they fix does not exist in this port's offline
+  render path.
+
 ### Crystallized against reference `75507112` (content-pinned; SHA unstable)
 
 A **full parity re-verification** of the 26 Photoshop-parity artistic filters, not an incremental

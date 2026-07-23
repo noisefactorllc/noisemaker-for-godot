@@ -5,12 +5,17 @@
 // Concentric ring distortion around the fixed image center (0.5,0.5) — no
 // user-facing center param, unlike spinBlur (Photoshop ZigZag: Around Center /
 // Out From Center / Pond Ripples styles). r = aspect-corrected distance from
-// center; phase = r*ridges*2*PI; w = sin(phase)*(amount/100)*0.05*max(0,1-r) is
-// the per-ring wave displacement (damped toward the edge, clamped >=0 so corners
-// beyond r=1 don't invert-and-amplify). style 0 (aroundCenter) rotates the
-// angular position by w*2*PI*0.25 at constant radius; style 1 (outFromCenter)
-// adds w to the radius at constant angle; style 2 (pondRipples) splits w evenly
-// across both.
+// center; phase = r*ridges*2*PI - time*2*PI*speed; w =
+// sin(phase)*(amount/100)*0.05*max(0,1-r) is the per-ring wave displacement
+// (damped toward the edge, clamped >=0 so corners beyond r=1 don't
+// invert-and-amplify). style 0 (aroundCenter) rotates the angular position by
+// w*2*PI*0.25 at constant radius; style 1 (outFromCenter) adds w to the radius
+// at constant angle; style 2 (pondRipples) splits w evenly across both.
+//
+// speed is an INTEGER number of wave cycles per normalized time loop, so the
+// animation is loop-seamless at any value (positive travels outward, negative
+// inward). At speed=0 the phase term vanishes and the effect is static — which
+// is why adding it leaves every existing default-param golden byte-identical.
 //
 // Rotation handedness: this file uses the GLSL golden's `mat2(co,-s,s,co)*dir`
 // expansion (co*dir.x+s*dir.y, -s*dir.x+co*dir.y), NOT WGSL's raw form — see the
@@ -18,8 +23,10 @@
 // (style:outFromCenter vs style:aroundCenter) that established this.
 //
 // No-layout effect: the backend synthesizes the Params UBO and injects
-// `#define amount data[..]`, `#define ridges data[..]`, `#define antialias data[..]`
-// (real per-pass uniforms). STYLE and WRAP are compile-time defines (globals.style/
+// `#define amount data[..]`, `#define ridges data[..]`, `#define speed data[..]`,
+// `#define antialias data[..]` (real per-pass uniforms), plus the fixed engine
+// header — `time` is one of those engine-provided globals (data[0].z), so it
+// needs no JSON entry of its own. STYLE and WRAP are compile-time defines (globals.style/
 // wrap.define in the JSON, matching the reference exactly) baked into the compiled
 // program variant (see the graph pass's program name, e.g.
 // "pondRipples__STYLE_0__WRAP_0") — bare uppercase identifiers, NOT uniform reads.
@@ -55,7 +62,7 @@ void main() {
 	uv.x *= ar;
 
 	float r = length(uv);
-	float phase = r * float(int(ridges)) * 2.0 * PI;
+	float phase = r * float(int(ridges)) * 2.0 * PI - time * 2.0 * PI * float(int(speed));
 	// Clamp the damping term at 0 so corners beyond r=1 (aspect ratios
 	// wider/taller than ~1.73:1) don't invert phase and amplify instead of
 	// damping.
@@ -87,6 +94,10 @@ void main() {
 	rDelta = w * 0.5;
 #endif
 
+	// r>0 guard avoids a 0/0 direction at the exact center pixel. With speed=0,
+	// w is exactly 0 there anyway (sin(0)=0); with animation w can be nonzero at
+	// r=0, and the zero dir pins the center pixel to sample the center, keeping
+	// the reconstruction NaN-free and stable.
 	vec2 dir = vec2(0.0);
 	if (r > 0.0) {
 		dir = uv / r;
