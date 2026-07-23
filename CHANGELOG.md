@@ -19,10 +19,14 @@ range is docs, dependency bumps, or reference-only engine work (see below).
   `tools/convert-definitions.mjs`; the shader is hand-maintained and was edited to match.
 - **Parity:** 10/10 pondRipples fixtures PASS at max-abs-diff 1.000 / ssim 0.99996 — the eight
   pre-existing style/wrap/amount fixtures plus two new ones covering animation in both directions
-  (`pondRipplesSpeed`, `pondRipplesSpeedNeg`). The `speed=0` goldens re-mint **byte-identically**,
-  confirming the addition is a true no-op at the default; the `speed≠0` fixtures differ from their
-  `speed=0` counterparts by max-abs-diff 239 (reference) / 238 (Godot), so they genuinely exercise
-  the new path rather than passing vacuously.
+  (`pondRipplesSpeed` at `+3`, `pondRipplesSpeedNeg` at `-5`). The `speed=0` goldens re-mint
+  **byte-identically**, confirming the addition is a true no-op at the default; the `speed≠0`
+  fixtures differ from their `speed=0` counterparts by max-abs-diff 239/253 (reference) and
+  238/253 (Godot), so they genuinely exercise the new path rather than passing vacuously.
+- **Pick animated fixture speeds that are not multiples of 4.** The harness pins `time` to 0.25, so
+  a speed of ±4 shifts the phase by exactly one 2*PI cycle and aliases onto the static `speed=0`
+  image — such a fixture passes while proving nothing (measured at `-4`: mean-abs-diff 0.0001,
+  ssim 1.00000 against `speed=0`). `-5` was chosen for the negative fixture for this reason.
 - **Gotcha worth keeping:** a stale committed graph JSON will now mis-render this effect. The DSL
   chain `noise(...).pondRipples(...)` puts `noise`'s own `speed: 25` in scope; previously
   pondRipples declared no `speed` global so the value was inert, but once it does, the reference
