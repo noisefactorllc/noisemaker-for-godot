@@ -5,6 +5,46 @@ This is pre-1.0, WIP software — see the README's status banner.
 
 ## [Unreleased]
 
+### Effect definitions re-synced to the reference; a gate added so they cannot drift again
+
+The 210 committed effect JSONs had fallen behind the reference on 31 effects, and **every existing
+gate was green the whole time**. `check_registry` feeds the *same* JSONs to both the GDScript
+registry and the reference registration logic — by design, since it tests registration logic, not
+input freshness — so a stale input is identical on both sides and passes. lex/parse/validate/expand/
+graph run off the committed JSONs too. Nothing compared the JSONs to the reference they are
+generated from.
+
+- **`parity/check_definitions.mjs` (new, seventh gate).** Copies the committed tree to a temp dir,
+  regenerates into that copy, diffs. Reports content drift, files the reference has that the port
+  lacks, and files the port kept that the reference dropped or renamed. Self-tested against all
+  three seeded defects. Regenerating into a *copy* rather than an empty dir is load-bearing — see
+  the carry-forward below.
+- **`tools/convert-definitions.mjs` was lossy in two ways, both fixed** — this is why regenerating
+  in bulk used to be destructive and had to be done one effect at a time:
+  - It dropped `passes[].conditions`. The reference declares these (pointsBillboardRender gates its
+    two deposit passes on `blendMode`); they had been re-added by hand and a blanket regen erased
+    them.
+  - It dropped port-authored `uniformLayouts`. `flow`, `pointsEmit`, `pointsRender` and
+    `pointsBillboardRender` bind several programs per effect but the reference declares no
+    `uniformLayout` for them — WebGL2 sets loose named uniforms, Vulkan/Godot cannot — so the vec4[]
+    packing was worked out in this port and lives **only** in these JSONs. It is not derivable from
+    the reference. The generator now carries it forward from the file it replaces and says so.
+  With both fixed the generator is lossless and idempotent, so bulk regeneration is now the
+  supported path.
+- **What was actually stale** (all now regenerated): 26 effects missing upstream's new `artist` tag
+  and/or carrying superseded descriptions; `synth/remap`'s `MAX_VERTS_PER_ZONE` **16 → 64** (its
+  per-zone vertex globals and `zone*_count.max` grew with it); `filter3d/palette3d` missing
+  entirely; and `render/renderCubemap3D` renamed to `renderCubemap3d`.
+- **The rename needed `git mv`.** macOS is case-insensitive, so the generator writing
+  `renderCubemap3d.json` silently updated the file while leaving it named `renderCubemap3D.json`.
+  The GDScript loader resolves `effects/<ns>/<func>.json` from the definition's `func`, so this
+  would have loaded on macOS and 404'd on Linux/Windows.
+- **Verification:** registry parity grew ops **209 → 210**, paramAliases **43 → 44**, effectKeys
+  **625 → 628** and still passes; lex/parse/validate/expand/graph **339/339** each; the render sweep
+  is **326/326** with **0 FAIL**. None of the changed effects has a shader in this port
+  (remap/palette3d/renderCubemap3d are definition-only, and 3D is still staged at 0 shaders), so no
+  golden moved — as expected.
+
 ### Synced to reference `349e9909` — `filter/pondRipples` gains `speed`
 
 Incremental sync, not a re-crystallization: the only port-affecting change upstream since the

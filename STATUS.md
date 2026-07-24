@@ -33,17 +33,20 @@ Re-verified as a **full parity re-crystallization** against the content-pinned `
 (every effect and every enum/define-selected mode re-minted from the snapshot and graded bit-exact;
 nothing trusted from prior rounds).
 
-- **In-engine compiler:** all six gates green vs the reference — lex / parse / validate / expand
-  **230/230**, graph **263/263** (grew with the new mode fixtures), registry parity (ops **209/209**,
-  8 enums, 43 param + 3 effect aliases, **625 effect keys**).
-- **Effect×mode ledger (`parity/sweep.sh` + corpus + timed sims):** **268 fixtures — 221 PASS, 40
-  NEAR, 0 FAIL, 7 SKIP**. The single-frame sweep is **249/249 pass, 4 skipped**. "NEAR" = passes only
+- **In-engine compiler:** all seven gates green vs the reference — lex / parse / validate / expand /
+  graph **339/339** each, registry parity (ops **210/210**, 8 enums, 44 param + 3 effect aliases,
+  **628 effect keys**), and definition parity **210/210** (`parity/check_definitions.mjs` — the
+  committed effect JSONs are byte-identical to what `tools/convert-definitions.mjs` emits from the
+  reference).
+- **Effect×mode ledger (`parity/sweep.sh` + corpus + timed sims):** **329 fixtures — 279 PASS, 47
+  NEAR, 0 FAIL, 3 CHAOS-gated**; the sweep grades 326/326 green (NEAR counts as passing) and skips
+  the 3 chaos rows. "NEAR" = passes only
   under a documented, mechanism-traced tolerance in `tol_for()`; every enum/define mode of the 26
   artistic filters has its own fixture (e.g. texture 15/15, oilPaint 6/6, hatch 6/6, strokes 5/5,
   stipple 5/5, scatter 5/5, lensFlare 4/4, lowPoly 4/4, extrude 4/4 type×depthSource, halftone
   color+mono/{dot,line,circle}, morphology mode×shape, pondRipples style+wrap, dither incl.
   errorDiffusion, emboss color+gray, invert full+solarize).
-- The 40 NEAR are all sub-LSB cross-backend fp on a handful of pixels (SSIM ≥ 0.999, mean-abs-diff at
+- The 47 NEAR are all sub-LSB cross-backend fp on a handful of pixels (SSIM ≥ 0.999, mean-abs-diff at
   the ~0.37 noise floor): NEAREST/bilinear resampling ties (uvRemap/refract/rotate/…), discrete
   argmin/threshold/quickselect selection (oilPaint's Kuwahara sector, median's 7×7 edge-clamp tie,
   hatchPencil's stroke-mask step), and pow/sine nonlinear amplification (chrome, plasticWrap family,

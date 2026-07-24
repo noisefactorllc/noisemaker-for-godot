@@ -5,7 +5,8 @@
   "starter": false,
   "tags": [
     "color",
-    "pixel"
+    "pixel",
+    "artist"
   ],
   "description": "Rotated-screen halftone reproduction with subtractive color rosettes or monochrome dot, line, and circle screens",
   "paramAliases": {},

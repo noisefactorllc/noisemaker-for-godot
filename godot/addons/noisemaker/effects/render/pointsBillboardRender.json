@@ -149,33 +149,96 @@
   },
   "uniformLayouts": {
     "diffuse": {
-      "resolution": {"slot": 0, "components": "xy"},
-      "intensity": {"slot": 0, "components": "z"}
+      "resolution": {
+        "slot": 0,
+        "components": "xy"
+      },
+      "intensity": {
+        "slot": 0,
+        "components": "z"
+      }
     },
     "copy": {
-      "resolution": {"slot": 0, "components": "xy"}
+      "resolution": {
+        "slot": 0,
+        "components": "xy"
+      }
     },
     "deposit": {
-      "resolution": {"slot": 0, "components": "xy"},
-      "density": {"slot": 0, "components": "z"},
-      "pointSize": {"slot": 0, "components": "w"},
-      "sizeVariation": {"slot": 1, "components": "x"},
-      "rotationVar": {"slot": 1, "components": "y"},
-      "seed": {"slot": 1, "components": "z"},
-      "viewMode": {"slot": 1, "components": "w"},
-      "rotateX": {"slot": 2, "components": "x"},
-      "rotateY": {"slot": 2, "components": "y"},
-      "rotateZ": {"slot": 2, "components": "z"},
-      "viewScale": {"slot": 2, "components": "w"},
-      "posX": {"slot": 3, "components": "x"},
-      "posY": {"slot": 3, "components": "y"},
-      "shapeMode": {"slot": 3, "components": "z"},
-      "depositOpacity": {"slot": 3, "components": "w"}
+      "resolution": {
+        "slot": 0,
+        "components": "xy"
+      },
+      "density": {
+        "slot": 0,
+        "components": "z"
+      },
+      "pointSize": {
+        "slot": 0,
+        "components": "w"
+      },
+      "sizeVariation": {
+        "slot": 1,
+        "components": "x"
+      },
+      "rotationVar": {
+        "slot": 1,
+        "components": "y"
+      },
+      "seed": {
+        "slot": 1,
+        "components": "z"
+      },
+      "viewMode": {
+        "slot": 1,
+        "components": "w"
+      },
+      "rotateX": {
+        "slot": 2,
+        "components": "x"
+      },
+      "rotateY": {
+        "slot": 2,
+        "components": "y"
+      },
+      "rotateZ": {
+        "slot": 2,
+        "components": "z"
+      },
+      "viewScale": {
+        "slot": 2,
+        "components": "w"
+      },
+      "posX": {
+        "slot": 3,
+        "components": "x"
+      },
+      "posY": {
+        "slot": 3,
+        "components": "y"
+      },
+      "shapeMode": {
+        "slot": 3,
+        "components": "z"
+      },
+      "depositOpacity": {
+        "slot": 3,
+        "components": "w"
+      }
     },
     "blend": {
-      "resolution": {"slot": 0, "components": "xy"},
-      "inputIntensity": {"slot": 0, "components": "z"},
-      "blendMode": {"slot": 0, "components": "w"}
+      "resolution": {
+        "slot": 0,
+        "components": "xy"
+      },
+      "inputIntensity": {
+        "slot": 0,
+        "components": "z"
+      },
+      "blendMode": {
+        "slot": 0,
+        "components": "w"
+      }
     }
   },
   "passes": [
@@ -232,7 +295,14 @@
       "drawMode": "billboards",
       "count": "input",
       "blend": true,
-      "conditions": { "runIf": [{ "uniform": "blendMode", "equals": 0 }] }
+      "conditions": {
+        "runIf": [
+          {
+            "uniform": "blendMode",
+            "equals": 0
+          }
+        ]
+      }
     },
     {
       "name": "deposit_alpha",
@@ -263,8 +333,18 @@
       },
       "drawMode": "billboards",
       "count": "input",
-      "blend": ["ONE", "ONE_MINUS_SRC_ALPHA"],
-      "conditions": { "runIf": [{ "uniform": "blendMode", "equals": 1 }] }
+      "blend": [
+        "ONE",
+        "ONE_MINUS_SRC_ALPHA"
+      ],
+      "conditions": {
+        "runIf": [
+          {
+            "uniform": "blendMode",
+            "equals": 1
+          }
+        ]
+      }
     },
     {
       "name": "blend",

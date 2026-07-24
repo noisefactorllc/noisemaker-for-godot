@@ -115,6 +115,9 @@ function projectPass (pass) {
   if (pass.countUniform !== undefined) out.countUniform = pass.countUniform
   if (pass.repeat !== undefined) out.repeat = pass.repeat
   if (pass.blend !== undefined) out.blend = pass.blend
+  // Per-pass execution predicate (reference/03 §4.x). pointsBillboardRender gates its two
+  // deposit passes on `blendMode`; dropping this ran BOTH passes and double-deposited.
+  if (pass.conditions !== undefined) out.conditions = pass.conditions
   if (pass.clear !== undefined) out.clear = pass.clear
   if (pass.type !== undefined) out.type = pass.type
   if (pass.entryPoint !== undefined) out.entryPoint = pass.entryPoint
@@ -136,7 +139,13 @@ function projectTextures (textures, is3D) {
   return out
 }
 
-function convertEffect (instance, namespace, name) {
+// True when the on-disk JSON carries a packing layout that the reference does NOT declare —
+// i.e. one authored for this port. Regeneration must carry it forward verbatim.
+function portAuthoredLayouts (instance, existing) {
+  return !instance.uniformLayout && !instance.uniformLayouts && !!existing?.uniformLayouts
+}
+
+function convertEffect (instance, namespace, name, existing) {
   const func = instance.func || name
   const def = {
     name: instance.name || func,
@@ -156,6 +165,13 @@ function convertEffect (instance, namespace, name) {
   if (instance.description) def.description = instance.description
   def.paramAliases = instance.paramAliases || {}
   def.globals = projectGlobals(instance.globals)
+  // PORT-AUTHORED packing layout, carried through untouched. The particle pipeline
+  // (flow / pointsEmit / pointsRender / pointsBillboardRender) binds several programs per
+  // effect but the reference declares no uniformLayout for them — WebGL2 sets loose named
+  // uniforms, Vulkan/Godot cannot. So the per-program vec4[] packing was worked out here and
+  // lives ONLY in these JSONs. It is not derivable from the reference: regenerating without
+  // this carry-forward silently deletes it and the particle passes bind garbage.
+  if (portAuthoredLayouts(instance, existing)) def.uniformLayouts = existing.uniformLayouts
   def.passes = (instance.passes || []).map(projectPass)
   def.textures = projectTextures(instance.textures, false) || {}
 
@@ -221,6 +237,7 @@ async function main () {
   let written = 0
   let failed = 0
   const errors = []
+  const preservedLayouts = []
 
   for (const { namespace, name, defPath } of enumerateEffects(filter)) {
     let instance
@@ -237,18 +254,28 @@ async function main () {
       continue
     }
     const func = instance.func || name
-    const def = convertEffect(instance, namespace, name)
     const outNsDir = join(OUT_DIR, namespace)
     const outPath = join(outNsDir, `${func}.json`)
+    // Read the file we are about to replace, so port-authored data survives regeneration.
+    let existing = null
+    if (existsSync(outPath)) {
+      try { existing = JSON.parse(readFileSync(outPath, 'utf8')) } catch { existing = null }
+    }
+    const def = convertEffect(instance, namespace, name, existing)
+    const preserved = portAuthoredLayouts(instance, existing)
+    if (preserved) preservedLayouts.push(`${namespace}/${func}`)
     if (!dryRun) {
       mkdirSync(outNsDir, { recursive: true })
       writeFileSync(outPath, JSON.stringify(def, null, 2) + '\n')
     }
     written++
-    process.stderr.write(`[convert] ${namespace}/${name} -> Effects/${namespace}/${func}.json${dryRun ? ' (dry-run)' : ''}\n`)
+    process.stderr.write(`[convert] ${namespace}/${name} -> Effects/${namespace}/${func}.json${preserved ? ' (+port uniformLayouts)' : ''}${dryRun ? ' (dry-run)' : ''}\n`)
   }
 
   process.stderr.write(`\n[convert] ${dryRun ? 'would write' : 'wrote'} ${written} effect(s), ${failed} failed.\n`)
+  if (preservedLayouts.length) {
+    process.stderr.write(`[convert] carried forward port-authored uniformLayouts for ${preservedLayouts.length}: ${preservedLayouts.join(', ')}\n`)
+  }
   for (const e of errors) process.stderr.write(`  ! ${e}\n`)
   if (failed > 0 && written === 0) process.exit(1)
 }

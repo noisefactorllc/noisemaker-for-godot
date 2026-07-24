@@ -4,7 +4,8 @@
   "func": "median",
   "starter": false,
   "tags": [
-    "blur"
+    "blur",
+    "artist"
   ],
   "description": "Exact dense 3x3, 5x5, or 7x7 brightness-ranked median with Dust & Scratches threshold gate",
   "paramAliases": {},

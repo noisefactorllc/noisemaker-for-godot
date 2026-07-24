@@ -4,9 +4,10 @@
   "func": "scatter",
   "starter": false,
   "tags": [
-    "noise"
+    "noise",
+    "artist"
   ],
-  "description": "Random per-pixel scatter with darken/lighten/anisotropic/clumped modes (Photoshop Diffuse, Spatter)",
+  "description": "Random per-pixel scatter with darken/lighten/anisotropic/clumped modes (Diffuse, Spatter)",
   "paramAliases": {},
   "globals": {
     "radius": {

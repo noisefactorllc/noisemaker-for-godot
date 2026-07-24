@@ -4,9 +4,10 @@
   "func": "directionalBlur",
   "starter": false,
   "tags": [
-    "blur"
+    "blur",
+    "artist"
   ],
-  "description": "Linear motion blur along a single direction (Photoshop Motion Blur)",
+  "description": "Linear motion blur along a single direction (Motion Blur)",
   "paramAliases": {},
   "globals": {
     "angle": {

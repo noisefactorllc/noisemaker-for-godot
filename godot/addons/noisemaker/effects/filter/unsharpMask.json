@@ -4,7 +4,8 @@
   "func": "unsharpMask",
   "starter": false,
   "tags": [
-    "edges"
+    "edges",
+    "artist"
   ],
   "description": "Classic unsharp mask sharpening with radius and threshold",
   "paramAliases": {},

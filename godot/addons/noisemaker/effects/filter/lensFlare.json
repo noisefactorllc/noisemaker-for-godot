@@ -4,9 +4,10 @@
   "func": "lensFlare",
   "starter": false,
   "tags": [
-    "lens"
+    "lens",
+    "artist"
   ],
-  "description": "Additive lens flare with ghost chain, halo, and four lens types (Photoshop Lens Flare)",
+  "description": "Additive lens flare with ghost chain, halo, and four lens types (Lens Flare)",
   "paramAliases": {},
   "globals": {
     "brightness": {

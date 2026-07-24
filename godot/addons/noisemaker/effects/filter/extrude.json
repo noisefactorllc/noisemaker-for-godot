@@ -5,9 +5,10 @@
   "starter": false,
   "tags": [
     "distort",
-    "geometric"
+    "geometric",
+    "artist"
   ],
-  "description": "Break the image into 3D blocks or pyramids projecting toward the viewer (Photoshop Extrude)",
+  "description": "Break the image into 3D blocks or pyramids projecting toward the viewer (Extrude)",
   "paramAliases": {},
   "globals": {
     "type": {

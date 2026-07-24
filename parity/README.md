@@ -57,6 +57,12 @@ Six gates verify the GDScript compiler stage by stage against the reference. Eac
 then deep-compares the two (key-order-insensitive, with a tight numeric epsilon for float
 serialization). Only the oracle needs `NM_REFERENCE_ROOT`.
 
+A seventh gate, `check_definitions.mjs`, checks the **inputs** the other six share. All six feed the
+committed effect JSONs to both oracle and candidate, so a JSON that has fallen behind the reference
+is equally stale on both sides and every gate stays green — that is exactly how 31 effects drifted
+unnoticed. `check_definitions.mjs` compares those JSONs against what `tools/convert-definitions.mjs`
+emits from the reference, and needs no Godot.
+
 ```bash
 NM_REFERENCE_ROOT=/path/to/noisemaker GODOT=/path/to/Godot node parity/check_lex.mjs       # tokens
 NM_REFERENCE_ROOT=... GODOT=... node parity/check_parse.mjs                                 # AST
@@ -64,6 +70,7 @@ NM_REFERENCE_ROOT=... GODOT=... node parity/check_validate.mjs                  
 NM_REFERENCE_ROOT=... GODOT=... node parity/check_expand.mjs                                # render passes
 NM_REFERENCE_ROOT=... GODOT=... node parity/check_graph.mjs                                 # normalized graph
 NM_REFERENCE_ROOT=... GODOT=... node parity/check_registry.mjs                              # effect registry
+NM_REFERENCE_ROOT=... node parity/check_definitions.mjs                                     # effect JSONs vs reference
 #   -> e.g. "GRAPH PARITY: 214/214 pass"
 ```
 

@@ -6,7 +6,7 @@
   "tags": [
     "edges"
   ],
-  "description": "Emboss effect creating raised relief appearance",
+  "description": "Emboss relief with color convolution or opt-in gray directional edge tracing",
   "paramAliases": {},
   "globals": {
     "style": {

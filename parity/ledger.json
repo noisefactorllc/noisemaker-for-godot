@@ -4016,6 +4016,46 @@
     }
   },
   {
+    "program": "pondRipplesSpeed",
+    "effect": "filter/pondRipples",
+    "mode": "speed: 3, amount: 70",
+    "golden": "parity/out/pondRipplesSpeed.golden.png",
+    "candidate": "parity/out/pondRipplesSpeed.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.37509918212890625,
+    "ssim": 0.999963641166687,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
+    "program": "pondRipplesSpeedNeg",
+    "effect": "filter/pondRipples",
+    "mode": "speed: -5, amount: 70, style: outFromCenter",
+    "golden": "parity/out/pondRipplesSpeedNeg.golden.png",
+    "candidate": "parity/out/pondRipplesSpeedNeg.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.3769416809082031,
+    "ssim": 0.9999643564224243,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
     "program": "posterize",
     "effect": "filter/posterize",
     "mode": "default",
