@@ -2360,6 +2360,26 @@
     }
   },
   {
+    "program": "lensWarp",
+    "effect": "filter/lensWarp",
+    "mode": "displacement: 0.25, antialias: false",
+    "golden": "parity/out/lensWarp.golden.png",
+    "candidate": "parity/out/lensWarp.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.37566760182380676,
+    "ssim": 0.999952495098114,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
     "program": "lightLeak",
     "effect": "filter/lightLeak",
     "mode": "default",

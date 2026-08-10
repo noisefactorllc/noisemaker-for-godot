@@ -59,10 +59,11 @@ var screen: Vector2i
 var _sampler: RID
 var _vfmt: int
 var _varr: RID
-var _vfmt_empty: int        # empty vertex format for procedural (gl_VertexIndex-only) point/billboard draws
+var _vfmt_empty: int        # no vertex format for procedural point/billboard/mesh draws
 var _shaders := {}
 var _pipelines := {}
 var _textures := {}
+var _depth_textures := {}
 var _tex_dims := {}         # texId -> Vector2i(w,h); count:"input" deposit draws derive agent count = w*h
 var _tex_fmt := {}          # texId -> RenderingDevice DATA_FORMAT_*; lets the snapshot read the render surface in its real format (rgba8 vs rgba16f)
 var _effect_defs := {}
@@ -90,6 +91,9 @@ var _black_tex: RID        # 1x1 zero texture bound for "none" inputs (reference
 var _samplers := {}        # shader cache_key -> [{"name":String,"binding":int}]
 var _sampler_re: RegEx
 var _state_node_re: RegEx  # matches particle state-node surface names (isStateSurface)
+var _audio_waveform := PackedFloat32Array()
+var _audio_spectrum := PackedFloat32Array()
+var _audio_layouts := {}
 
 func setup(p_rd: RenderingDevice, p_addon_dir: String, p_screen: Vector2i) -> void:
 	rd = p_rd
@@ -130,9 +134,31 @@ func setup(p_rd: RenderingDevice, p_addon_dir: String, p_screen: Vector2i) -> vo
 	_varr = rd.vertex_array_create(3, _vfmt, [vbuf])
 	# No-vertex-input format: agent deposit passes draw N procedural vertices (gl_VertexIndex
 	# indexes the agent state textures) with NO vertex buffer. A pipeline built with
-	# INVALID_FORMAT_ID does not expect a bound vertex array — see execute_pass points path.
+	# INVALID_FORMAT_ID does not expect a bound vertex array — see execute_pass custom-draw path.
 	# (An empty vertex_format_create([]) still makes the pipeline demand a vertex array.)
 	_vfmt_empty = RenderingDevice.INVALID_FORMAT_ID
+	_ensure_audio_storage()
+
+# Runtime-fed 128-sample audio buffers used by synth/scope and synth/spectrum. Callers may
+# update either side independently by passing an empty array for the side to preserve.
+func set_audio_samples(waveform, spectrum) -> void:
+	_ensure_audio_storage()
+	if waveform.size() > 0:
+		_audio_waveform.fill(0.5)
+		for i in range(min(128, waveform.size())):
+			_audio_waveform[i] = float(waveform[i])
+	if spectrum.size() > 0:
+		_audio_spectrum.fill(0.0)
+		for i in range(min(128, spectrum.size())):
+			_audio_spectrum[i] = float(spectrum[i])
+
+func _ensure_audio_storage() -> void:
+	if _audio_waveform.size() != 128:
+		_audio_waveform.resize(128)
+		_audio_waveform.fill(0.5)
+	if _audio_spectrum.size() != 128:
+		_audio_spectrum.resize(128)
+		_audio_spectrum.fill(0.0)
 
 # --- textures -------------------------------------------------------------
 
@@ -159,6 +185,49 @@ func _make_tex(w: int, h: int, fmt: int) -> RID:
 	# read for feedback/state surfaces; harmless for transients (fully overwritten).
 	rd.texture_clear(rid, Color(0, 0, 0, 0), 0, 1, 0, 1)
 	return rid
+
+func _make_sampled_float_tex(w: int, h: int, values: PackedFloat32Array) -> RID:
+	var tf := RDTextureFormat.new()
+	tf.width = w
+	tf.height = h
+	tf.format = RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT
+	tf.usage_bits = RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT
+	return rd.texture_create(tf, RDTextureView.new(), [values.to_byte_array()])
+
+func _depth_texture(size: Vector2i) -> RID:
+	if _depth_textures.has(size):
+		return _depth_textures[size]
+	var tf := RDTextureFormat.new()
+	tf.width = size.x
+	tf.height = size.y
+	tf.format = RenderingDevice.DATA_FORMAT_D32_SFLOAT
+	tf.usage_bits = RenderingDevice.TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+	var texture := rd.texture_create(tf, RDTextureView.new())
+	_depth_textures[size] = texture
+	return texture
+
+func _ensure_default_mesh_texture(tex_id: String) -> bool:
+	var base_id := tex_id.get_slice("_chain_", 0)
+	if base_id != "global_mesh0_positions" and base_id != "global_mesh0_normals":
+		return false
+	if not _textures.has(tex_id):
+		var values: PackedFloat32Array
+		if base_id.ends_with("_positions"):
+			values = PackedFloat32Array([
+				-0.6, -0.5, 0.0, 1.0,
+				 0.6, -0.5, 0.0, 1.0,
+				 0.0,  0.6, 0.0, 1.0,
+			])
+		else:
+			values = PackedFloat32Array([
+				0.0, 0.0, 1.0, 0.0,
+				0.0, 0.0, 1.0, 0.0,
+				0.0, 0.0, 1.0, 0.0,
+			])
+		_textures[tex_id] = _make_sampled_float_tex(3, 1, values)
+	_tex_dims[tex_id] = Vector2i(3, 1)
+	_tex_fmt[tex_id] = RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT
+	return true
 
 func _resolve_dim(d, screen_size: int, uniforms: Dictionary = {}) -> int:
 	# Subset of reference/04 §9 resolveDimension. number | "screen"/"auto"/"input" |
@@ -302,6 +371,8 @@ func _merge_uniforms(graph: Dictionary) -> Dictionary:
 func _ensure_tex(tex_id: String) -> void:
 	if _pingpong.has(tex_id):
 		return
+	if _ensure_default_mesh_texture(tex_id):
+		return
 	if not _textures.has(tex_id):
 		var f16 := _data_format("rgba16f")
 		_textures[tex_id] = _make_tex(screen.x, screen.y, f16)
@@ -436,7 +507,7 @@ func _get_shader(cache_key: String, vert_src: String, frag_src: String) -> RID:
 # per-pass `blend: ['src','dst']` array (e.g. pointsBillboardRender's alpha deposit
 # 'ONE'/'ONE_MINUS_SRC_ALPHA') names a WebGL blendFunc pair; map both color and alpha.
 func _blend_factor(name: String) -> int:
-	match name:
+	match name.to_upper():
 		"ONE":
 			return RenderingDevice.BLEND_FACTOR_ONE
 		"ZERO":
@@ -476,8 +547,10 @@ func _resolve_blend(p: Dictionary) -> Dictionary:
 	return {"enable": false, "src": 0, "dst": 0, "key": "rep"}
 
 func _get_pipeline(cache_key: String, shader: RID, fb_format: int, n_attach: int,
-		primitive: int, blend_spec: Dictionary, vfmt: int) -> RID:
-	var key := "%s:%d:%d:%d:%s" % [cache_key, fb_format, n_attach, primitive, str(blend_spec.get("key", "rep"))]
+		primitive: int, blend_spec: Dictionary, vfmt: int, is_mesh: bool) -> RID:
+	var key := "%s:%d:%d:%d:%s:%s" % [
+		cache_key, fb_format, n_attach, primitive, str(blend_spec.get("key", "rep")), str(is_mesh),
+	]
 	if _pipelines.has(key):
 		return _pipelines[key]
 	var blend := RDPipelineColorBlendState.new()
@@ -495,13 +568,24 @@ func _get_pipeline(cache_key: String, shader: RID, fb_format: int, n_attach: int
 			a.dst_alpha_blend_factor = blend_spec["dst"]
 			a.alpha_blend_op = RenderingDevice.BLEND_OP_ADD
 		blend.attachments.push_back(a)
-	var p := rd.render_pipeline_create(shader, fb_format, vfmt,
-		primitive, RDPipelineRasterizationState.new(),
-		RDPipelineMultisampleState.new(), RDPipelineDepthStencilState.new(), blend)
+	var raster := RDPipelineRasterizationState.new()
+	var depth := RDPipelineDepthStencilState.new()
+	if is_mesh:
+		raster.cull_mode = RenderingDevice.POLYGON_CULL_BACK
+		# Source mesh vertices are CCW in OpenGL's Y-up clip space. RenderingDevice's
+		# Y-down viewport reverses their raster-space winding, so CLOCKWISE preserves
+		# the reference's CCW-facing triangles and culls the same back faces.
+		raster.front_face = RenderingDevice.POLYGON_FRONT_FACE_CLOCKWISE
+		depth.enable_depth_test = true
+		depth.enable_depth_write = true
+		depth.depth_compare_operator = RenderingDevice.COMPARE_OP_LESS
+	var p := rd.render_pipeline_create(shader, fb_format, vfmt, primitive, raster,
+		RDPipelineMultisampleState.new(), depth, blend)
 	_pipelines[key] = p
 	return p
 
-# Vertex shader for a custom-draw program (agent deposit): effects/<ns>/<func>/<prog>.vert.glsl.
+# Vertex shader for a custom-draw program (agent deposit or mesh triangles):
+# effects/<ns>/<func>/<prog>.vert.glsl.
 func _load_vertex(ns: String, fn: String, prog: String) -> String:
 	var path := addon_dir + "/shaders/effects/%s/%s/%s.vert.glsl" % [ns, fn, prog]
 	var f := FileAccess.open(path, FileAccess.READ)
@@ -512,14 +596,14 @@ func _load_vertex(ns: String, fn: String, prog: String) -> String:
 	f.close()
 	return _resolve_includes(s)
 
-# Draw-vertex count for an agent deposit pass. count:number is literal; count:"input"/"auto"/
-# "screen" derives the agent count from the state input texture (stateSize²). Billboards expand
-# ×6 (two tris/quad) at the call site.
+# Draw-vertex count for a custom pass. count:number is literal; count:"input"/"auto"/"screen"
+# derives the count from the mesh-position or agent-state input texture. Billboards expand ×6
+# (two tris/quad) at the call site.
 func _resolve_count(p: Dictionary) -> int:
 	var c = p.get("count", 1)
 	if typeof(c) == TYPE_STRING:
 		var inputs: Dictionary = p.get("inputs", {})
-		var src_id := str(inputs.get("xyzTex", ""))
+		var src_id := str(inputs.get("meshPositions", inputs.get("xyzTex", "")))
 		if src_id == "" or src_id == "none":
 			for k in inputs:
 				var t := str(inputs[k])
@@ -575,6 +659,13 @@ func _synth_layout(ns: String, fn: String, globals: Dictionary) -> Dictionary:
 		var g = globals[gk]
 		if not g.has("uniform"):
 			continue
+		if str(g.get("type", "")) == "mat3":
+			if cursor > 0:
+				slot += 1
+				cursor = 0
+			layout[str(g["uniform"])] = {"slot": slot, "components": "xyz", "columns": 3}
+			slot += 3
+			continue
 		var w := _type_width(str(g.get("type", "float")))
 		if cursor + w > 4:
 			slot += 1
@@ -587,6 +678,11 @@ func _synth_layout(ns: String, fn: String, globals: Dictionary) -> Dictionary:
 		if cursor >= 4:
 			slot += 1
 			cursor = 0
+	# lensWarp's reference shader consumes the preceding pipeline's `speed` uniform,
+	# even though its own definition does not redeclare it. Keep that inherited value
+	# in the synthesized layout without introducing definition drift.
+	if ns == "filter" and fn == "lensWarp":
+		layout["speed"] = {"slot": slot, "components": letters[cursor]}
 	_synth_cache[key] = layout
 	return layout
 
@@ -594,10 +690,14 @@ func _synth_layout(ns: String, fn: String, globals: Dictionary) -> Dictionary:
 func _synth_header(layout: Dictionary) -> String:
 	var max_slot := 0
 	for k in layout:
-		max_slot = max(max_slot, int(layout[k]["slot"]))
+		max_slot = max(max_slot, int(layout[k]["slot"]) + int(layout[k].get("columns", 1)) - 1)
 	var s := "layout(set=0,binding=0,std140) uniform Params { vec4 data[%d]; };\n" % (max_slot + 1)
 	for k in layout:
-		s += "#define %s data[%d].%s\n" % [k, int(layout[k]["slot"]), str(layout[k]["components"])]
+		if int(layout[k].get("columns", 1)) == 3:
+			var slot := int(layout[k]["slot"])
+			s += "#define %s mat3(data[%d].xyz, data[%d].xyz, data[%d].xyz)\n" % [k, slot, slot + 1, slot + 2]
+		else:
+			s += "#define %s data[%d].%s\n" % [k, int(layout[k]["slot"]), str(layout[k]["components"])]
 	return s
 
 func _engine_value(name: String) -> Array:
@@ -635,10 +735,43 @@ func _value_floats(v) -> Array:
 		return out
 	return [float(v)]
 
+func _default_for_uniform(globals: Dictionary, uniform_name: String):
+	if globals.has(uniform_name) and globals[uniform_name].has("default"):
+		return globals[uniform_name]["default"]
+	for global_spec in globals.values():
+		if global_spec is Dictionary and str(global_spec.get("uniform", "")) == uniform_name:
+			return global_spec.get("default")
+	return null
+
+func _audio_values(name: String) -> Array:
+	_ensure_audio_storage()
+	var source := _audio_waveform if name.begins_with("audioWaveform_") else _audio_spectrum
+	var group := int(name.get_slice("_", 1))
+	var start := group * 4
+	return [source[start], source[start + 1], source[start + 2], source[start + 3]]
+
+func _audio_layout(fn: String) -> Dictionary:
+	if _audio_layouts.has(fn):
+		return _audio_layouts[fn]
+	var prefix := "audioWaveform" if fn == "scope" else "audioSpectrum"
+	var layout := {
+		"resolution": {"slot": 0, "components": "xy"},
+		"time": {"slot": 0, "components": "z"},
+		"tileOffset": {"slot": 1, "components": "xy"},
+		"fullResolution": {"slot": 1, "components": "zw"},
+		"lineColor": {"slot": 2, "components": "xyz"},
+		"lineThickness": {"slot": 2, "components": "w"},
+		"gain": {"slot": 3, "components": "x"},
+	}
+	for group in 32:
+		layout["%s_%d" % [prefix, group]] = {"slot": 4 + group, "components": "xyzw"}
+	_audio_layouts[fn] = layout
+	return layout
+
 func pack_with_layout(layout: Dictionary, globals: Dictionary, p: Dictionary) -> PackedByteArray:
 	var max_slot := 0
 	for name in layout:
-		max_slot = max(max_slot, int(layout[name]["slot"]))
+		max_slot = max(max_slot, int(layout[name]["slot"]) + int(layout[name].get("columns", 1)) - 1)
 	var data := PackedFloat32Array()
 	data.resize((max_slot + 1) * 4)
 	var pass_u: Dictionary = p.get("uniforms", {})
@@ -646,16 +779,25 @@ func pack_with_layout(layout: Dictionary, globals: Dictionary, p: Dictionary) ->
 		var slot := int(layout[name]["slot"])
 		var offs := _comp_offsets(str(layout[name]["components"]))
 		var vals: Array
-		if ENGINE_GLOBALS.has(name):
+		if str(name).begins_with("audioWaveform_") or str(name).begins_with("audioSpectrum_"):
+			vals = _audio_values(str(name))
+		elif ENGINE_GLOBALS.has(name):
 			vals = _engine_value(name)
 		elif pass_u.has(name):
 			vals = _value_floats(pass_u[name])
-		elif globals.has(name) and globals[name].has("default"):
-			vals = _value_floats(globals[name]["default"])
 		else:
-			vals = [0.0]
-		for i in range(min(offs.size(), vals.size())):
-			data[slot * 4 + offs[i]] = vals[i]
+			var default_value = _default_for_uniform(globals, str(name))
+			vals = _value_floats(default_value) if default_value != null else [0.0]
+		var columns := int(layout[name].get("columns", 1))
+		if columns == 3:
+			for column in 3:
+				for row in 3:
+					var source_index := column * 3 + row
+					if source_index < vals.size():
+						data[(slot + column) * 4 + row] = vals[source_index]
+		else:
+			for i in range(min(offs.size(), vals.size())):
+				data[slot * 4 + offs[i]] = vals[i]
 	return data.to_byte_array()
 
 func _pack_pass(p: Dictionary) -> PackedByteArray:
@@ -675,6 +817,8 @@ func _pack_pass(p: Dictionary) -> PackedByteArray:
 # program effects like cellularAutomata's ca/caFb). Drives both the synth-header decision
 # and packing. An empty {} still counts as declared — do NOT confuse "empty" with "absent".
 func _has_layout(def: Dictionary, p: Dictionary) -> bool:
+	if str(def.get("namespace", "")) == "synth" and str(def.get("func", "")) in ["scope", "spectrum"]:
+		return true
 	if def.has("uniformLayout"):
 		return true
 	if def.has("uniformLayouts"):
@@ -683,25 +827,28 @@ func _has_layout(def: Dictionary, p: Dictionary) -> bool:
 
 # The declared layout dict for a pass (only meaningful when _has_layout is true).
 func _layout_for(def: Dictionary, p: Dictionary) -> Dictionary:
+	if str(def.get("namespace", "")) == "synth" and str(def.get("func", "")) in ["scope", "spectrum"]:
+		return _audio_layout(str(def["func"]))
 	if def.has("uniformLayouts"):
 		return def["uniformLayouts"].get(str(p.get("progName", p.get("func"))), {})
 	return def.get("uniformLayout", {})
 
 # --- execution ------------------------------------------------------------
 
-# A pass is one of four draws, dispatched on outputs + drawMode:
+# A pass is one of five draws, dispatched on outputs + drawMode:
 #   fullscreen  — 1 output, fullscreen triangle (the 93 isolation effects + blit)
 #   MRT         — N outputs (drawBuffers>1), fullscreen triangle into N attachments
 #                 (agent state updates: pointsEmit/init, flow/agent write xyz+vel+rgba)
 #   points      — drawMode "points": N procedural point primitives, one per agent, custom
 #                 vertex shader fetching agent position from the state textures (deposit)
 #   billboards  — drawMode "billboards": N×6 procedural triangles (agent quads)
-# points/billboards use ONE,ONE additive blend (blend:true) and do NOT clear — they
-# accumulate onto the trail the copy pass just produced (reference deposit semantics).
+#   triangles   — drawMode "triangles": N procedural mesh vertices from texture inputs
+# Custom draws do not clear. Point/billboard passes accumulate onto the trail the copy
+# pass just produced; triangle passes preserve the preceding background clear pass.
 func execute_pass(p: Dictionary) -> void:
 	var ptype := str(p.get("passType", "effect"))
 	var draw_mode := str(p.get("drawMode", ""))
-	var is_points := draw_mode == "points" or draw_mode == "billboards"
+	var is_custom_draw := draw_mode == "points" or draw_mode == "billboards" or draw_mode == "triangles"
 	var cache_key := ""
 	var frag_src := ""
 	var vert_src := FULLSCREEN_VS
@@ -729,7 +876,7 @@ func execute_pass(p: Dictionary) -> void:
 		frag_src = _inject_after_version(raw_frag, inject)
 		# Agent deposit passes carry a custom vertex stage (gl_VertexIndex scatter); the
 		# same UBO/defines are injected into it so the VS can read params + sample state.
-		if is_points:
+		if is_custom_draw:
 			vert_src = _inject_after_version(_load_vertex(ns, fn, prog), inject)
 	var shader := _get_shader(cache_key, vert_src, frag_src)
 	if not shader.is_valid():
@@ -739,22 +886,29 @@ func execute_pass(p: Dictionary) -> void:
 	# Double-buffered surfaces render into the current WRITE buffer; everything else flat.
 	var outputs: Dictionary = p.get("outputs", {})
 	var out_rids := []
+	var output_size := screen
 	for k in outputs:
-		var rid := _resolve_write(str(outputs[k]))
+		var output_id := str(outputs[k])
+		var rid := _resolve_write(output_id)
 		if not rid.is_valid():
-			push_error("pass output texture missing: " + str(outputs[k]))
+			push_error("pass output texture missing: " + output_id)
 			return
 		out_rids.append(rid)
+		output_size = _tex_dims.get(output_id, screen)
 	if out_rids.is_empty():
 		return
-	var fb := rd.framebuffer_create(out_rids)
+	var framebuffer_rids := out_rids.duplicate()
+	var is_mesh := draw_mode == "triangles"
+	if is_mesh:
+		framebuffer_rids.append(_depth_texture(output_size))
+	var fb := rd.framebuffer_create(framebuffer_rids)
 	var fb_format := rd.framebuffer_get_format(fb)
 	var n_attach := out_rids.size()
 	var primitive := RenderingDevice.RENDER_PRIMITIVE_POINTS if draw_mode == "points" \
 		else RenderingDevice.RENDER_PRIMITIVE_TRIANGLES
 	var blend_spec := _resolve_blend(p)
-	var vfmt := _vfmt_empty if is_points else _vfmt
-	var pipeline := _get_pipeline(cache_key, shader, fb_format, n_attach, primitive, blend_spec, vfmt)
+	var vfmt := _vfmt_empty if is_custom_draw else _vfmt
+	var pipeline := _get_pipeline(cache_key, shader, fb_format, n_attach, primitive, blend_spec, vfmt, is_mesh)
 
 	var set0_uniforms := []
 	if ptype == "blit":
@@ -789,11 +943,12 @@ func execute_pass(p: Dictionary) -> void:
 			set0_uniforms.append(u)
 	var set0 := rd.uniform_set_create(set0_uniforms, shader, 0)
 
-	# Deposit accumulates onto the existing trail (no clear); all other passes clear their
-	# N attachments to transparent black, then a full-coverage draw overwrites every texel.
+	# Custom draws preserve the previous attachment contents: point/billboard deposits
+	# accumulate and mesh triangles draw over their preceding background clear pass.
 	var dl: int
-	if is_points:
-		dl = rd.draw_list_begin(fb, 0, PackedColorArray())
+	if is_custom_draw:
+		var draw_flags := RenderingDevice.DRAW_CLEAR_DEPTH if is_mesh else 0
+		dl = rd.draw_list_begin(fb, draw_flags, PackedColorArray(), 1.0)
 	else:
 		var clears := PackedColorArray()
 		for _i in n_attach:
@@ -801,9 +956,9 @@ func execute_pass(p: Dictionary) -> void:
 		dl = rd.draw_list_begin(fb, RenderingDevice.DRAW_CLEAR_COLOR_ALL, clears)
 	rd.draw_list_bind_render_pipeline(dl, pipeline)
 	rd.draw_list_bind_uniform_set(dl, set0, 0)
-	if is_points:
+	if is_custom_draw:
 		# Procedural draw: N (or N×6) vertices, no vertex buffer — gl_VertexIndex indexes
-		# the agent state textures in the deposit vertex shader.
+		# either agent state textures or mesh position/normal textures in the custom VS.
 		var count := _resolve_count(p)
 		if draw_mode == "billboards":
 			count *= 6
