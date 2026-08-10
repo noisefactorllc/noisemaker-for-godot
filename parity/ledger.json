@@ -25,18 +25,18 @@
     "mode": "density: 100, intensity: 74.59, inputIntensity: 21.46",
     "golden": "parity/out/agentsPoints.golden.png",
     "candidate": "parity/out/agentsPoints.candidate.png",
-    "verdict": "CHAOS",
-    "max_abs_diff": 206.0,
-    "mean_abs_diff": 0.7407759428024292,
-    "ssim": 0.3877251148223877,
-    "passed": false,
-    "skipped": true,
+    "verdict": "PASS",
+    "max_abs_diff": 0.0,
+    "mean_abs_diff": 0.0,
+    "ssim": 1.0,
+    "passed": true,
+    "skipped": false,
     "policy": {
-      "tolerance": 255.0,
-      "ssim_min": 0.0,
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
       "strict_tolerance": 2.001,
       "strict_ssim_min": 0.98,
-      "reason": "chaotic agent iterations amplify oklab pow cross-GPU non-determinism; non-chaotic control is exact"
+      "reason": "strict RGBA8 float round-trip allowance"
     }
   },
   {
@@ -725,18 +725,18 @@
     "mode": "default",
     "golden": "parity/out/convolutionFeedback.golden.png",
     "candidate": "parity/out/convolutionFeedback.candidate.png",
-    "verdict": "CHAOS",
-    "max_abs_diff": 174.0,
-    "mean_abs_diff": 38.135459899902344,
-    "ssim": 0.6064441800117493,
-    "passed": false,
-    "skipped": true,
+    "verdict": "NEAR",
+    "max_abs_diff": 8.999999046325684,
+    "mean_abs_diff": 0.3754081726074219,
+    "ssim": 0.9999698400497437,
+    "passed": true,
+    "skipped": false,
     "policy": {
-      "tolerance": 255.0,
-      "ssim_min": 0.0,
+      "tolerance": 9.001,
+      "ssim_min": 0.999,
       "strict_tolerance": 2.001,
       "strict_ssim_min": 0.98,
-      "reason": "expansive feedback amplifies cross-GPU floating-point non-determinism"
+      "reason": "expansive feedback amplifies sparse cross-GPU floating-point residuals after deterministic initialization"
     }
   },
   {
@@ -1369,6 +1369,46 @@
     "max_abs_diff": 0.0,
     "mean_abs_diff": 0.0,
     "ssim": 1.0,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
+    "program": "filter3dFlow3d",
+    "effect": "filter3d/flow3d",
+    "mode": "default",
+    "golden": "parity/out/filter3dFlow3d.golden.png",
+    "candidate": "parity/out/filter3dFlow3d.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.10390090942382812,
+    "ssim": 0.999973475933075,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
+    "program": "filter3dPalette3d",
+    "effect": "filter3d/palette3d",
+    "mode": "index: palette.vaporwave",
+    "golden": "parity/out/filter3dPalette3d.golden.png",
+    "candidate": "parity/out/filter3dPalette3d.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.21859361231327057,
+    "ssim": 0.9999673962593079,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4101,18 +4141,18 @@
     "mode": "default",
     "golden": "parity/out/reactionDiffusion.golden.png",
     "candidate": "parity/out/reactionDiffusion.candidate.png",
-    "verdict": "CHAOS",
-    "max_abs_diff": 168.0,
-    "mean_abs_diff": 29.288555145263672,
-    "ssim": 0.4682372510433197,
-    "passed": false,
-    "skipped": true,
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.2808036804199219,
+    "ssim": 0.999916672706604,
+    "passed": true,
+    "skipped": false,
     "policy": {
-      "tolerance": 255.0,
-      "ssim_min": 0.0,
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
       "strict_tolerance": 2.001,
       "strict_ssim_min": 0.98,
-      "reason": "continuous solver evolution amplifies cross-backend floating-point non-determinism"
+      "reason": "strict RGBA8 float round-trip allowance"
     }
   },
   {
@@ -5645,6 +5685,146 @@
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 0.08957289904356003,
     "ssim": 0.999991774559021,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
+    "program": "synth3dCell3d",
+    "effect": "synth3d/cell3d",
+    "mode": "volumeSize: x64",
+    "golden": "parity/out/synth3dCell3d.golden.png",
+    "candidate": "parity/out/synth3dCell3d.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.2071533352136612,
+    "ssim": 0.9999763369560242,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
+    "program": "synth3dCellularAutomata3d",
+    "effect": "synth3d/cellularAutomata3d",
+    "mode": "volumeSize: x32",
+    "golden": "parity/out/synth3dCellularAutomata3d.golden.png",
+    "candidate": "parity/out/synth3dCellularAutomata3d.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.279052734375,
+    "ssim": 0.9999628067016602,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
+    "program": "synth3dFlythrough3d",
+    "effect": "synth3d/flythrough3d",
+    "mode": "default",
+    "golden": "parity/out/synth3dFlythrough3d.golden.png",
+    "candidate": "parity/out/synth3dFlythrough3d.candidate.png",
+    "verdict": "NEAR",
+    "max_abs_diff": 87.0,
+    "mean_abs_diff": 0.12533950805664062,
+    "ssim": 0.999862015247345,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 87.001,
+      "ssim_min": 0.999,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "fractal distance-estimator rounding moves sparse raymarch-boundary pixels across the surface"
+    }
+  },
+  {
+    "program": "synth3dFractal3d",
+    "effect": "synth3d/fractal3d",
+    "mode": "volumeSize: x64",
+    "golden": "parity/out/synth3dFractal3d.golden.png",
+    "candidate": "parity/out/synth3dFractal3d.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.042652130126953125,
+    "ssim": 0.9999831914901733,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
+    "program": "synth3dNoise3d",
+    "effect": "synth3d/noise3d",
+    "mode": "default",
+    "golden": "parity/out/synth3dNoise3d.golden.png",
+    "candidate": "parity/out/synth3dNoise3d.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.25879669189453125,
+    "ssim": 0.999965488910675,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
+    "program": "synth3dReactionDiffusion3d",
+    "effect": "synth3d/reactionDiffusion3d",
+    "mode": "volumeSize: x32",
+    "golden": "parity/out/synth3dReactionDiffusion3d.golden.png",
+    "candidate": "parity/out/synth3dReactionDiffusion3d.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.0820312425494194,
+    "ssim": 0.9999774694442749,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
+    "program": "synth3dShape3d",
+    "effect": "synth3d/shape3d",
+    "mode": "volumeSize: x64",
+    "golden": "parity/out/synth3dShape3d.golden.png",
+    "candidate": "parity/out/synth3dShape3d.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.24860002100467682,
+    "ssim": 0.9999679923057556,
     "passed": true,
     "skipped": false,
     "policy": {

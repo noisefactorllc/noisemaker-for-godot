@@ -252,8 +252,16 @@ async function main () {
         throw new Error('DSL compile failed: ' + document.getElementById('status')?.textContent)
       }
       const p = window.__noisemakerRenderingPipeline
-      return !!(p && p.graph && p.graph.id !== base)
-    }, { timeout: STATUS_TIMEOUT }, baselineId)
+      if (!(p && p.graph && p.graph.id !== base && p.isCompiling === false)) return false
+      if (!s.includes('compiled')) return false
+      if (window.__nmStableId === p.graph.id) {
+        window.__nmStableCount = (window.__nmStableCount || 0) + 1
+      } else {
+        window.__nmStableId = p.graph.id
+        window.__nmStableCount = 0
+      }
+      return window.__nmStableCount >= 1
+    }, baselineId, { timeout: STATUS_TIMEOUT })
 
     // PAUSE FIRST so the demo's requestAnimationFrame loop stops re-syncing the
     // canvas to its (small, letterboxed) layout size — that auto-resize is what
@@ -321,6 +329,58 @@ async function main () {
       return true
     }, opts.size, { timeout: STATUS_TIMEOUT })
 
+    if (opts.runSeconds === 0) {
+      await page.evaluate((time) => {
+        if (window.__noisemakerSetPausedTime) window.__noisemakerSetPausedTime(time)
+      }, opts.time)
+
+      // ROOT-CAUSE FIX: the demo's CanvasRenderer owns an always-on
+      // requestAnimationFrame loop (shaders/src/renderer/canvas.js
+      // _renderLoop/start()/stop()). The ordinary DSL-swap compile path sets
+      // pipeline.isCompiling while programs are rebuilt, but does not stop the
+      // renderer. pipeline.render() no-ops only while isCompiling is true; as
+      // soon as compilation finishes, the still-running RAF loop resumes real
+      // render calls until this harness's asynchronous pause reaches the page.
+      // That CDP-latency window is load-dependent: direct pre-fix double mints
+      // of convolutionFeedback observed different goldens even though both
+      // used the same DSL, graph, size, pinned time, and official 8 frames.
+      // The reference's deterministic renderer tests avoid the race by driving
+      // renderer.render(t) directly without ever calling renderer.start().
+      //
+      // resize() is not a reset: Pipeline.createSurfaces() preserves matching
+      // textures. Clear the whole backend registry, including iterative graph
+      // textures absent from p.surfaces, then restore canonical ping-pong
+      // orientation and the frame clock. This is deliberately limited to the
+      // discrete protocol; timed sampling has different evolution semantics.
+      const reset = await page.evaluate(() => {
+        const p = window.__noisemakerRenderingPipeline
+        const backend = p?.backend
+        if (!p) return { error: 'no pipeline' }
+        if (!backend?.textures || typeof backend.clearTexture !== 'function') {
+          return { error: 'backend cannot clear textures' }
+        }
+        const textureIds = [...backend.textures.keys()]
+        for (const texId of backend.textures.keys()) backend.clearTexture(texId)
+        const normalizedSurfaces = []
+        if (p.surfaces) {
+          for (const [name, surface] of p.surfaces.entries()) {
+            const readId = `global_${name}_read`
+            const writeId = `global_${name}_write`
+            if (backend.textures.get(readId) && backend.textures.get(writeId)) {
+              surface.read = readId
+              surface.write = writeId
+              normalizedSurfaces.push(name)
+            }
+          }
+        }
+        p.frameIndex = 0
+        p.lastTime = 0
+        return { textureCount: textureIds.length, normalizedSurfaces }
+      })
+      if (reset.error) throw new Error(`state reset failed: ${reset.error}`)
+      process.stderr.write(`[parity] reset ${reset.textureCount} textures and ${reset.normalizedSurfaces.length} ping-pong surfaces before the 8-frame protocol\n`)
+    }
+
     // ---- 3. Render + capture: one pinned frame, or timed samples for statefuls.
     if (opts.runSeconds > 0) {
       // Timed-sampling mode (fluid/feedback sims): step total_frames at 1/600
@@ -350,7 +410,6 @@ async function main () {
       // the PIPELINE directly (the CanvasRenderer re-syncs canvas size per frame and
       // can revert the resize; pipeline.render does the GPU work the readback reads).
       await page.evaluate(({ time, frames }) => {
-        if (window.__noisemakerSetPausedTime) window.__noisemakerSetPausedTime(time)
         const p = window.__noisemakerRenderingPipeline
         const r = window.__noisemakerCanvasRenderer
         for (let i = 0; i < frames; i++) {

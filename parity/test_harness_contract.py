@@ -2,6 +2,7 @@
 """App-free regression tests for the shell parity gate contract."""
 
 import os
+import importlib.util
 import json
 import shutil
 import subprocess
@@ -13,12 +14,119 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 
 
+def load_ledger_writer():
+    spec = importlib.util.spec_from_file_location(
+        "nm_godot_write_ledger", REPO / "parity" / "write-ledger.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class HarnessContractTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="nm-godot-harness-"))
 
     def tearDown(self):
         shutil.rmtree(self.tmp)
+
+    def test_exporter_waits_for_settled_graph_and_resets_full_pipeline_state(self):
+        source = (REPO / "parity" / "export-and-render.mjs").read_text()
+
+        self.assertIn("p.graph.id !== base && p.isCompiling === false", source)
+        self.assertIn("}, baselineId, { timeout: STATUS_TIMEOUT })", source)
+        self.assertIn("for (const texId of backend.textures.keys())", source)
+        self.assertIn("backend.clearTexture(texId)", source)
+        self.assertIn("surface.read = readId", source)
+        self.assertIn("surface.write = writeId", source)
+        self.assertIn("p.frameIndex = 0", source)
+        self.assertIn("p.lastTime = 0", source)
+        self.assertLess(
+            source.index("if (window.__noisemakerSetPausedTime)"),
+            source.index("p.lastTime = 0"),
+        )
+
+    def test_ledger_reports_3d_effect_namespaces_and_explicit_modes(self):
+        writer = load_ledger_writer()
+
+        self.assertEqual(
+            ("filter3d/flow3d", "default"),
+            writer.effect_metadata(REPO, "filter3dFlow3d"),
+        )
+        self.assertEqual(
+            ("filter3d/palette3d", "index: palette.vaporwave"),
+            writer.effect_metadata(REPO, "filter3dPalette3d"),
+        )
+        self.assertEqual(
+            ("synth3d/cell3d", "volumeSize: x64"),
+            writer.effect_metadata(REPO, "synth3dCell3d"),
+        )
+
+    def test_ledger_ignores_nested_argument_helpers_and_preserves_initial_2d_behavior(self):
+        writer = load_ledger_writer()
+
+        self.assertEqual(
+            ("filter/lighting", "normalStrength: 2, heightMap: read(o0)"),
+            writer.effect_metadata(REPO, "lightingHeightMap"),
+        )
+        self.assertEqual(
+            (
+                "filter/parallax",
+                "direction: vec3(0.8, 0.3, 1), pivot: 0.3, heightMap: read(o0)",
+            ),
+            writer.effect_metadata(REPO, "parallaxHeightMap"),
+        )
+        self.assertEqual(
+            (
+                "filter/plasticWrap",
+                "highlight: 80, detail: 60, lightDirection: vec3(0.2, -0.4, 0.8)",
+            ),
+            writer.effect_metadata(REPO, "plasticWrapDirected"),
+        )
+        self.assertEqual((None, "default"), writer.effect_metadata(REPO, "noise"))
+        self.assertEqual((None, "default"), writer.effect_metadata(REPO, "cnd_noise3d"))
+
+    def _definition_gate_fixture(self):
+        parity = self.tmp / "parity"
+        parity.mkdir()
+        shutil.copy2(REPO / "parity" / "check_definitions.mjs", parity / "check_definitions.mjs")
+        effects = self.tmp / "godot" / "addons" / "noisemaker" / "effects"
+        effects.mkdir(parents=True)
+        tools = self.tmp / "tools"
+        tools.mkdir()
+        (tools / "convert-definitions.mjs").write_text("// synthetic no-op converter\n")
+        reference = self.tmp / "reference"
+        (reference / "shaders" / "effects").mkdir(parents=True)
+        return parity / "check_definitions.mjs", effects, reference
+
+    def test_definition_gate_rejects_reference_side_effect_deletion(self):
+        gate, effects, reference = self._definition_gate_fixture()
+        stale = effects / "filter" / "stale.json"
+        stale.parent.mkdir()
+        stale.write_text("{}\n")
+
+        result = subprocess.run(
+            ["node", str(gate)],
+            env={**os.environ, "NM_REFERENCE_ROOT": str(reference)},
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("STALE in repo (reference dropped/renamed it): filter/stale.json", result.stdout)
+
+    def test_definition_gate_rejects_vacuous_empty_trees(self):
+        gate, _effects, reference = self._definition_gate_fixture()
+
+        result = subprocess.run(
+            ["node", str(gate)],
+            env={**os.environ, "NM_REFERENCE_ROOT": str(reference)},
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+        self.assertIn("refusing a vacuous pass", result.stderr)
 
     def test_sweep_exits_nonzero_when_a_case_fails(self):
         parity = self.tmp / "parity"
@@ -79,26 +187,24 @@ class HarnessContractTests(unittest.TestCase):
         self.assertEqual(ledger[0]["program"], "missingGolden")
         self.assertEqual(ledger[0]["verdict"], "FAIL")
 
-    def test_sweep_records_chaos_as_distinct_from_policy_skip(self):
+    def test_ledger_records_chaos_as_distinct_from_policy_skip(self):
         parity = self.tmp / "parity"
         (parity / "programs").mkdir(parents=True)
         (parity / "out").mkdir()
-        shutil.copy2(REPO / "parity" / "sweep.sh", parity / "sweep.sh")
-        ledger_writer = REPO / "parity" / "write-ledger.py"
-        if ledger_writer.exists():
-            shutil.copy2(ledger_writer, parity / "write-ledger.py")
-        shutil.copy2(REPO / "parity" / "make-batch-manifest.py", parity / "make-batch-manifest.py")
+        shutil.copy2(REPO / "parity" / "write-ledger.py", parity / "write-ledger.py")
         (parity / "programs" / "reactionDiffusion.dsl").write_text(
             "noise().reactionDiffusion().write(o0)\n"
         )
-        (parity / "out" / "reactionDiffusion.golden.png").touch()
-
-        result = subprocess.run(
-            ["bash", str(parity / "sweep.sh")],
-            env={**os.environ, "GODOT": "/bin/false"},
-            capture_output=True,
-            text=True,
+        results = self.tmp / "results.tsv"
+        results.write_text(
+            "reactionDiffusion\tCHAOS\t255\t0\tcontinuous solver non-determinism\n"
         )
+
+        result = subprocess.run([
+            "python3", str(parity / "write-ledger.py"),
+            "--root", str(self.tmp), "--results", str(results),
+            "--output", "parity/ledger.json",
+        ], capture_output=True, text=True)
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         ledger = json.loads((parity / "ledger.json").read_text())
@@ -454,6 +560,37 @@ class HarnessContractTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(json.loads((parity / "ledger.json").read_text())[0]["verdict"], "FAIL")
+
+    def test_ledger_rejects_duplicate_program_row(self):
+        parity = self.tmp / "parity"
+        (parity / "out").mkdir(parents=True)
+        (parity / "programs").mkdir()
+        shutil.copy2(REPO / "parity" / "write-ledger.py", parity / "write-ledger.py")
+        (parity / "programs" / "chrome.dsl").write_text("noise().chrome().write(o0)\n")
+        (parity / "out" / "chrome.report.json").write_text(json.dumps({
+            "name": "chrome",
+            "passed": True,
+            "max_abs_diff": 0,
+            "mean_abs_diff": 0,
+            "ssim": 1,
+            "tolerance": 2.001,
+            "ssim_min": 0.98,
+        }))
+        results = self.tmp / "results.tsv"
+        results.write_text(
+            "chrome\tAUTO\t2.001\t0.98\tstrict comparison\n"
+            "chrome\tAUTO\t2.001\t0.98\tstrict comparison\n"
+        )
+
+        result = subprocess.run([
+            "python3", str(parity / "write-ledger.py"),
+            "--root", str(self.tmp), "--results", str(results),
+            "--output", "parity/ledger.json",
+        ], capture_output=True, text=True)
+
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("UNIVERSE MISMATCH", result.stdout)
+        self.assertIn("chrome", result.stdout)
 
     def _run_with_fake_renderer(self, renderer_exit):
         parity = self.tmp / "parity"

@@ -2,6 +2,7 @@
 """Build a policy-accurate Godot parity ledger from one sweep."""
 
 import argparse
+import collections
 import json
 import re
 from pathlib import Path
@@ -12,11 +13,12 @@ STRICT_SSIM_MIN = 0.98
 
 
 def explicit_effect_arguments(source, effect):
-    marker = f".{effect}("
-    start = source.rfind(marker)
-    if start < 0:
+    matches = list(re.finditer(
+        rf"(?<![A-Za-z0-9_])(?:\.)?{re.escape(effect)}\(", source
+    ))
+    if not matches:
         return ""
-    start += len(marker)
+    start = matches[-1].end()
     depth = 0
     quote = None
     escaped = False
@@ -47,20 +49,99 @@ def explicit_effect_arguments(source, effect):
     return re.sub(r"\s+", " ", "".join(chars)).strip()
 
 
+def top_level_calls(source):
+    """Return (name, dotted) calls outside argument lists and comments."""
+    calls = []
+    depth = 0
+    quote = None
+    escaped = False
+    i = 0
+    while i < len(source):
+        char = source[i]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            i += 1
+            continue
+        if source.startswith("//", i):
+            newline = source.find("\n", i + 2)
+            i = len(source) if newline < 0 else newline + 1
+            continue
+        if source.startswith("/*", i):
+            end = source.find("*/", i + 2)
+            i = len(source) if end < 0 else end + 2
+            continue
+        if char in {'"', "'"}:
+            quote = char
+            i += 1
+            continue
+        if char == "(":
+            depth += 1
+            i += 1
+            continue
+        if char == ")":
+            depth = max(0, depth - 1)
+            i += 1
+            continue
+        if depth == 0 and (char.isalpha() or char == "_"):
+            end = i + 1
+            while end < len(source) and (source[end].isalnum() or source[end] == "_"):
+                end += 1
+            cursor = end
+            while cursor < len(source) and source[cursor].isspace():
+                cursor += 1
+            if cursor < len(source) and source[cursor] == "(":
+                previous = i - 1
+                while previous >= 0 and source[previous].isspace():
+                    previous -= 1
+                calls.append((source[i:end], previous >= 0 and source[previous] == "."))
+            i = end
+            continue
+        i += 1
+    return calls
+
+
 def effect_metadata(root, program):
     dsl = root / "parity" / "programs" / f"{program}.dsl"
     effect = None
+    namespace = "filter"
     source = ""
     if dsl.exists():
         source = dsl.read_text()
-        calls = [name for name in re.findall(r"\.([A-Za-z][A-Za-z0-9_]*)\(", source) if name not in {"write", "render"}]
+        calls = [
+            (name, dotted) for name, dotted in top_level_calls(source)
+            if name not in {"write", "render", "render3d", "renderCubemap3d"}
+        ]
         if calls:
-            effect = calls[-1]
+            effect, dotted = calls[-1]
+            if not dotted:
+                effects_root = root / "godot" / "addons" / "noisemaker" / "effects"
+                search = re.search(r"^\s*search\s+([^\n]+)$", source, re.MULTILINE)
+                selected_namespace = next((
+                    candidate.strip()
+                    for candidate in search.group(1).split(",")
+                    if (effects_root / candidate.strip() / f"{effect}.json").exists()
+                ), None) if search else None
+                if selected_namespace in {"filter3d", "synth3d"}:
+                    namespace = selected_namespace
+                else:
+                    effect = None
     mode = explicit_effect_arguments(source, effect) if effect else ""
     if not mode and effect and program.startswith(effect + "_"):
         mode = program[len(effect) + 1 :]
     mode = mode or "default"
-    return (f"filter/{effect}" if effect else None), mode
+    if effect:
+        effects_root = root / "godot" / "addons" / "noisemaker" / "effects"
+        if namespace == "filter":
+            for candidate in ("filter3d", "synth3d"):
+                if (effects_root / candidate / f"{effect}.json").exists():
+                    namespace = candidate
+                    break
+    return (f"{namespace}/{effect}" if effect else None), mode
 
 
 def main():
@@ -186,8 +267,36 @@ def main():
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(sorted(rows, key=lambda row: row["program"]), indent=2) + "\n")
+
+    exit_code = 0
     if any(row["verdict"] == "FAIL" for row in rows):
-        raise SystemExit(1)
+        exit_code = 1
+
+    programs_dir = args.root / "parity" / "programs"
+    if programs_dir.is_dir():
+        universe = {path.stem for path in programs_dir.glob("*.dsl")}
+        row_counts = collections.Counter(row["program"] for row in rows)
+        covered = set(row_counts)
+        missing = sorted(universe - covered)
+        extra = sorted(covered - universe)
+        duplicates = sorted(name for name, count in row_counts.items() if count > 1)
+        if len(rows) != len(covered):
+            assert duplicates, "row/covered count mismatch with no duplicate program identified"
+        if missing or extra or duplicates:
+            if missing:
+                print(f"[write-ledger] UNIVERSE MISMATCH: {len(missing)} program(s) on disk have no "
+                      f"ledger row: {' '.join(missing)}")
+            if extra:
+                print(f"[write-ledger] UNIVERSE MISMATCH: {len(extra)} ledger row(s) have no matching "
+                      f".dsl on disk: {' '.join(extra)}")
+            if duplicates:
+                print(f"[write-ledger] UNIVERSE MISMATCH: {len(duplicates)} program(s) have more than "
+                      f"one ledger row ({len(rows)} rows for {len(covered)} distinct programs): "
+                      f"{' '.join(duplicates)}")
+            exit_code = 1
+
+    if exit_code:
+        raise SystemExit(exit_code)
 
 
 if __name__ == "__main__":

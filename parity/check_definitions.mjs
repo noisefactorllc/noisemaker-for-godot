@@ -16,8 +16,13 @@
 // forward from the file it replaces, and those exist for the four particle effects whose packing
 // layout the reference does not declare. Regenerating into an empty dir would drop them and this
 // gate would report false drift.
+//
+// That same seeding creates a blind spot for a pure reference-side deletion: the converter only
+// writes currently-live effects and never unlinks the stale committed file copied into the temp
+// tree, so the committed and generated copies match themselves forever. The independent live
+// reference census below closes that gap without sharing the converter's namespace enumeration.
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
@@ -27,6 +32,28 @@ const REPO = resolve(HERE, '..')
 const EFFECTS_DIR = join(REPO, 'godot', 'addons', 'noisemaker', 'effects')
 
 if (!process.env.NM_REFERENCE_ROOT) { console.error('NM_REFERENCE_ROOT is not set'); process.exit(3) }
+const REFERENCE_ROOT = resolve(process.env.NM_REFERENCE_ROOT)
+const REF_EFFECTS_DIR = join(REFERENCE_ROOT, 'shaders', 'effects')
+
+function isDir (p) {
+  try { return statSync(p).isDirectory() } catch { return false }
+}
+
+// Discover namespaces and effects directly from the reference instead of reusing the converter's
+// enumeration, so either a deleted definition.js or an enumeration bug makes the gate fail loud.
+function liveReferenceEffects () {
+  const live = new Set()
+  for (const ns of readdirSync(REF_EFFECTS_DIR)) {
+    const nsDir = join(REF_EFFECTS_DIR, ns)
+    if (!isDir(nsDir)) continue
+    for (const func of readdirSync(nsDir)) {
+      const funcDir = join(nsDir, func)
+      if (!isDir(funcDir)) continue
+      if (existsSync(join(funcDir, 'definition.js'))) live.add(`${ns}/${func}`)
+    }
+  }
+  return live
+}
 
 const tmp = mkdtempSync(join(tmpdir(), 'nm-godot-defs-'))
 try {
@@ -45,6 +72,11 @@ try {
   const committed = new Set(walk(EFFECTS_DIR, EFFECTS_DIR))
   const generated = new Set(walk(tmp, tmp))
 
+  if (committed.size === 0 && generated.size === 0) {
+    console.error('DEFINITIONS: 0/0 — empty tree on both sides; refusing a vacuous pass (check NM_REFERENCE_ROOT and EFFECTS_DIR)')
+    process.exit(3)
+  }
+
   const drift = []
   for (const rel of [...new Set([...committed, ...generated])].sort()) {
     // NOTE: a case-only rename (renderCubemap3D -> renderCubemap3d) is invisible on a
@@ -54,6 +86,19 @@ try {
     const a = readFileSync(join(EFFECTS_DIR, rel), 'utf8')
     const b = readFileSync(join(tmp, rel), 'utf8')
     if (a !== b) drift.push(`DRIFTED: ${rel}`)
+  }
+
+  // A committed definition can survive the clone-seeded generated tree even after the reference
+  // drops it. Compare committed relpaths against the separately-discovered live definition.js set.
+  const live = liveReferenceEffects()
+  const flaggedAlready = new Set(drift.map(d => d.slice(d.lastIndexOf(' ') + 1)))
+  for (const rel of committed) {
+    const slash = rel.indexOf('/')
+    const ns = rel.slice(0, slash)
+    const func = basename(rel.slice(slash + 1), '.json')
+    if (!live.has(`${ns}/${func}`) && !flaggedAlready.has(rel)) {
+      drift.push(`STALE in repo (reference dropped/renamed it): ${rel}`)
+    }
   }
 
   console.log('DEFINITION PARITY:')

@@ -192,7 +192,17 @@ func _resolve_dim(d, screen_size: int, uniforms: Dictionary = {}) -> int:
 			return max(1, c)
 		if d.has("param"):
 			var pk := str(d["param"])
-			var val = uniforms[pk] if uniforms.has(pk) else d.get("paramDefault", 64)
+			var has_param := uniforms.has(pk) and uniforms[pk] != null
+			var val = uniforms[pk] if has_param else d.get("paramDefault", 64)
+			var has_transform: bool = d.has("multiply") or d.has("power")
+			if d.has("multiply"):
+				val = float(val) * float(d["multiply"])
+			if d.has("power"):
+				val = pow(float(val), float(d["power"]))
+			# A transformed dimension's `default` is already the final resolved size
+			# (for example volumeSize² defaults to 4096), not the base to transform.
+			if has_transform and not has_param and d.has("default"):
+				val = d["default"]
 			return max(1, int(floor(float(val))))
 	return screen_size
 
@@ -339,6 +349,58 @@ func _defines_key(defines: Dictionary) -> String:
 	for k in keys:
 		s += "__%s_%s" % [k, str(defines[k])]
 	return s
+
+# Remove comments for boolean-context scanning only; assembled shader text is untouched.
+# A state machine avoids false positives from `if (KEY)` examples in line/block comments.
+func _strip_glsl_comments_for_scan(source: String) -> String:
+	var out := ""
+	var i := 0
+	while i < source.length():
+		if source[i] == "/" and i + 1 < source.length() and source[i + 1] == "/":
+			i += 2
+			while i < source.length() and source[i] != "\n":
+				i += 1
+			out += " "
+		elif source[i] == "/" and i + 1 < source.length() and source[i + 1] == "*":
+			i += 2
+			while i + 1 < source.length() and not (source[i] == "*" and source[i + 1] == "/"):
+				if source[i] == "\n":
+					out += "\n"
+				i += 1
+			i = min(i + 2, source.length())
+			out += " "
+		else:
+			out += source[i]
+			i += 1
+	return out
+
+func _define_needs_bool(key: String, shader_source: String) -> bool:
+	var scan := _strip_glsl_comments_for_scan(shader_source)
+	var escaped := key  # Graph define keys are validated GLSL identifiers.
+	var patterns := [
+		"#define\\s+%s\\s+(?:true|false)\\b" % escaped,
+		"\\bif\\s*\\(\\s*!?\\s*%s\\s*\\)" % escaped,
+		"\\b!?\\s*%s\\s*\\?" % escaped,
+		"\\b!?\\s*%s\\s*(?:&&|\\|\\|)" % escaped,
+	]
+	for pattern in patterns:
+		var regex := RegEx.new()
+		if regex.compile(pattern) == OK and regex.search(scan) != null:
+			return true
+	return false
+
+# Graph JSON serializes compile-time booleans as numeric 0/1. GLSL 450 requires a
+# real bool literal in a bare condition (`if (RIDGES)`, `if (INVERT)`), but some
+# boolean metadata is consumed numerically (`if (RIDGES != 0)` in curl). Require
+# both the declared boolean type and a comment-stripped boolean source context.
+func _format_define_value(key: String, value, def: Dictionary, shader_source: String) -> String:
+	for global_spec in def.get("globals", {}).values():
+		if str(global_spec.get("define", "")) == key \
+				and str(global_spec.get("type", "")) == "boolean" \
+				and _define_needs_bool(key, shader_source):
+			var truthy := bool(value) if typeof(value) == TYPE_BOOL else float(value) != 0.0
+			return "true" if truthy else "false"
+	return str(int(value))
 
 func _load_fragment(ns: String, fn: String, prog: String) -> String:
 	# Shaders live func-qualified at effects/<ns>/<func>/<prog>.glsl, mirroring the
@@ -654,18 +716,17 @@ func execute_pass(p: Dictionary) -> void:
 		var prog := str(p.get("progName", fn))
 		var defs: Dictionary = p.get("defines", {})
 		var def := _load_effect_def(ns, fn)
+		var raw_frag := _load_fragment(ns, fn, prog)
 		var inject := ""
 		for k in defs:
-			# Defines are compile-time integer enums; emit as ints (Godot JSON parses
-			# them as floats, which would otherwise inject `10.0`).
-			inject += "#define %s %d\n" % [k, int(defs[k])]
+			inject += "#define %s %s\n" % [k, _format_define_value(str(k), defs[k], def, raw_frag)]
 		# Synthesize + inject the UBO only for true no-layout effects. Effects that DECLARE
 		# a layout (uniformLayout — even empty {} — or uniformLayouts[prog]) declare their
 		# own Params block in the .glsl; injecting one too would duplicate it.
 		if not _has_layout(def, p):
 			inject += _synth_header(_synth_layout(ns, fn, def.get("globals", {})))
 		cache_key = ns + "/" + fn + "/" + prog + _defines_key(defs)
-		frag_src = _inject_after_version(_load_fragment(ns, fn, prog), inject)
+		frag_src = _inject_after_version(raw_frag, inject)
 		# Agent deposit passes carry a custom vertex stage (gl_VertexIndex scatter); the
 		# same UBO/defines are injected into it so the VS can read params + sample state.
 		if is_points:

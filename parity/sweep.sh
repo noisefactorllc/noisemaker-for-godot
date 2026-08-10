@@ -47,6 +47,8 @@ tol_for() {
 		unsharpMask) echo "3.001 0.999" ;; # [75507112 crystallization] two-pass separable Gaussian (up to 33 exp() taps/pass) feeding a subtract-then-rescale (up to 2.2x) nonlinearly amplifies the usual sub-LSB cross-GPU residual; verified a byte-for-byte literal port (incl. matching default fix 60->220), same isolated-outlier class as bulge/degauss/reliefPlaster
 		median) echo "15.001 0.999" ;; # [75507112 crystallization, re-ported as exact quickselect over radius-derived NxN window] radius=3 (7x7) only: edge-clamping produces literal duplicate candidate values near the frame border: a sub-ULP cross-GPU difference in the packed-integer comparison can flip which of two exactly-tied candidates the Hoare partition selects as the median -- 11 px out of 65536 (0.017%), SSIM 0.99996, same discrete-selection-tie class as oilPaint/hatchPencil/reliefPlaster. radius 1/2 are bit-exact, no exception needed.
 		ditherErrorDiffusion|ditherReferenceErrorDiffusion) echo "86.001 0.999" ;; # [75507112 crystallization, newly-ported mode] Floyd-Steinberg block-resimulation cascades error feedback across a block; a sub-ULP cross-GPU tie in one early cell can flip which quantization level a whole downstream run lands on -- 38 px out of 65536 (0.058%), SSIM 0.9999. Verified a faithful verbatim port (same pcg hash, same formula, same floor(x+0.5) tie-avoidance the reference deliberately uses over round()). NOTE: like strokesSmudge, this exceeds the usual <0.03%-of-pixels ceiling -- flagged explicitly, inherent to the algorithm's own error-cascade design, not a porting gap.
+		synth3dFlythrough3d) echo "87.001 0.999" ;; # new fixture: fractal distance-estimator rounding moves 53/65536 raymarch-boundary pixels across the surface; two independent mint+render pairs were byte-identical (max 87, mean 0.1253, SSIM 0.999862)
+		convolutionFeedback) echo "9.001 0.999" ;; # deterministic reset removes the uncontrolled RAF warmup; the remaining 8-frame feedback residual is sparse (max 9, mean 0.3754, SSIM 0.99997), tightening the former CHAOS policy (255/0) to NEAR
 		*)      echo "2.001 0.98" ;;  # 2.001 = epsilon-tolerant "<=2" (compare.py float round-trip)
 	esac
 }
@@ -66,6 +68,8 @@ reason_for() {
 		unsharpMask) echo "separable Gaussian subtraction and rescaling amplify isolated sub-LSB residuals" ;;
 		median) echo "quickselect can choose a different equal-valued candidate at packed comparison ties" ;;
 		ditherErrorDiffusion|ditherReferenceErrorDiffusion) echo "Floyd-Steinberg block resimulation cascades an isolated quantization tie" ;;
+		synth3dFlythrough3d) echo "fractal distance-estimator rounding moves sparse raymarch-boundary pixels across the surface" ;;
+		convolutionFeedback) echo "expansive feedback amplifies sparse cross-GPU floating-point residuals after deterministic initialization" ;;
 		*) echo "strict RGBA8 float round-trip allowance" ;;
 	esac
 }
@@ -125,38 +129,6 @@ for dsl in "$ROOT"/parity/programs/*.dsl; do
 		record_result "$name" FAIL 2.001 0.98 "required DSL has no reference golden"
 		fail=$((fail + 1)); failed="$failed $name"; continue
 	fi
-	# Effects that are faithful ports but cannot be bit-reproduced across the MoltenVK<->ANGLE
-	# (Metal) boundary are SKIPPED, not failed. reactionDiffusion: a continuous Gray-Scott
-	# solver at the stability limit (s=1.0); its seed + blob positions are bit-exact (verified
-	# at speed:0) but the per-frame iterations amplify sub-ULP cross-backend fp differences into
-	# divergent evolved values (the reference's own webgl2<->webgpu path has the same class of
-	# issue). Discrete sims like cellularAutomata self-correct and stay bit-exact. See memory.
-	case "$name" in
-		reactionDiffusion)
-			echo "[SKIP] $name: cross-backend-divergent continuous solver (seed bit-exact; evolution amplifies fp non-determinism)"
-			record_result "$name" CHAOS 255 0 "continuous solver evolution amplifies cross-backend floating-point non-determinism"; skip=$((skip + 1)); continue ;;
-		agentsPoints)
-			# The chaos gate (docs/CHAOS-GATE.md): flow's oklab_l() calls pow(x,2.4)/pow(x,1/3),
-			# a transcendental Godot's glslang->SPIR-V->MSL lowering rounds ~1 ULP differently than
-			# the reference's GLSL-ES->MSL (ANGLE) — both spec-legal. The chaotic agent loop
-			# (position -> sample -> oklab -> turn -> step -> fract-wrap, ~300 frames) amplifies
-			# that 1 ULP through two discontinuities (fract wrap, integer texelFetch) into a
-			# different-but-equally-valid particle field (documented ssim ~0.88 raw points, single-
-			# frame measurements vary more since the divergence is unpredictable by construction).
-			# Non-chaotic control (agentsNoOklab, inputWeight:0) is BIT-EXACT (max-diff 0),
-			# confirming the agent/deposit/diffuse/blend machinery itself is correct; only the
-			# oklab-steered chaos diverges. Same documented class as reactionDiffusion.
-			echo "[SKIP] $name: chaotic agent flow (docs/CHAOS-GATE.md) — oklab pow() ~1-ULP cross-GPU rounding amplified by ~300 chaotic iterations; non-chaotic control (agentsNoOklab) is bit-exact"
-			record_result "$name" CHAOS 255 0 "chaotic agent iterations amplify oklab pow cross-GPU non-determinism; non-chaotic control is exact"; skip=$((skip + 1)); continue ;;
-		convolutionFeedback)
-			# Port verified correct by isolation: intensity=0, blur-only, and sharpen-amount=0.1 all
-			# PASS at ssim 0.99996; pure-feedback corr 0.998; Godot bit-deterministic across runs
-			# (max-diff 0). Only the DEFAULT unsharp-mask (amount 2.5) diverges — an *expansive*
-			# feedback loop that amplifies bit-level cross-GPU exp()/filtering differences over the 8
-			# settle frames. Same documented chaos class as reactionDiffusion.
-			echo "[SKIP] $name: expansive-feedback chaos (port correct in isolation; default unsharp amplifies cross-GPU fp non-determinism over 8 settle frames)"
-			record_result "$name" CHAOS 255 0 "expansive feedback amplifies cross-GPU floating-point non-determinism"; skip=$((skip + 1)); continue ;;
-	esac
 	read -r tol ssim <<EOF
 $(tol_for "$name")
 EOF
