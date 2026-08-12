@@ -1,0 +1,49 @@
+{
+  "configVersion": 1,
+  "id": "godot",
+  "series": "0.1",
+  "shaderSource": "kit",
+  "engineSource": "kit",
+  "pageTemplate": false,
+  "gatedTopLevelDirs": {
+    "addons": "engine",
+    "shaders": "shaders"
+  },
+  "subtrees": [
+    { "from": "godot/addons/noisemaker", "to": "addons/noisemaker" }
+  ],
+  "licenses": [
+    { "from": "LICENSE", "to": "LICENSES/noisemaker-for-godot-LICENSE.txt" }
+  ],
+  "requireFiles": [
+    "addons/noisemaker/plugin.cfg",
+    "project.godot",
+    "main.gd",
+    "main.tscn"
+  ],
+  "forbidDirs": ["engine"],
+  "requireContains": [
+    { "file": "project.godot", "needle": "run/main_scene=\"res://main.tscn\"" }
+  ],
+  "shaderCorpus": {
+    "effectsDir": "godot/addons/noisemaker/shaders/effects",
+    "includeDir": "godot/addons/noisemaker/shaders/include"
+  },
+  "shaderLayout": {
+    "root": "shaders",
+    "effectsPrefix": "",
+    "includeDir": "include"
+  },
+  "inject": {
+    "type": "dsl-file",
+    "target": "program.dsl"
+  },
+  "compat": {
+    "mode": "list",
+    "fromDefs": "godot/addons/noisemaker/effects",
+    "excludeNames": [],
+    "excludeIds": [],
+    "requireShaderDirUnder": "godot/addons/noisemaker/shaders/effects"
+  },
+  "engineBytesFrom": ["addons/"]
+}
