@@ -24,7 +24,7 @@ extends RefCounted
 const ALIAS_EOL_DATE := "2026-09-01"
 
 # !! Do not expand — strict allowlist for string params (reference ALLOWED_STRING_PARAMS).
-const ALLOWED_STRING_PARAMS := ["text.text", "text.font", "text.justify"]
+const ALLOWED_STRING_PARAMS := ["text.text", "text.font", "text.justify", "text.style"]
 const STATE_SURFACES := ["time", "frame", "mouse", "resolution", "seed", "a"]
 const STATE_VALUES := ["time", "frame", "mouse", "resolution", "seed", "a", "u1", "u2", "u3", "u4", "s1", "s2", "b1", "b2", "a1", "a2", "deltaTime"]
 const SURFACE_PASSTHROUGH_CALLS := ["read"]
