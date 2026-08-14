@@ -22,6 +22,10 @@
 # save_surface_png) reconciles to the webgl2/GLSL golden.
 extends RefCounted
 
+const SinkManager := preload("res://addons/noisemaker/runtime/sink.gd")
+const FrameExportQueue := preload("res://addons/noisemaker/runtime/frame_export.gd")
+const RenderingDeviceFrameExport := preload("res://addons/noisemaker/runtime/rendering_device_frame_export.gd")
+
 const FULLSCREEN_VS := """#version 450
 layout(location = 0) in vec2 vpos;
 layout(location = 0) out vec2 v_uv;
@@ -76,6 +80,8 @@ var _render_scale := 1.0
 # path, so the 90 isolation effects render byte-identically.
 var _delta_time := 0.0
 var _frame_index := 0
+var sink_manager := SinkManager.new()
+var _closed := false
 
 # Double-buffered "ping-pong" surfaces (reference/04 §6/§8/§10). A `global_<name>`
 # texId that is BOTH read and written by passes gets a physical read/write texture
@@ -96,6 +102,9 @@ var _audio_spectrum := PackedFloat32Array()
 var _audio_layouts := {}
 
 func setup(p_rd: RenderingDevice, p_addon_dir: String, p_screen: Vector2i) -> void:
+	if _closed:
+		push_error("Noisemaker backend is closed")
+		return
 	rd = p_rd
 	addon_dir = p_addon_dir
 	screen = p_screen
@@ -138,6 +147,32 @@ func setup(p_rd: RenderingDevice, p_addon_dir: String, p_screen: Vector2i) -> vo
 	# (An empty vertex_format_create([]) still makes the pipeline demand a vertex array.)
 	_vfmt_empty = RenderingDevice.INVALID_FORMAT_ID
 	_ensure_audio_storage()
+	sink_manager.configure({
+		"width": screen.x,
+		"height": screen.y,
+		"format": "rgba8unorm",
+		"colorSpace": "srgb",
+		"alphaMode": "straight",
+		"fps": 60.0,
+	})
+
+
+func add_sink(sink) -> Callable:
+	return sink_manager.add(sink)
+
+
+func create_frame_export_queue(options := {}):
+	if _closed or rd == null:
+		push_error("Noisemaker backend must be set up before creating a frame export queue")
+		return null
+	return FrameExportQueue.new(RenderingDeviceFrameExport.new(rd), options)
+
+
+func close(options := {}) -> void:
+	if _closed:
+		return
+	_closed = true
+	sink_manager.close(options)
 
 # Runtime-fed 128-sample audio buffers used by synth/scope and synth/spectrum. Callers may
 # update either side independently by passing an empty array for the side to preserve.
@@ -1020,7 +1055,10 @@ func _has_feedback(graph: Dictionary) -> bool:
 				return true
 	return false
 
-func render(graph: Dictionary, normalized_time: float = 0.25) -> void:
+func render(graph: Dictionary, normalized_time: float = 0.25, presentation_timestamp: float = -1.0) -> void:
+	if _closed:
+		push_error("Noisemaker backend is closed")
+		return
 	_time = normalized_time
 	allocate_textures(graph)
 	# Feedback/state graphs (read-before-write, or any double-buffered surface) need the
@@ -1044,12 +1082,16 @@ func render(graph: Dictionary, normalized_time: float = 0.25) -> void:
 		_end_frame()
 	rd.submit()
 	rd.sync()
+	_submit_render_surface(presentation_timestamp)
 
 # Timed multi-sample render for stateful sims (reference 30s/5s sampling). Steps a real
 # per-frame deltaTime (1/600 normalized = one 60fps frame in the 10s loop) so fluid/feedback
 # sims actually EVOLVE — the single-frame render() pins deltaTime=0, freezing them at the seed.
 # Snapshots the render surface every `sample_every` frames; returns the sampled Images in order.
 func render_samples(graph: Dictionary, total_frames: int, sample_every: int) -> Array:
+	if _closed:
+		push_error("Noisemaker backend is closed")
+		return []
 	allocate_textures(graph)
 	var dt := 1.0 / 600.0
 	var samples := []
@@ -1074,9 +1116,19 @@ func render_samples(graph: Dictionary, total_frames: int, sample_every: int) -> 
 		# (see _pingpong_surfaces), not from batching.
 		rd.submit()
 		rd.sync()
+		_submit_render_surface(float(frame) * (1000.0 / 60.0))
 		if frame % sample_every == 0:
 			samples.append(_snapshot_surface())
 	return samples
+
+
+func _submit_render_surface(presentation_timestamp: float) -> void:
+	if not _textures.has(render_surface_tex):
+		return
+	var timestamp := presentation_timestamp
+	if timestamp < 0.0:
+		timestamp = float(Time.get_ticks_usec()) / 1000.0
+	sink_manager.submit(_textures[render_surface_tex], timestamp)
 
 # reference Pipeline.shouldSkipPass: a pass with conditions.{skipIf|runIf}:[{uniform,equals}]
 # runs conditionally on a resolved uniform. skipIf -> skip when ANY matches; runIf -> skip
