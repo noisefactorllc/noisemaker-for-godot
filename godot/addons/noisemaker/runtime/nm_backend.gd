@@ -1764,11 +1764,11 @@ func _submit_render_surface(presentation_timestamp: float) -> void:
 # (the compiler bakes every global's resolved value into pass.uniforms), with the effect-def
 # global default as fallback.
 #
-# NOTE: the reference graph compiler (expand) does NOT copy passDef.conditions onto the
-# compiled-graph passes, so in practice this is a no-op for the current catalog (and the
-# graph-parity gate confirms the port's graph matches reference WITHOUT conditions). It is
-# implemented here for faithfulness with shouldSkipPass and forward-compatibility if a graph
-# ever carries conditions.
+# As of reference 0ed489ec, expander.js sets `conditions: passDef.conditions` on every graph
+# pass it builds (pointsRender/pointsBillboardRender's per-viewMode deposit variants, and
+# pointsBillboardRender's `deposit` (additive) vs `deposit_alpha` (premult-over) blendMode
+# split, are what actually exercises this) — expander.gd mirrors that, so `p["conditions"]` IS
+# populated at runtime for any effect whose definition carries one.
 func _condition_value(p: Dictionary, name: String):
 	var u: Dictionary = p.get("uniforms", {})
 	if u.has(name):

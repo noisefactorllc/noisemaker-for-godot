@@ -101,6 +101,12 @@ void main() {
 	vec2 texSize = vec2(textureSize(inputTex, 0));
 	vec2 uv = gl_FragCoord.xy / texSize;
 	vec4 color = texture(inputTex, uv);
+	// Color operations use straight RGB; retain coverage at the boundary (reference 0ed489ec).
+	if (color.a > 0.0) {
+		color = vec4(color.rgb / color.a, color.a);
+	} else {
+		color = vec4(0.0);
+	}
 
 	// --- Colorspace reinterpretation ---
 	if (int(mode) == 1) {
@@ -137,5 +143,5 @@ void main() {
 	float contrastFactor = contrast * 2.0;
 	color = vec4((color.rgb - 0.5) * contrastFactor + 0.5, color.a);
 
-	frag = color;
+	frag = vec4(color.rgb * color.a, color.a);
 }

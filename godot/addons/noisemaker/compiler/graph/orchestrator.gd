@@ -138,11 +138,20 @@ func _derive_prog_name(p: Dictionary) -> String:
 	return s
 
 func _defines_for_pass(p: Dictionary, programs: Dictionary) -> Dictionary:
+	var out := {}
 	var prog = programs.get(p.get("program"))
 	var d = prog.get("defines") if prog is Dictionary else null
-	if not (d is Dictionary):
-		return {}
-	return d.duplicate(true)
+	if d is Dictionary:
+		out.merge(d)
+	# Pass-level compile-time defines (pointsRender/pointsBillboardRender's per-viewMode
+	# deposit variants, reference 0ed489ec: `defines: {VIEW_MODE: viewMode, ...}` from the
+	# definition's own `.flatMap()`). The `programs` lookup above stays inert for this port
+	# (no effect JSON carries a `shaders` key — see expander.gd), so this is the live path;
+	# nm_backend.gd's execute_pass() reads this same `defines` field straight off the pass.
+	var pd = p.get("defines")
+	if pd is Dictionary:
+		out.merge(pd, true)
+	return out
 
 func _normalize_pass(p: Dictionary, programs: Dictionary, define_map: Dictionary) -> Dictionary:
 	var is_blit = p.get("type") == "blit" or p.get("program") == "blit" or p.get("effectFunc") == "blit"
@@ -172,7 +181,7 @@ func _normalize_pass(p: Dictionary, programs: Dictionary, define_map: Dictionary
 					out["uniforms"].erase(global_key)
 
 	# optional execution modifiers (only when present)
-	for opt_key in ["drawMode", "count", "countUniform", "drawBuffers", "blend", "repeat", "clear"]:
+	for opt_key in ["drawMode", "count", "countUniform", "drawBuffers", "blend", "repeat", "clear", "conditions"]:
 		if p.has(opt_key):
 			out[opt_key] = p[opt_key]
 

@@ -21,10 +21,11 @@ void main() {
 	vec2 uv = gl_FragCoord.xy / texSize;
 	vec4 color = texture(inputTex, uv);
 
+	// Invert the underlying color and retain premultiplied coverage (reference 0ed489ec).
 	if (int(mode) == 1) {
-		color = vec4(min(color.rgb, 1.0 - color.rgb), color.a);
+		color = vec4(min(color.rgb, color.a - color.rgb), color.a);
 	} else {
-		color = vec4(1.0 - color.rgb, color.a);
+		color = vec4(color.a - color.rgb, color.a);
 	}
 
 	frag = color;

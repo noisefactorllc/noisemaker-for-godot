@@ -63,19 +63,24 @@ void main() {
 	vec4 color2 = texture(tex, st);
 
 	int m = int(mode);
-	vec4 middle = applyBlendMode(color1, color2, m);
-
 	float amt = map_range(mixAmt, -100.0, 100.0, 0.0, 1.0);
-	vec4 color;
-	if (amt < 0.5) {
-		float factor = amt * 2.0;
-		color = mix(color1, middle, factor);
-	} else {
-		float factor = (amt - 0.5) * 2.0;
-		color = mix(middle, color2, factor);
+
+	// The normal mixer axis ("mix", m==8) is source opacity. Other modes reach the full
+	// blend at the midpoint, then transition to normal source-over at +100 (reference 0ed489ec).
+	float opacity = (m == 8) ? amt : min(amt * 2.0, 1.0);
+	float sourceAlpha = color2.a * opacity;
+	vec3 source = color2.rgb * opacity;
+	if (m != 8) {
+		// Surfaces are premultiplied. Blend functions operate on straight RGB
+		// only where both inputs cover the pixel; uncovered source stays intact.
+		vec4 baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+		vec4 sourceColor = vec4(0.0, 0.0, 0.0, 1.0);
+		if (color1.a > 0.0) { baseColor = vec4(color1.rgb / color1.a, 1.0); }
+		if (color2.a > 0.0) { sourceColor = vec4(color2.rgb / color2.a, 1.0); }
+		vec3 blended = applyBlendMode(baseColor, sourceColor, m).rgb;
+		blended = mix(blended, sourceColor.rgb, max(amt * 2.0 - 1.0, 0.0));
+		source = source * (1.0 - color1.a) + blended * sourceAlpha * color1.a;
 	}
 
-	float alphaFactor = color2.a * amt;
-	color = vec4(mix(color1.rgb, color.rgb, color2.a), alphaFactor + color1.a * (1.0 - alphaFactor));
-	frag = color;
+	frag = vec4(source + color1.rgb * (1.0 - sourceAlpha), sourceAlpha + color1.a * (1.0 - sourceAlpha));
 }

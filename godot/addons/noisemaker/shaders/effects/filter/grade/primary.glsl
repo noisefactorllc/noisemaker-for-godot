@@ -152,8 +152,14 @@ void main() {
     ivec2 coord = ivec2(gl_FragCoord.xy);
     vec4 color = texelFetch(inputTex, coord, 0);
 
-    // Decode to linear (assume input is sRGB)
-    vec3 rgb = srgbToLinear(color.rgb);
+    // The public input is premultiplied. Private grade stages carry straight sRGB until the
+    // final vignette pass restores premultiplied coverage (reference 0ed489ec).
+    vec3 straight = vec3(0.0);
+    if (color.a > 0.0) {
+        straight = color.rgb / color.a;
+    }
+    // Decode to linear
+    vec3 rgb = srgbToLinear(straight);
 
     // 1. White Balance
     rgb = applyWhiteBalance(rgb, temperature, tint);

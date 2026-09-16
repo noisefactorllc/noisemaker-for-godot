@@ -6,20 +6,28 @@
 // at the agent's clip position. Dead/density-culled agents are pushed off-screen.
 //
 // Layout effect: vec4 data[3] (effects/render/pointsRender.json, uniformLayouts.deposit):
-//   resolution=data[0].xy, density=data[0].z, viewMode=data[0].w, rotateX=data[1].x,
-//   rotateY=data[1].y, rotateZ=data[1].z, viewScale=data[1].w, posX=data[2].x, posY=data[2].y.
-//   Samplers: xyzTex=1, rgbaTex=2. Clip-space write is self-consistent with the fullscreen
-//   passes' gl_FragCoord reads in Vulkan; the single global present-flip reconciles to golden.
+//   resolution=data[0].xy, density=data[0].z, rotateX=data[0].w, rotateY=data[1].x,
+//   rotateZ=data[1].y, viewScale=data[1].z, posX=data[1].w, posY=data[2].x, posZ=data[2].y,
+//   fieldOfView=data[2].z. Samplers: xyzTex=1, rgbaTex=2. Clip-space write is self-consistent
+//   with the fullscreen passes' gl_FragCoord reads in Vulkan; the single global present-flip
+//   reconciles to golden.
+//
+// viewMode (reference 0ed489ec) moved from a packed uniform to a compile-time define: the
+// definition's `.flatMap()` clones this program per viewMode into deposit_0/1/2, each carrying
+// its own `defines: {VIEW_MODE: n}` — the backend injects `#define VIEW_MODE <n>` regardless of
+// this being a layout effect (nm_backend.gd's execute_pass() injects pass.defines unconditionally,
+// only the synthesized-UBO step is layout-gated). Keep VIEW_MODE as a bare identifier.
 layout(set = 0, binding = 0, std140) uniform Params { vec4 data[3]; };
 #define resolution data[0].xy
 #define density data[0].z
-#define viewMode int(data[0].w)
-#define rotateX data[1].x
-#define rotateY data[1].y
-#define rotateZ data[1].z
-#define viewScale data[1].w
-#define posX data[2].x
-#define posY data[2].y
+#define rotateX data[0].w
+#define rotateY data[1].x
+#define rotateZ data[1].y
+#define viewScale data[1].z
+#define posX data[1].w
+#define posY data[2].x
+#define posZ data[2].y
+#define fieldOfView data[2].z
 
 layout(set = 0, binding = 1) uniform sampler2D xyzTex;
 layout(set = 0, binding = 2) uniform sampler2D rgbaTex;
@@ -74,16 +82,16 @@ void main() {
 
 	vec2 clipPos;
 
-	if (viewMode == 0) {
+	if (VIEW_MODE == 0) {
 		// 2D mode: positions are normalized 0..1
 		clipPos = pos.xy * 2.0 - 1.0;
 	} else {
-		// 3D mode: apply rotation and orthographic projection
+		// 3D mode: rotate world coordinates before camera projection
 		vec3 p = pos.xyz;
 
 		// Detect if this is a 2D system (coords in 0-1) or 3D attractor (coords ±40)
 		// 2D systems have Z near 0 and XY in 0-1 range
-		bool is2DSystem = abs(p.z) < 1.0 && p.x >= 0.0 && p.x <= 1.0 && p.y >= 0.0 && p.y <= 1.0;
+		bool is2DSystem = VIEW_MODE == 1 && abs(p.z) < 1.0 && p.x >= 0.0 && p.x <= 1.0 && p.y >= 0.0 && p.y <= 1.0;
 
 		if (is2DSystem) {
 			// Center 2D coords around origin: 0-1 -> -0.5 to 0.5
@@ -110,8 +118,19 @@ void main() {
 		p.x += posX;
 		p.y += posY;
 
-		// Orthographic projection with scale
-		if (is2DSystem) {
+		if (VIEW_MODE == 2) {
+			// Match the billboard camera at Z=80, looking down negative Z.
+			float cameraDepth = 80.0 - (p.z + posZ);
+			if (cameraDepth <= 0.1) {
+				gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+				gl_PointSize = 0.0;
+				vColor = vec4(0.0);
+				return;
+			}
+			float focalLength = 1.0 / tan(clamp(fieldOfView, 10.0, 150.0) * 0.00872664626);
+			clipPos = p.xy * focalLength * viewScale / cameraDepth;
+			clipPos.x = clipPos.x * resolution.y / resolution.x;
+		} else if (is2DSystem) {
 			// 2D systems: coords are now ±0.5, scale to fill viewport
 			// Use 3.5x multiplier for close-up view that's nice to pan around
 			clipPos = p.xy * 3.5 * viewScale;

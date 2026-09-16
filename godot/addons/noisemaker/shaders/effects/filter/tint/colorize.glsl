@@ -49,7 +49,11 @@ void main() {
     ivec2 size = max(textureSize(inputTex, 0), ivec2(1, 1));
     vec2 st = gl_FragCoord.xy / vec2(size);
     vec4 base = textureLod(inputTex, st, 0.0);
-    vec3 base_rgb = clamp(base.rgb, vec3(0.0), vec3(1.0));
+    // Un-premultiply for straight-RGB color math (reference 0ed489ec).
+    vec3 base_rgb = vec3(0.0);
+    if (base.a > 0.0) {
+        base_rgb = clamp(base.rgb / base.a, vec3(0.0), vec3(1.0));
+    }
 
     int m = int(mode);
     vec3 tinted;
@@ -67,5 +71,5 @@ void main() {
     }
 
     vec3 rgb = mix(base_rgb, tinted, vec3(alpha));
-    frag = vec4(rgb, base.a);
+    frag = vec4(rgb * base.a, base.a);
 }

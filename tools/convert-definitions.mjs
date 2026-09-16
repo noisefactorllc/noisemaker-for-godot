@@ -118,6 +118,12 @@ function projectPass (pass) {
   // Per-pass execution predicate (reference/03 §4.x). pointsBillboardRender gates its two
   // deposit passes on `blendMode`; dropping this ran BOTH passes and double-deposited.
   if (pass.conditions !== undefined) out.conditions = pass.conditions
+  // Pass-level compile-time defines (pointsRender/pointsBillboardRender's per-viewMode deposit
+  // variants, reference 0ed489ec: `defines: {VIEW_MODE: viewMode, ...}` from the definition's
+  // own `.flatMap()`). nm_backend.gd's execute_pass() already reads `p["defines"]` directly
+  // (injecting into both fragment and, for custom draws, vertex stage) — it just needs the
+  // expander to actually put it on the compiled graph pass; see expander.gd.
+  if (pass.defines !== undefined) out.defines = pass.defines
   if (pass.clear !== undefined) out.clear = pass.clear
   if (pass.type !== undefined) out.type = pass.type
   if (pass.entryPoint !== undefined) out.entryPoint = pass.entryPoint

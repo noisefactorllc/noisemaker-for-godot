@@ -412,7 +412,7 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 				var pass_obj := {"id": pass_id, "program": program_name, "inputs": {}, "outputs": {}, "uniforms": {}}
 				# Optional pass fields: include only when the passDef provides them (the reference's
 				# object literal sets them to undefined otherwise, which JSON.stringify drops).
-				for opt_key in ["entryPoint", "drawMode", "drawBuffers", "count", "countUniform", "repeat", "blend", "workgroups", "storageBuffers", "storageTextures"]:
+				for opt_key in ["entryPoint", "drawMode", "drawBuffers", "count", "countUniform", "repeat", "blend", "workgroups", "storageBuffers", "storageTextures", "conditions", "defines"]:
 					if pass_def is Dictionary and pass_def.has(opt_key):
 						pass_obj[opt_key] = pass_def[opt_key]
 				pass_obj["effectKey"] = effect_name

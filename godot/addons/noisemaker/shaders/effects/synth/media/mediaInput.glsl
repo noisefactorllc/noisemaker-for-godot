@@ -40,6 +40,22 @@ vec2 rotate2D(vec2 st, float rot) {
     return st;
 }
 
+// External uploads use straight alpha. Interpolate premultiplied texels so transparent pixels
+// cannot darken edges or bleed their hidden RGB into them (reference 0ed489ec).
+vec4 mediaTexel(ivec2 p, ivec2 size) {
+    vec4 c = texelFetch(imageTex, clamp(p, ivec2(0), size - 1), 0);
+    return vec4(c.rgb * c.a, c.a);
+}
+
+vec4 sampleMedia(vec2 uv) {
+    ivec2 size = textureSize(imageTex, 0);
+    vec2 p = uv * vec2(size) - 0.5;
+    ivec2 lo = ivec2(floor(p));
+    vec2 f = fract(p);
+    return mix(mix(mediaTexel(lo, size), mediaTexel(lo + ivec2(1, 0), size), f.x),
+               mix(mediaTexel(lo + ivec2(0, 1), size), mediaTexel(lo + ivec2(1, 1), size), f.x), f.y);
+}
+
 vec2 tile(vec2 st) {
     if (tiling == 0) {
         // no tiling
@@ -110,7 +126,8 @@ vec4 getImage(vec2 st) {
 
     // Correct for aspect ratio before rotation
     st.x *= size.x / size.y;
-    st = rotate2D(st, rotation);
+    // Preserve exact texture coordinates for the identity transform (reference 0ed489ec).
+    if (rotation != 0.0) { st = rotate2D(st, rotation); }
     st.x /= size.x / size.y;
 
     st = tile(st);
@@ -183,18 +200,11 @@ vec4 getImage(vec2 st) {
        }
     }
 
-    vec4 text = texture(imageTex, st);
+    vec4 text = sampleMedia(st);
 
     if (st.x < 0.0 || st.x > 1.0 || st.y < 0.0 || st.y > 1.0) {
         // Don't draw texture if out of coordinate bounds
-        return vec4(bgColor, bgAlpha);
-    }
-
-    // Un-premultiply to compensate for linear filtering on straight-alpha textures
-    // Linear filtering averages with black (0,0,0,0) transparent pixels, darkening edges
-    // Dividing by alpha restores the original RGB values
-    if (text.a > 0.0) {
-        text.rgb = text.rgb / text.a;
+        return vec4(bgColor * bgAlpha, bgAlpha);
     }
 
     return text;

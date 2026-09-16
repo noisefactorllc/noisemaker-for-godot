@@ -38,9 +38,13 @@ void main() {
 	float hR = lum(texture(blurTex, uv + vec2(texel.x, 0.0)).rgb);
 	float hB = lum(texture(blurTex, uv - vec2(0.0, texel.y)).rgb);
 	float hT = lum(texture(blurTex, uv + vec2(0.0, texel.y)).rgb);
-	vec2 grad = vec2(hR - hL, hT - hB);
+	// Per-UV luminance gradient (normalize each finite difference by its own sampling
+	// distance so the two components live on the same scale; reference 0ed489ec).
+	vec2 grad = vec2((hR - hL) / (2.0 * texel.x), (hT - hB) / (2.0 * texel.y));
 
-	vec2 uv2 = uv + grad * (distortion / 100.0) * 0.5;
+	// Convert per-UV gradient back to a UV offset via texel — aspect-symmetric pixel-space
+	// displacement. Reduces to `grad_raw * 0.5 * d` on square textures.
+	vec2 uv2 = uv + grad * texel * (distortion / 100.0);
 	float h2 = lum(texture(blurTex, uv2).rgb);
 
 	float cycles = mix(1.0, 7.0, detail / 100.0);
