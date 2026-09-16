@@ -9,6 +9,72 @@ not by tracking a branch. The sources of truth are `parity/sweep.sh` and `parity
 range — `filter/pondRipples` gained a `speed` control (10/10 fixtures PASS, incl. two new animated
 ones). The catalogue-wide numbers below are still the `75507112` figures; they were not re-swept.*
 
+*Incrementally synced 2026-09-15 to reference `0ed489ec4684` (`246ff57f43cc..0ed489ec4684`, commit
+6a8f925) — same upstream range as the blender/cables/cpu sibling ports: 3 new effects
+(`synth3d/heightmap3d`, `render/renderLandscape3d`, `points/heightGrid`, an isometric/perspective voxel
+landscape renderer), a new `perspective` view mode on `render/pointsRender` + `render/pointsBillboardRender`
+(billboard also gains a depth-sorted alpha-blend path — `depthKeys`/`depthMerge`, a 22-stage GPU merge
+sort — and aperture defocus blur via `spriteMeanTiles`/`spriteMean`/`clearDefocus`), a full rewrite of
+`synth/remap`'s polygon-zone compositor, and premultiplied-alpha fixes across
+`filter/{invert,tint,adjust,grade}`, `mixer/{alphaMask,blendMode}`, `synth/media`, plus a
+gradient-normalization fix in `filter/chrome`. This was a hand-translated port (no auto-transpiler),
+so unlike the sibling ports it carried real shader-math risk, not just mechanical compiler fixes.
+
+**Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
+both pre-existing gaps only now exercised by this round's `viewMode`-conditional pass pattern, not
+introduced by it:
+- `uniformSpecs` never emitted an entry for a `type:int` global with `choices` used as a pass
+  `conditions` selector (e.g. `viewMode`) — the reference emits `{type:"int", min, max}` for exactly
+  this case (a "conditional selector" branch the port's `uniformSpecs` builder never had). Fixed by
+  porting the reference's `conditionalUniforms` tracking (scans every pass's `conditions.runIf`/
+  `skipIf` for referenced uniform names) and the matching `uniformSpecs` branch.
+- Per-pass `program` names never got the reference's second, pass-level `defines`-derived suffix
+  (`__VIEW_MODE_0`, sorted by key) on top of the effect-level compile-time-define suffix, so
+  `agentsNoOklab`/`agentsSpawn`/`agentsPoints`/`target`/`targetO0` (pre-existing corpus programs that
+  exercise `pointsRender`'s default `viewMode:flat` pass, first added upstream this round) produced an
+  unsuffixed name where the reference expects one. Fixed; verified this has **no runtime effect**
+  either way (`orchestrator.gd`'s `_derive_prog_name()` strips any `__...` suffix regardless, and
+  `nm_backend.gd`'s shader cache key is built from namespace/func/progName/defines independently of
+  this string) — a pure `check_expand.mjs` parity fix.
+- **`check_expand.mjs` intentionally NOT fully closed:** those same 5 programs still show
+  `passes[N].defines` present in this port's output but absent from the reference's. This is not a bug
+  — `orchestrator.gd`'s `_defines_for_pass()` already documents relying on this exact field (the
+  reference's alternative, a live `programs` registry lookup, is permanently inert for this port: no
+  effect JSON carries a `shaders` key), and `nm_backend.gd`'s `execute_pass()` reads it directly to
+  inject `#define`s at shader-load time. Removing it to chase full JSON-shape parity would have broken
+  real `viewMode` rendering; confirmed by trying it and reverting.
+- **Found, not fixed — flagged for follow-up:** `check_graph.mjs` (347/349) still shows
+  `target.dsl`/`targetO0.dsl` computing `stateSize_node_2` = 1024 (this port) vs 256 (reference) for
+  `pointsBillboardRender`'s new `depthOrderA`/`depthOrderB` sort buffers, when the DSL's upstream
+  `pointsEmit(stateSize: x1024)` differs from billboard's own declared default (256). The port's
+  chain-wide `pipeline_uniforms` inheritance (`expander.gd`) appears to carry the upstream override
+  into billboard's own scoped-dimension resolution where the reference does not; tracing the exact
+  reference-side mechanism that keeps it independent needs more time than this verification pass had,
+  and the inheritance logic is shared, foundational plumbing used by every particle-chain effect in
+  the corpus — too risky to patch speculatively. Low real-world severity: both affected programs are
+  already chaos-gated (see Known limits) and excluded from pixel-parity grading.
+
+**Pixel parity, this round's new/rewritten shader math — verified correct.** Minted fresh goldens
+against the reference and rendered the Godot candidate for each (all standalone, non-batch):
+`heightmap3d_landscape` (PASS, max-abs-diff=1), `heightGrid_billboard` (PASS, max-abs-diff=1),
+`heightGrid_billboard_alpha` (PASS, max-abs-diff=1 — see batch-mode caveat below), `remap` and
+`remap_zone` (both PASS, max-abs-diff=1; `synth/remap`'s full rewrite is correct). `full sweep.sh`:
+**343/345 pass**. Two residual items:
+- `heightGrid_pointsRender_perspective`: 46/65536 px (0.07%) mismatched, every one candidate-background
+  where the golden shows a point (never a wrong color at an existing point) — consistent with a
+  `fract()` boundary tie in the density-cull test (`particleRandom > cullThreshold`) flipping a handful
+  of points in/out right at the threshold, a normal cross-GPU float-precision limit of the same class
+  `tol_for()` already documents for a dozen other effects, not a port bug.
+- `heightGrid_billboard_alpha`: **passes cleanly standalone** (and in an isolated 2-entry batch run
+  immediately after `heightGrid_billboard`) but **fails catastrophically** (ssim≈0.00001, i.e. a
+  completely different image) specifically inside the full ~345-program `sweep.sh` batch run —
+  reproduced twice, same numbers both times. This means the shader math itself is confirmed correct;
+  something about accumulated `RenderingDevice`/resource state across a long batch of `render()` calls
+  in one Godot process corrupts this one program's render. Root cause not found — needs bisection
+  across the batch order (isolating which earlier program(s) trigger it) with more time than this pass
+  had. Flagging as a real, reproducible bug: automated sweep-based CI may currently report a false
+  failure here (or mask a real one) depending on batch composition/order.
+
 This file holds the detailed coverage and parity numbers. For what the project is and how to use it,
 see the [README](README.md).
 

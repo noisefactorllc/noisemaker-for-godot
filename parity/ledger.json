@@ -2020,6 +2020,86 @@
     }
   },
   {
+    "program": "heightGrid_billboard",
+    "effect": "filter/pointsBillboardRender",
+    "mode": "viewMode: perspective, rotateX: 0.55, posY: -12, posZ: 22, pointSize: 2, density: 100, intensity: 0, inputIntensity: 0, depositOpacity: 65, sizeDistance: 150, brightnessDistance: 180, aperture: 1.5, focalDistance: 65",
+    "golden": "parity/out/heightGrid_billboard.golden.png",
+    "candidate": "parity/out/heightGrid_billboard.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.24814988672733307,
+    "ssim": 0.9999908804893494,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
+    "program": "heightGrid_billboard_alpha",
+    "effect": "filter/pointsBillboardRender",
+    "mode": "viewMode: perspective, blendMode: alpha, rotateX: 0.55, posY: -12, posZ: 22, pointSize: 3, density: 100, intensity: 0, inputIntensity: 0, depositOpacity: 65",
+    "golden": "parity/out/heightGrid_billboard_alpha.golden.png",
+    "candidate": "parity/out/heightGrid_billboard_alpha.candidate.png",
+    "verdict": "FAIL",
+    "max_abs_diff": 255.0,
+    "mean_abs_diff": 104.42106628417969,
+    "ssim": 1.2390126357786357e-05,
+    "passed": false,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "comparison child exited nonzero"
+    }
+  },
+  {
+    "program": "heightGrid_pointsRender_perspective",
+    "effect": "filter/pointsRender",
+    "mode": "viewMode: perspective, rotateX: 0.55, posY: -12, posZ: 22, fieldOfView: 70",
+    "golden": "parity/out/heightGrid_pointsRender_perspective.golden.png",
+    "candidate": "parity/out/heightGrid_pointsRender_perspective.candidate.png",
+    "verdict": "FAIL",
+    "max_abs_diff": 243.0,
+    "mean_abs_diff": 0.7142600417137146,
+    "ssim": 0.997850239276886,
+    "passed": false,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "comparison child exited nonzero"
+    }
+  },
+  {
+    "program": "heightmap3d_landscape",
+    "effect": "filter/renderLandscape3d",
+    "mode": "panY: -0.18",
+    "golden": "parity/out/heightmap3d_landscape.golden.png",
+    "candidate": "parity/out/heightmap3d_landscape.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.09296798706054688,
+    "ssim": 0.9999831914901733,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
     "program": "highPass",
     "effect": "filter/highPass",
     "mode": "default",
@@ -4333,6 +4413,46 @@
       "strict_tolerance": 2.001,
       "strict_ssim_min": 0.98,
       "reason": "glossy pow amplifies isolated sub-LSB blur residuals"
+    }
+  },
+  {
+    "program": "remap",
+    "effect": null,
+    "mode": "default",
+    "golden": "parity/out/remap.golden.png",
+    "candidate": "parity/out/remap.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 0.9999999403953552,
+    "mean_abs_diff": 0.2499999850988388,
+    "ssim": 0.9999179244041443,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
+    "program": "remap_zone",
+    "effect": null,
+    "mode": "default",
+    "golden": "parity/out/remap_zone.golden.png",
+    "candidate": "parity/out/remap_zone.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 0.6779441833496094,
+    "ssim": 0.9996206164360046,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
     }
   },
   {

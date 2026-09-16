@@ -405,10 +405,39 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 
 			# expand passes
 			var effect_passes = effect_def.get("passes", [])
+			var conditional_uniforms := {}
+			for pass_def_scan in effect_passes:
+				if not (pass_def_scan is Dictionary):
+					continue
+				var conditions_scan = pass_def_scan.get("conditions")
+				if not (conditions_scan is Dictionary):
+					continue
+				for cond_list_key in ["runIf", "skipIf"]:
+					var cond_list = conditions_scan.get(cond_list_key)
+					if cond_list is Array:
+						for condition in cond_list:
+							if condition is Dictionary and condition.get("uniform") != null:
+								conditional_uniforms[condition["uniform"]] = true
 			for i in range(effect_passes.size()):
 				var pass_def = effect_passes[i]
 				var pass_id := "%s_pass_%d" % [node_id, i]
 				var program_name := "%s_%s%s" % [node_id, pass_def.get("program"), program_define_suffix]
+				var pass_defines = pass_def.get("defines") if pass_def is Dictionary else null
+				if pass_defines is Dictionary and not pass_defines.is_empty():
+					# Conditional passes select a per-variant program name without freezing an
+					# animated selector into a global define (mirrors reference expander.js).
+					# NOTE: unlike the reference, this port's `_programs` registry is never
+					# populated (no effect JSON carries a `shaders` key — see the "program
+					# collection" block above), so there is no base entry to clone here; the
+					# suffix only affects this string. The real defines value nm_backend.gd
+					# injects at runtime comes from `pass_def.defines` directly, forwarded
+					# below via the opt_key copy (see orchestrator.gd's _defines_for_pass).
+					var define_keys = pass_defines.keys()
+					define_keys.sort()
+					var pass_define_suffix := ""
+					for k in define_keys:
+						pass_define_suffix += "__%s_%s" % [k, _js_num(pass_defines[k])]
+					program_name += pass_define_suffix
 				var pass_obj := {"id": pass_id, "program": program_name, "inputs": {}, "outputs": {}, "uniforms": {}}
 				# Optional pass fields: include only when the passDef provides them (the reference's
 				# object literal sets them to undefined otherwise, which JSON.stringify drops).
@@ -450,6 +479,14 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 								"min": gdef.get("min") if gdef.get("min") != null else 0,
 								"max": gdef.get("max") if gdef.get("max") != null else 100,
 							}
+						elif gdef.get("type") == "int" and gdef.get("choices") and conditional_uniforms.get(uniform_name):
+							# A conditional selector must use the same integer in every shader
+							# pass and in CPU-side pass selection.
+							var spec := {"type": "int"}
+							if gdef.get("min") != null and gdef.get("max") != null:
+								spec["min"] = gdef["min"]
+								spec["max"] = gdef["max"]
+							pass_obj["uniformSpecs"][uniform_name] = spec
 
 				# map uniforms from step.args
 				if step_args is Dictionary:
