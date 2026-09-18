@@ -78,12 +78,16 @@ func _init() -> void:
 					continue
 
 				var raw_fragment = backend.call("_load_fragment", namespace_name, effect, program)
+				var pass_defines: Dictionary = pass_spec.get("defines", {})
 				for defines in _define_variants(definition):
+					var merged_defines: Dictionary = defines.duplicate()
+					for k in pass_defines:
+						merged_defines[str(k)] = pass_defines[k]
 					var inject := ""
-					for define_name in defines:
+					for define_name in merged_defines:
 						inject += "#define %s %s\n" % [
 							define_name,
-							backend.call("_format_define_value", define_name, defines[define_name], definition, raw_fragment),
+							backend.call("_format_define_value", define_name, merged_defines[define_name], definition, raw_fragment),
 						]
 					var runtime_pass := {"progName": program}
 					if not backend.call("_has_layout", definition, runtime_pass):
@@ -103,7 +107,7 @@ func _init() -> void:
 
 					var shader: RID = backend.call("_get_shader", "sweep/%s/%d" % [shader_key, compiled], vertex, fragment)
 					if not shader.is_valid():
-						failed.append("%s %s" % [shader_key, defines])
+						failed.append("%s %s" % [shader_key, merged_defines])
 					compiled += 1
 
 	if not missing.is_empty():

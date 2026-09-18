@@ -20,6 +20,8 @@ sort — and aperture defocus blur via `spriteMeanTiles`/`spriteMean`/`clearDefo
 gradient-normalization fix in `filter/chrome`. This was a hand-translated port (no auto-transpiler),
 so unlike the sibling ports it carried real shader-math risk, not just mechanical compiler fixes.
 
+*Incrementally synced 2026-09-17 to reference `688c5146` (`5a14256732b5..688c514655d3`) — audited upstream WebGPU frame export row-inversion changes. Godot's `rendering_device_frame_export.gd` already applies `source.flip_y()` on texture readback to align Vulkan/Metal RD coordinates with Godot's top-down Image convention; runtime contracts verified via `parity/test_frame_export.py` (2/2 PASS). Updated `parity/shader_compile_sweep.gd` to merge pass-level `defines` into sweep variants, restoring 798/798 clean Vulkan shader compiles (59/59 unittest PASS).*
+
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
 both pre-existing gaps only now exercised by this round's `viewMode`-conditional pass pattern, not
 introduced by it:
