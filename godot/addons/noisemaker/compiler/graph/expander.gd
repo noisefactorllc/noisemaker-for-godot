@@ -330,8 +330,8 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 					var should_scope_params = should_scope_particle or should_scope_chain or (_cur_particle_pipeline_id != null and not tex_name.begins_with("global_")) or has_param_ref
 					if should_scope_params:
 						var scope_suffix = _cur_particle_pipeline_id if should_scope_particle else _chain_scope_id
-						resolved_spec["width"] = _scope_dim_spec(spec.get("width"), scope_suffix, scoped_param_map)
-						resolved_spec["height"] = _scope_dim_spec(spec.get("height"), scope_suffix, scoped_param_map)
+						resolved_spec["width"] = _scope_dim_spec(spec.get("width"), scope_suffix, scoped_param_map, tex_name)
+						resolved_spec["height"] = _scope_dim_spec(spec.get("height"), scope_suffix, scoped_param_map, tex_name)
 					_texture_specs[virtual_tex_id] = resolved_spec
 
 			var textures3d = effect_def.get("textures3d")
@@ -520,6 +520,9 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 				if pdef_uniforms is Dictionary:
 					for uniform_name in pdef_uniforms:
 						var global_ref = pdef_uniforms[uniform_name]
+						if global_ref is int or global_ref is float:
+							pass_obj["uniforms"][uniform_name] = global_ref
+							continue
 						if pipeline_uniforms.get(uniform_name) != null:
 							pass_obj["uniforms"][uniform_name] = pipeline_uniforms[uniform_name]
 						elif pipeline_uniforms.get(global_ref) != null:
@@ -664,10 +667,11 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 	return {"passes": _passes, "errors": _errors, "programs": _programs, "textureSpecs": _texture_specs, "renderSurface": render_surface}
 
 # Scope a dimension spec's param reference to this pipeline/chain (tracks the mapping).
-func _scope_dim_spec(dim_spec, scope_suffix, scoped_param_map: Dictionary):
+func _scope_dim_spec(dim_spec, scope_suffix: String, scoped_param_map: Dictionary, tex_name: String = ""):
 	if dim_spec is Dictionary and dim_spec.has("param"):
 		var original_param = dim_spec["param"]
-		var scoped_param = "%s_%s" % [original_param, scope_suffix]
+		var dimension_scope = _cur_particle_pipeline_id if (original_param == "stateSize" and _cur_particle_pipeline_id != null and not tex_name.begins_with("global_")) else scope_suffix
+		var scoped_param = "volumeSize_%s" % _chain_scope_id if original_param == "volumeSize" else "%s_%s" % [original_param, dimension_scope]
 		scoped_param_map[original_param] = scoped_param
 		var d = dim_spec.duplicate(true)
 		d["param"] = scoped_param

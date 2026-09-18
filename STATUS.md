@@ -45,16 +45,15 @@ introduced by it:
   effect JSON carries a `shaders` key), and `nm_backend.gd`'s `execute_pass()` reads it directly to
   inject `#define`s at shader-load time. Removing it to chase full JSON-shape parity would have broken
   real `viewMode` rendering; confirmed by trying it and reverting.
-- **Found, not fixed — flagged for follow-up:** `check_graph.mjs` (347/349) still shows
-  `target.dsl`/`targetO0.dsl` computing `stateSize_node_2` = 1024 (this port) vs 256 (reference) for
-  `pointsBillboardRender`'s new `depthOrderA`/`depthOrderB` sort buffers, when the DSL's upstream
-  `pointsEmit(stateSize: x1024)` differs from billboard's own declared default (256). The port's
-  chain-wide `pipeline_uniforms` inheritance (`expander.gd`) appears to carry the upstream override
-  into billboard's own scoped-dimension resolution where the reference does not; tracing the exact
-  reference-side mechanism that keeps it independent needs more time than this verification pass had,
-  and the inheritance logic is shared, foundational plumbing used by every particle-chain effect in
-  the corpus — too risky to patch speculatively. Low real-world severity: both affected programs are
-  already chaos-gated (see Known limits) and excluded from pixel-parity grading.
+- **Graph parity fully closed (355/355 pass):** `check_graph.mjs` now passes cleanly across all 355
+  programs and corpus files. Resolved the follow-up where `target.dsl`/`targetO0.dsl` and
+  `heightGrid_billboard`/`heightGrid_billboard_alpha` showed discrepancies:
+  1. Aligned `_scope_dim_spec()` in `expander.gd` with reference `expander.js` so that `stateSize`
+     on node-local textures within a particle pipeline inherits the particle pipeline ID
+     (`_cur_particle_pipeline_id`) rather than falling back to `_chain_scope_id`.
+  2. Supported numeric constants in pass-level `uniforms` (`global_ref is int or global_ref is float`),
+     matching reference `expander.js:827-830` and restoring numeric uniforms such as `runLength`
+     in bitonic merge sort passes.
 
 **Pixel parity, this round's new/rewritten shader math — verified correct.** Minted fresh goldens
 against the reference and rendered the Godot candidate for each (all standalone, non-batch):
