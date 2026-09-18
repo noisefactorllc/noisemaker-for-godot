@@ -22,6 +22,8 @@ so unlike the sibling ports it carried real shader-math risk, not just mechanica
 
 *Incrementally synced 2026-09-17 to reference `688c5146` (`5a14256732b5..688c514655d3`) — audited upstream WebGPU frame export row-inversion changes. Godot's `rendering_device_frame_export.gd` already applies `source.flip_y()` on texture readback to align Vulkan/Metal RD coordinates with Godot's top-down Image convention; runtime contracts verified via `parity/test_frame_export.py` (2/2 PASS). Updated `parity/shader_compile_sweep.gd` to merge pass-level `defines` into sweep variants, restoring 798/798 clean Vulkan shader compiles (59/59 unittest PASS).*
 
+*Incrementally synced 2026-09-18 to reference `ead42a5d` (`688c514655d3..ead42a5df110a7f04d732cb200a1a39629db8a67`) — regenerated effect definitions via `tools/convert-definitions.mjs` (213/213 definitions match reference in `parity/check_definitions.mjs`). Updated `defaultProgram` in `effects/synth3d/heightmap3d.json`, `effects/render/renderLandscape3d.json`, and `parity/programs/heightmap3d_landscape.dsl` to use discrete write/read chains instead of inline surface parameters. All parity gates verified: registry (213/213), lex (355/355), parse (355/355), validate (355/355), graph (355/355), and parity unittests (59/59 PASS).*
+
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
 both pre-existing gaps only now exercised by this round's `viewMode`-conditional pass pattern, not
 introduced by it:
