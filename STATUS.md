@@ -24,6 +24,9 @@ so unlike the sibling ports it carried real shader-math risk, not just mechanica
 
 *Incrementally synced 2026-09-18 to reference `ead42a5d` (`688c514655d3..ead42a5df110a7f04d732cb200a1a39629db8a67`) — regenerated effect definitions via `tools/convert-definitions.mjs` (213/213 definitions match reference in `parity/check_definitions.mjs`). Updated `defaultProgram` in `effects/synth3d/heightmap3d.json`, `effects/render/renderLandscape3d.json`, and `parity/programs/heightmap3d_landscape.dsl` to use discrete write/read chains instead of inline surface parameters. All parity gates verified: registry (213/213), lex (355/355), parse (355/355), validate (355/355), graph (355/355), and parity unittests (59/59 PASS).*
 
+*Incrementally synced 2026-09-19 to reference `f1d2b46a` (`ead42a5df110..f1d2b46a2773`) — audited upstream changes (GAP-023 compiler phase-2 harness exit status reporting, chained variable test plan verification, unified agent instructions; no shader source or effect definition changes). Verified effect definitions via `tools/convert-definitions.mjs` (213/213 PASS). Added unit test in `parity/test_compiler_automation.py` covering chained variable alias syntax compilation into terminal write blit graph. All parity gates verified: definitions (213/213), registry (213/213), lex (355/355), parse (355/355), validate (355/355), graph (355/355), and parity unittests (60/60 PASS).*
+
+
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
 both pre-existing gaps only now exercised by this round's `viewMode`-conditional pass pattern, not
 introduced by it:

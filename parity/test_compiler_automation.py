@@ -39,7 +39,14 @@ class CompilerAutomationTests(unittest.TestCase):
                 timeout=30,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            marker = "PARSEDUMP:" if script_name == "_parse_dump.gd" else "VALIDATEDUMP:"
+            markers = {
+                "_parse_dump.gd": "PARSEDUMP:",
+                "_graph_dump.gd": "GRAPHDUMP:",
+                "_validate_dump.gd": "VALIDATEDUMP:",
+            }
+            if script_name not in markers:
+                raise ValueError(f"Unknown dump script: {script_name}")
+            marker = markers[script_name]
             marker_line = next(
                 (line for line in result.stdout.splitlines() if line.startswith(marker)),
                 None,
@@ -271,6 +278,30 @@ class CompilerAutomationTests(unittest.TestCase):
         self.assertTrue(any("cycle" in message.lower() for message in cycle_messages), cycle_messages)
         self.assertTrue(any("maximum depth of 8" in message for message in depth_messages), depth_messages)
 
+    def test_chained_variable_compiles_to_terminal_write_blit(self):
+        programs = {
+            "chained.dsl": """
+                search synth, filter
+                let gen = noise(scaleX: 50)
+                let eff = rotate(1, 0.1)
+                gen().eff().write(o0)
+                render(o0)
+            """
+        }
+        output = self._dump("_graph_dump.gd", programs)["chained.dsl"]
+        self.assertTrue(output["ok"])
+        graph = output["out"]
+        self.assertEqual(graph.get("renderSurface"), "o0")
+        self.assertEqual(len(graph.get("passes", [])), 3)
+        pass_ids = [p["id"] for p in graph["passes"]]
+        self.assertEqual(pass_ids, ["node_0_pass_0", "node_1_pass_0", "node_2_write_blit"])
+        write_pass = graph["passes"][2]
+        self.assertEqual(write_pass.get("program"), "blit")
+        self.assertEqual(write_pass.get("outputs", {}).get("color"), "global_o0")
+        self.assertEqual(write_pass.get("inputs", {}).get("src"), "node_1_out")
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
