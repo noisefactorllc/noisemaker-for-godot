@@ -26,6 +26,8 @@ so unlike the sibling ports it carried real shader-math risk, not just mechanica
 
 *Incrementally synced 2026-09-19 to reference `f1d2b46a` (`ead42a5df110..f1d2b46a2773`) — audited upstream changes (GAP-023 compiler phase-2 harness exit status reporting, chained variable test plan verification, unified agent instructions; no shader source or effect definition changes). Verified effect definitions via `tools/convert-definitions.mjs` (213/213 PASS). Added unit test in `parity/test_compiler_automation.py` covering chained variable alias syntax compilation into terminal write blit graph. All parity gates verified: definitions (213/213), registry (213/213), lex (355/355), parse (355/355), validate (355/355), graph (355/355), and parity unittests (60/60 PASS).*
 
+*Incrementally synced 2026-09-19 to reference `2df19feb` (`f1d2b46a2773..2df19feb6ce1`) — audited upstream commit `2df19feb6ce1` (support for borrowed `VideoFrame` in `updateTextureFromSource` across WebGL2 and WebGPU web backends). Confirmed inapplicable to Godot (runs in Godot engine via GDScript and RenderingDevice Vulkan/Metal and does not consume browser DOM / WebCodecs / WebGL2 / WebGPU media source pipelines). Zero effect definitions, DSL compiler operations, or shaders changed upstream. All parity gates verified: definitions (213/213), registry (213/213), lex (355/355), parse (355/355), validate (355/355), graph (355/355), and parity unittests (60/60 PASS).*
+
 
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
 both pre-existing gaps only now exercised by this round's `viewMode`-conditional pass pattern, not
