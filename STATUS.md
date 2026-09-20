@@ -28,6 +28,8 @@ so unlike the sibling ports it carried real shader-math risk, not just mechanica
 
 *Incrementally synced 2026-09-19 to reference `2df19feb` (`f1d2b46a2773..2df19feb6ce1`) — audited upstream commit `2df19feb6ce1` (support for borrowed `VideoFrame` in `updateTextureFromSource` across WebGL2 and WebGPU web backends). Confirmed inapplicable to Godot (runs in Godot engine via GDScript and RenderingDevice Vulkan/Metal and does not consume browser DOM / WebCodecs / WebGL2 / WebGPU media source pipelines). Zero effect definitions, DSL compiler operations, or shaders changed upstream. All parity gates verified: definitions (213/213), registry (213/213), lex (355/355), parse (355/355), validate (355/355), graph (355/355), and parity unittests (60/60 PASS).*
 
+*Incrementally synced 2026-09-20 to reference `beabda38` (`2df19feb6ce1..beabda385253`) — ported upstream commit `beabda385253` MIDI channel validation to unconditionally require static integer channels 1..16 across all channel-based MIDI modes in `compiler/lang/validator.gd` (including legacy note modes). Audited upstream commit `6e0166ce` (pipeline recreation format checks). Added unit test in `parity/test_compiler_automation.py` covering static integer 1..16 channel enforcement across all legacy note modes. All parity gates verified: definitions (213/213 PASS), registry (213/213 PASS), lex (355/355 PASS), parse (355/355 PASS), validate (355/355 PASS), graph (355/355 PASS), and parity unittests (61/61 PASS).*
+
 
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
 both pre-existing gaps only now exercised by this round's `viewMode`-conditional pass pattern, not

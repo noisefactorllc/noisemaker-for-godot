@@ -300,6 +300,82 @@ class CompilerAutomationTests(unittest.TestCase):
         self.assertEqual(write_pass.get("outputs", {}).get("color"), "global_o0")
         self.assertEqual(write_pass.get("inputs", {}).get("src"), "node_1_out")
 
+    def test_legacy_midi_note_mode_channels_must_be_static_integers(self):
+        modes = [
+            ("noteChange", "midiMode.noteChange"),
+            ("gateNote", "midiMode.gateNote"),
+            ("gateVelocity", "midiMode.gateVelocity"),
+            ("triggerNote", "midiMode.triggerNote"),
+            ("velocity", "midiMode.velocity"),
+        ]
+        programs = {}
+        for name, mode_expr in modes:
+            programs[f"{name}_valid_1.dsl"] = f"""
+                search synth
+                let m = midi(mode: {mode_expr}, channel: 1)
+                noise(scaleX: m).write(o0)
+                render(o0)
+            """
+            programs[f"{name}_valid_16.dsl"] = f"""
+                search synth
+                let m = midi(mode: {mode_expr}, channel: 16)
+                noise(scaleX: m).write(o0)
+                render(o0)
+            """
+            programs[f"{name}_invalid_0.dsl"] = f"""
+                search synth
+                let m = midi(mode: {mode_expr}, channel: 0)
+                noise(scaleX: m).write(o0)
+                render(o0)
+            """
+            programs[f"{name}_invalid_17.dsl"] = f"""
+                search synth
+                let m = midi(mode: {mode_expr}, channel: 17)
+                noise(scaleX: m).write(o0)
+                render(o0)
+            """
+            programs[f"{name}_invalid_float.dsl"] = f"""
+                search synth
+                let m = midi(mode: {mode_expr}, channel: 1.5)
+                noise(scaleX: m).write(o0)
+                render(o0)
+            """
+            programs[f"{name}_invalid_bool.dsl"] = f"""
+                search synth
+                let m = midi(mode: {mode_expr}, channel: true)
+                noise(scaleX: m).write(o0)
+                render(o0)
+            """
+            programs[f"{name}_invalid_string.dsl"] = f"""
+                search synth
+                let m = midi(mode: {mode_expr}, channel: "1")
+                noise(scaleX: m).write(o0)
+                render(o0)
+            """
+            programs[f"{name}_invalid_osc.dsl"] = f"""
+                search synth
+                let m = midi(mode: {mode_expr}, channel: osc())
+                noise(scaleX: m).write(o0)
+                render(o0)
+            """
+        outputs = self._dump("_validate_dump.gd", programs)
+        for name, _ in modes:
+            self.assertTrue(outputs[f"{name}_valid_1.dsl"]["ok"])
+            self.assertEqual(outputs[f"{name}_valid_1.dsl"]["out"]["diagnostics"], [])
+            self.assertTrue(outputs[f"{name}_valid_16.dsl"]["ok"])
+            self.assertEqual(outputs[f"{name}_valid_16.dsl"]["out"]["diagnostics"], [])
+
+            for bad_case in ("0", "17", "float", "bool", "string", "osc"):
+                file_key = f"{name}_invalid_{bad_case}.dsl"
+                diags = outputs[file_key]["out"]["diagnostics"]
+                self.assertTrue(len(diags) > 0, f"Expected diagnostics for {file_key}")
+                self.assertTrue(
+                    any("channel" in d["message"].lower() for d in diags),
+                    f"Expected channel error in {diags}",
+                )
+                desc = outputs[file_key]["out"]["plans"][0]["chain"][0]["args"]["scaleX"]
+                self.assertTrue(desc.get("_invalid", False), f"Expected _invalid: true for {file_key}")
+
 
 if __name__ == "__main__":
     unittest.main()

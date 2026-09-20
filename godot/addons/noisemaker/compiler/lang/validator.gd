@@ -1189,8 +1189,7 @@ func _compile_automation_descriptor(node: Dictionary, depth: int = 0):
 			selection_invalid = selection_invalid or not has_zone or member_options.get("invalid", false)
 		if has_zone and node.has("channel"):
 			selection_invalid = true
-		var channel_options := {"integer": true, "min": 1, "max": 16, "allowMember": false} \
-			if mode >= 5 else {"allowBoolean": true}
+		var channel_options := {"integer": true, "min": 1, "max": 16, "allowMember": false}
 		var channel = null if has_zone else _resolve_automation_number(
 			node.get("channel"), "midi", "channel", 1, channel_options, depth)
 		var cc_options := {"integer": true, "min": 0, "max": 31 if mode == 6 else 127, "allowMember": false}
