@@ -40,6 +40,7 @@ class CompilerAutomationTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             markers = {
+                "_lex_dump.gd": "LEXDUMP:",
                 "_parse_dump.gd": "PARSEDUMP:",
                 "_graph_dump.gd": "GRAPHDUMP:",
                 "_validate_dump.gd": "VALIDATEDUMP:",
@@ -375,6 +376,55 @@ class CompilerAutomationTests(unittest.TestCase):
                 )
                 desc = outputs[file_key]["out"]["plans"][0]["chain"][0]["args"]["scaleX"]
                 self.assertTrue(desc.get("_invalid", False), f"Expected _invalid: true for {file_key}")
+
+    def test_output_surface_range_enforcement(self):
+        invalid_programs = {
+            "render_o8.dsl": "search synth\nnoise().write(o0)\nrender(o8)",
+            "read_o99.dsl": "search synth\nread(o99).write(o0)\nrender(o0)",
+            "write_o10.dsl": "search synth\nnoise().write(o10)\nrender(o0)",
+        }
+        invalid_outputs = self._dump("_lex_dump.gd", invalid_programs)
+        for key in invalid_programs:
+            tokens = invalid_outputs[key]
+            self.assertFalse(
+                any(t["type"] == "EOF" for t in tokens),
+                f"Expected lexer error (no EOF token) for {key}",
+            )
+
+        valid_programs = {
+            "boundary.dsl": "search synth\nread(o0).write(o7)\nrender(o7)",
+            "member_and_refs.dsl": """
+                search synth
+                let low = foo.o0
+                let high = foo.o7
+                let extended = foo.o8
+                let many = foo.o99
+                let source = s99
+                let vol = vol99
+                let geo = geo99
+                let xyz = xyz99
+                let vel = vel99
+                let rgba = rgba99
+                let mesh = mesh99
+            """,
+        }
+        valid_outputs = self._dump("_lex_dump.gd", valid_programs)
+        boundary_tokens = valid_outputs["boundary.dsl"]
+        self.assertTrue(any(t["type"] == "EOF" for t in boundary_tokens))
+        output_refs = [t["lexeme"] for t in boundary_tokens if t["type"] == "OUTPUT_REF"]
+        self.assertEqual(output_refs, ["o0", "o7", "o7"])
+
+        member_tokens = valid_outputs["member_and_refs.dsl"]
+        self.assertTrue(any(t["type"] == "EOF" for t in member_tokens))
+        member_output_refs = [t["lexeme"] for t in member_tokens if t["type"] == "OUTPUT_REF"]
+        self.assertEqual(member_output_refs, ["o0", "o7", "o8", "o99"])
+        self.assertTrue(any(t["type"] == "SOURCE_REF" and t["lexeme"] == "s99" for t in member_tokens))
+        self.assertTrue(any(t["type"] == "VOL_REF" and t["lexeme"] == "vol99" for t in member_tokens))
+        self.assertTrue(any(t["type"] == "GEO_REF" and t["lexeme"] == "geo99" for t in member_tokens))
+        self.assertTrue(any(t["type"] == "XYZ_REF" and t["lexeme"] == "xyz99" for t in member_tokens))
+        self.assertTrue(any(t["type"] == "VEL_REF" and t["lexeme"] == "vel99" for t in member_tokens))
+        self.assertTrue(any(t["type"] == "RGBA_REF" and t["lexeme"] == "rgba99" for t in member_tokens))
+        self.assertTrue(any(t["type"] == "MESH_REF" and t["lexeme"] == "mesh99" for t in member_tokens))
 
 
 if __name__ == "__main__":

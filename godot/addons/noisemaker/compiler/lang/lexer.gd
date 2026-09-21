@@ -98,8 +98,13 @@ static func lex(src) -> Array:
 			j = i + 1
 			while j < n and _is_digit(s[j]):
 				j += 1
+			var lexeme := s.substr(i, j - i)
 			var tt := "OUTPUT_REF" if ch == "o" else "SOURCE_REF"
-			tokens.append(Token.new(tt, s.substr(i, j - i), start_line, start_col))
+			var is_member_segment := tokens.size() > 0 and (tokens[tokens.size() - 1] as Token).type == "DOT"
+			if tt == "OUTPUT_REF" and not is_member_segment and not (lexeme.length() == 2 and lexeme[1] >= "0" and lexeme[1] <= "7"):
+				push_error("Output surface reference '%s' is out of range; expected o0-o7 at line %d col %d" % [lexeme, start_line, start_col])
+				return tokens
+			tokens.append(Token.new(tt, lexeme, start_line, start_col))
 			col += j - i; i = j; continue
 
 		# vol reference (vol + digit) — tested BEFORE vel
