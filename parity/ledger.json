@@ -80,26 +80,6 @@
     }
   },
   {
-    "program": "bc",
-    "effect": "filter/bc",
-    "mode": "default",
-    "golden": "parity/out/bc.golden.png",
-    "candidate": "parity/out/bc.candidate.png",
-    "verdict": "PASS",
-    "max_abs_diff": 1.0000075101852417,
-    "mean_abs_diff": 0.3756256103515625,
-    "ssim": 0.9999638795852661,
-    "passed": true,
-    "skipped": false,
-    "policy": {
-      "tolerance": 2.001,
-      "ssim_min": 0.98,
-      "strict_tolerance": 2.001,
-      "strict_ssim_min": 0.98,
-      "reason": "strict RGBA8 float round-trip allowance"
-    }
-  },
-  {
     "program": "bitwise",
     "effect": null,
     "mode": "default",
@@ -669,26 +649,6 @@
     "max_abs_diff": 1.0000075101852417,
     "mean_abs_diff": 0.34857940673828125,
     "ssim": 0.9999746680259705,
-    "passed": true,
-    "skipped": false,
-    "policy": {
-      "tolerance": 2.001,
-      "ssim_min": 0.98,
-      "strict_tolerance": 2.001,
-      "strict_ssim_min": 0.98,
-      "reason": "strict RGBA8 float round-trip allowance"
-    }
-  },
-  {
-    "program": "colorspace",
-    "effect": "filter/colorspace",
-    "mode": "default",
-    "golden": "parity/out/colorspace.golden.png",
-    "candidate": "parity/out/colorspace.candidate.png",
-    "verdict": "PASS",
-    "max_abs_diff": 1.0000075101852417,
-    "mean_abs_diff": 0.37413790822029114,
-    "ssim": 0.9999672770500183,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2149,26 +2109,6 @@
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 0.2828063666820526,
     "ssim": 0.9999895095825195,
-    "passed": true,
-    "skipped": false,
-    "policy": {
-      "tolerance": 2.001,
-      "ssim_min": 0.98,
-      "strict_tolerance": 2.001,
-      "strict_ssim_min": 0.98,
-      "reason": "strict RGBA8 float round-trip allowance"
-    }
-  },
-  {
-    "program": "hs",
-    "effect": "filter/hs",
-    "mode": "default",
-    "golden": "parity/out/hs.golden.png",
-    "candidate": "parity/out/hs.candidate.png",
-    "verdict": "PASS",
-    "max_abs_diff": 1.0000075101852417,
-    "mean_abs_diff": 0.3757743537425995,
-    "ssim": 0.9999639987945557,
     "passed": true,
     "skipped": false,
     "policy": {
