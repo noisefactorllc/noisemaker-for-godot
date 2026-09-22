@@ -111,7 +111,12 @@ func _push_diag(code: String, node, message = null) -> void:
 		"severity": Diagnostics.severity(code),
 	}
 	if node is Dictionary and node.get("loc") is Dictionary and node["loc"].has("line"):
-		rec["location"] = {"line": node["loc"]["line"]}
+		var loc: Dictionary = node["loc"]
+		var location := {"line": loc["line"]}
+		var col = loc["column"] if (loc.has("column") and loc["column"] != null) else (loc["col"] if loc.has("col") else null)
+		if col != null:
+			location["column"] = col
+		rec["location"] = location
 	if ident_name != null and ident_name != "":
 		rec["identifier"] = ident_name
 	_diagnostics.push_back(rec)

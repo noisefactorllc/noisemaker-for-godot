@@ -31,6 +31,17 @@ func _init() -> void:
 	var d2 = Diagnostics.make("S007")
 	_expect(d2["severity"] == "warning" and d2["message"] == "Deprecated parameter alias" and not d2.has("line"), "diag.make-min")
 
+	# Validator._push_diag column preservation
+	var v_probe = load("res://addons/noisemaker/compiler/lang/validator.gd").new(null)
+	v_probe._push_diag("S001", {"loc": {"line": 2, "column": 7}})
+	_expect(v_probe._diagnostics.back()["location"] == {"line": 2, "column": 7}, "validator.diag-explicit-column")
+	v_probe._push_diag("S001", {"loc": {"line": 4, "col": 12}})
+	_expect(v_probe._diagnostics.back()["location"] == {"line": 4, "column": 12}, "validator.diag-col-fallback")
+	v_probe._push_diag("S001", {"loc": {"line": 5, "column": 8, "col": 99}})
+	_expect(v_probe._diagnostics.back()["location"] == {"line": 5, "column": 8}, "validator.diag-column-precedence")
+	v_probe._push_diag("S001", {})
+	_expect(not v_probe._diagnostics.back().has("location"), "validator.diag-unlocated")
+
 	# EnumPaths
 	_expect(EnumPaths.normalize_member_path("oscKind.sine") == ["oscKind", "sine"], "enumpaths.normalize-str")
 	_expect(EnumPaths.normalize_member_path(["a", "", "b"]) == ["a", "b"], "enumpaths.normalize-arr")

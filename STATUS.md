@@ -36,6 +36,9 @@ so unlike the sibling ports it carried real shader-math risk, not just mechanica
 
 *Incrementally synced 2026-09-21 to reference `68d37721` (`50b8f909ff59..68d37721091a`) — audited upstream commit `68d37721` (excluding builtins from mutation introspection in JS `transform.js`). Confirmed inapplicable to Godot (does not implement JS AST mutation introspection; compiler frontend is execution-only). Zero effect definitions, DSL compiler operations, or shaders changed upstream. All parity gates verified: definitions (210/210 PASS), registry (ops 210/210, enums 8/8, paramAliases 44/44, effectAliases 0/0, effectKeys 628/628 PASS), lex (352/352 PASS), parse (352/352 PASS), validate (352/352 PASS), graph (352/352 PASS), and parity unittests (62/62 PASS).*
 
+*Incrementally synced 2026-09-22 to reference `e5bd2013` (`68d37721091a..e5bd2013087e`) — ported upstream commit `e5bd2013` (GAP-002: "fix: preserve source columns in DSL diagnostics") to preserve source column numbers from `loc.column` (with fallback to `loc.col`) in diagnostic records in `godot/addons/noisemaker/compiler/lang/validator.gd`. Added unit smoke checks in `godot/addons/noisemaker/compiler/_smoke.gd` and regression tests in `parity/test_compiler_automation.py` covering exact column preservation on diagnostics, multi-line indentation, caller-supplied AST column precedence, and omission of location on unlocated AST nodes. All parity gates verified: definitions (210/210 PASS), registry (ops 210/210, enums 8/8, paramAliases 44/44, effectAliases 0/0, effectKeys 628/628 PASS), lex (352/352 PASS), parse (352/352 PASS), validate (352/352 PASS), graph (352/352 PASS), smoke (24/24 PASS), and parity unittests (63/63 PASS).*
+
+
 
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
 both pre-existing gaps only now exercised by this round's `viewMode`-conditional pass pattern, not

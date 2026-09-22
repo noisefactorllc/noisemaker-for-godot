@@ -426,6 +426,46 @@ class CompilerAutomationTests(unittest.TestCase):
         self.assertTrue(any(t["type"] == "RGBA_REF" and t["lexeme"] == "rgba99" for t in member_tokens))
         self.assertTrue(any(t["type"] == "MESH_REF" and t["lexeme"] == "mesh99" for t in member_tokens))
 
+    def test_diagnostic_locations_preserve_source_columns(self):
+        source = """
+            search synth
+              read(123).write(o0)
+              render(o0)
+        """
+        output = self._dump("_validate_dump.gd", {"diag.dsl": source})["diag.dsl"]
+        self.assertTrue(output["ok"])
+        diagnostics = output["out"]["diagnostics"]
+        self.assertGreaterEqual(len(diagnostics), 2)
+        read_diag = next(
+            (d for d in diagnostics if "read() requires a valid surface reference" in d["message"]),
+            None,
+        )
+        self.assertIsNotNone(read_diag)
+        self.assertEqual(read_diag.get("location"), {"line": 3, "column": 3})
+
+        write_diag = next(
+            (d for d in diagnostics if "write() requires an input" in d["message"]),
+            None,
+        )
+        self.assertIsNotNone(write_diag)
+        self.assertEqual(write_diag.get("location"), {"line": 3, "column": 13})
+
+        source_indented = """
+            search synth
+
+
+                    read(123).write(o0)
+            render(o0)
+        """
+        output_indented = self._dump("_validate_dump.gd", {"indented.dsl": source_indented})["indented.dsl"]
+        self.assertTrue(output_indented["ok"])
+        indented_read_diag = next(
+            (d for d in output_indented["out"]["diagnostics"] if "read() requires a valid surface reference" in d["message"]),
+            None,
+        )
+        self.assertIsNotNone(indented_read_diag)
+        self.assertEqual(indented_read_diag.get("location"), {"line": 5, "column": 9})
+
 
 if __name__ == "__main__":
     unittest.main()
