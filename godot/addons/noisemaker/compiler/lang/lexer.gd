@@ -15,6 +15,41 @@
 extends RefCounted
 
 const Token = preload("res://addons/noisemaker/compiler/lang/token.gd")
+const Diagnostics := preload("res://addons/noisemaker/compiler/lang/diagnostics.gd")
+
+static var last_diagnostic = null
+static var last_error: String = ""
+
+static func get_last_diagnostic():
+	return last_diagnostic
+
+static func get_last_error() -> String:
+	return last_error
+
+static func _fail(code: String, message: String, start: int, end: int, s: String, tokens: Array) -> Array:
+	var error_line := 1
+	var column := 1
+	for k in range(start):
+		var code_pt := s.unicode_at(k)
+		if code_pt == 10:
+			error_line += 1
+			column = 1
+		else:
+			column += 2 if code_pt > 0xFFFF else 1
+	var start_u16 := s.substr(0, start).to_utf16_buffer().size() / 2
+	var end_u16 := s.substr(0, end).to_utf16_buffer().size() / 2
+	var diag := {
+		"code": code,
+		"stage": Diagnostics.stage(code),
+		"severity": Diagnostics.severity(code),
+		"message": message,
+		"location": {"line": error_line, "column": column},
+		"span": {"start": start_u16, "end": end_u16},
+	}
+	last_diagnostic = diag
+	last_error = message
+	push_error(message)
+	return tokens
 
 # RESERVED_KEYWORDS (reference/01 §1.3 — lexer.js, frozen). keyword text -> token-type string.
 const KEYWORDS := {
@@ -47,6 +82,8 @@ static func _at(s: String, k: int, n: int) -> String:
 
 # Tokenize `src` into an Array of Token, ending in one EOF token (reference/01 §1).
 static func lex(src) -> Array:
+	last_diagnostic = null
+	last_error = ""
 	var tokens: Array = []
 	if src == null:
 		src = ""
@@ -74,7 +111,7 @@ static func lex(src) -> Array:
 			while j < n and s[j] != "\n":
 				j += 1
 			tokens.append(Token.new("COMMENT", s.substr(i, j - i), start_line, start_col))
-			col += j - i; i = j; continue
+			col += s.substr(i, j - i).to_utf16_buffer().size() / 2; i = j; continue
 
 		# block comment /* ... */
 		if ch == "/" and _at(s, i + 1, n) == "*":
@@ -85,10 +122,10 @@ static func lex(src) -> Array:
 				if s[j] == "\n":
 					end_line += 1; end_col = 1
 				else:
-					end_col += 1
+					end_col += 2 if s.unicode_at(j) > 0xFFFF else 1
 				j += 1
 			if j >= n:
-				push_error("Unterminated comment at line %d col %d" % [start_line, start_col]); return tokens
+				return _fail("L003", "Unterminated comment at line %d col %d" % [start_line, start_col], i, n, s, tokens)
 			j += 2
 			tokens.append(Token.new("COMMENT", s.substr(i, j - i), start_line, start_col))
 			line = end_line; col = end_col + 2; i = j; continue
@@ -102,8 +139,7 @@ static func lex(src) -> Array:
 			var tt := "OUTPUT_REF" if ch == "o" else "SOURCE_REF"
 			var is_member_segment := tokens.size() > 0 and (tokens[tokens.size() - 1] as Token).type == "DOT"
 			if tt == "OUTPUT_REF" and not is_member_segment and not (lexeme.length() == 2 and lexeme[1] >= "0" and lexeme[1] <= "7"):
-				push_error("Output surface reference '%s' is out of range; expected o0-o7 at line %d col %d" % [lexeme, start_line, start_col])
-				return tokens
+				return _fail("L004", "Output surface reference '%s' is out of range; expected o0-o7 at line %d col %d" % [lexeme, start_line, start_col], i, j, s, tokens)
 			tokens.append(Token.new(tt, lexeme, start_line, start_col))
 			col += j - i; i = j; continue
 
@@ -218,14 +254,14 @@ static func lex(src) -> Array:
 					line += 1; col = 0
 				j += 1
 			if j >= n - 2 or not (_at(s, j, n) == '"' and _at(s, j + 1, n) == '"' and _at(s, j + 2, n) == '"'):
-				push_error("Unterminated triple-quoted string at line %d col %d" % [start_line, start_col]); return tokens
+				return _fail("L002", "Unterminated triple-quoted string at line %d col %d" % [start_line, start_col], i, n, s, tokens)
 			var tri_content := s.substr(i + 3, j - (i + 3))
 			tokens.append(Token.new("STRING", tri_content, start_line, start_col))
 			var clines := tri_content.split("\n")
 			if clines.size() > 1:
-				col = clines[clines.size() - 1].length() + 4  # +3 closing """ +1 next char
+				col = clines[clines.size() - 1].to_utf16_buffer().size() / 2 + 4  # +3 closing """ +1 next char
 			else:
-				col += j - i + 3
+				col += s.substr(i, j - i + 3).to_utf16_buffer().size() / 2
 			i = j + 3; continue
 
 		# single/double quoted string (escapes consume 2 chars, NOT decoded)
@@ -238,10 +274,10 @@ static func lex(src) -> Array:
 				else:
 					j += 1
 			if j >= n or s[j] == "\n":
-				push_error("Unterminated string literal at line %d col %d" % [line, col]); return tokens
+				return _fail("L002", "Unterminated string literal at line %d col %d" % [line, col], i, j, s, tokens)
 			var str_content := s.substr(i + 1, j - (i + 1))
 			tokens.append(Token.new("STRING", str_content, start_line, start_col))
-			col += j - i + 1; i = j + 1; continue
+			col += s.substr(i, j - i + 1).to_utf16_buffer().size() / 2; i = j + 1; continue
 
 		# number D...
 		if _is_digit(ch):
@@ -266,7 +302,7 @@ static func lex(src) -> Array:
 			col += j - i; i = j; continue
 
 		# anything else
-		push_error("Unexpected character '%s' at line %d col %d" % [ch, line, col]); return tokens
+		return _fail("L001", "Unexpected character '%s' at line %d col %d" % [ch, line, col], i, i + 1, s, tokens)
 
 	tokens.append(Token.new("EOF", "", line, col))
 	return tokens

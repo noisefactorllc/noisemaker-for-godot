@@ -10,16 +10,23 @@ extends RefCounted
 const SEVERITY_ERROR := "error"
 const SEVERITY_WARNING := "warning"
 
-# code -> [default message, severity] (verbatim from diagnostics.js).
+# code -> [default message, severity, stage] (verbatim from diagnostics.js).
 const _TABLE := {
-	"S001": ["Unknown identifier", "error"],
-	"S002": ["Argument out of range", "warning"],
-	"S003": ["Variable used before assignment", "error"],
-	"S004": ["Cannot assign null or undefined", "error"],
-	"S005": ["Illegal chain structure", "error"],
-	"S006": ["Starter chain missing write() call", "error"],
-	"S007": ["Deprecated parameter alias", "warning"],
-	"S008": ["Deprecated effect", "warning"],
+	"L001": ["Unexpected character", "error", "lexer"],
+	"L002": ["Unterminated string literal", "error", "lexer"],
+	"L003": ["Unterminated comment", "error", "lexer"],
+	"L004": ["Output surface reference out of range", "error", "lexer"],
+	"P001": ["Unexpected token", "error", "parser"],
+	"P002": ["Expected closing parenthesis", "error", "parser"],
+	"S001": ["Unknown identifier", "error", "semantic"],
+	"S002": ["Argument out of range", "warning", "semantic"],
+	"S003": ["Variable used before assignment", "error", "semantic"],
+	"S004": ["Cannot assign null or undefined", "error", "semantic"],
+	"S005": ["Illegal chain structure", "error", "semantic"],
+	"S006": ["Starter chain missing write() call", "error", "semantic"],
+	"S007": ["Deprecated parameter alias", "warning", "semantic"],
+	"S008": ["Deprecated effect", "warning", "semantic"],
+	"R001": ["Runtime error", "error", "runtime"],
 }
 
 static func default_message(code: String) -> String:
@@ -27,6 +34,9 @@ static func default_message(code: String) -> String:
 
 static func severity(code: String) -> String:
 	return _TABLE[code][1]
+
+static func stage(code: String) -> String:
+	return _TABLE[code][2]
 
 # Build a diagnostic record (the shape the reference compile() emits in `diagnostics`).
 static func make(code: String, message = null, line = null, column = null, identifier = null) -> Dictionary:

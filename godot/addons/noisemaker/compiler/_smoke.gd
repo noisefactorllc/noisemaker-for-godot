@@ -5,6 +5,7 @@
 extends SceneTree
 
 const Token = preload("res://addons/noisemaker/compiler/lang/token.gd")
+const Lexer = preload("res://addons/noisemaker/compiler/lang/lexer.gd")
 const Ast = preload("res://addons/noisemaker/compiler/lang/ast.gd")
 const Diagnostics = preload("res://addons/noisemaker/compiler/lang/diagnostics.gd")
 const EnumPaths = preload("res://addons/noisemaker/compiler/lang/enum_paths.gd")
@@ -30,6 +31,18 @@ func _init() -> void:
 		and d["line"] == 1 and d["column"] == 2 and d["identifier"] == "foo", "diag.make-full")
 	var d2 = Diagnostics.make("S007")
 	_expect(d2["severity"] == "warning" and d2["message"] == "Deprecated parameter alias" and not d2.has("line"), "diag.make-min")
+	_expect(Diagnostics.stage("L001") == "lexer" and Diagnostics.stage("L003") == "lexer" and Diagnostics.stage("L004") == "lexer", "diag.lexer-stage")
+	_expect(Diagnostics.default_message("L003") == "Unterminated comment" and Diagnostics.default_message("L004") == "Output surface reference out of range", "diag.lexer-messages")
+
+	# Lexer structured diagnostics
+	Lexer.lex("// 😀\r\n\t@")
+	_expect(Lexer.last_diagnostic["code"] == "L001" and Lexer.last_diagnostic["location"] == {"line": 2, "column": 2} and Lexer.last_diagnostic["span"] == {"start": 8, "end": 9}, "lexer.diag-crlf-utf16")
+	Lexer.lex("/* unterminated")
+	_expect(Lexer.last_diagnostic["code"] == "L003" and Lexer.last_diagnostic["stage"] == "lexer" and Lexer.last_diagnostic["severity"] == "error", "lexer.diag-unterminated-comment")
+	Lexer.lex("search synth\nrender(o99)")
+	_expect(Lexer.last_diagnostic["code"] == "L004" and Lexer.last_diagnostic["location"] == {"line": 2, "column": 8} and Lexer.last_diagnostic["span"] == {"start": 20, "end": 23}, "lexer.diag-output-ref-range")
+	Lexer.lex("\"😀\" @")
+	_expect(Lexer.last_diagnostic["code"] == "L001" and Lexer.last_diagnostic["location"] == {"line": 1, "column": 6} and Lexer.last_diagnostic["span"] == {"start": 5, "end": 6}, "lexer.diag-astral-span")
 
 	# Validator._push_diag column preservation
 	var v_probe = load("res://addons/noisemaker/compiler/lang/validator.gd").new(null)
