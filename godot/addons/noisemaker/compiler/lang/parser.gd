@@ -100,31 +100,43 @@ func _type_at(i: int) -> String:
 func _tok(i: int):
 	return tokens[i] if (i >= 0 and i < tokens.size()) else null
 
+static func _format_coords(token) -> String:
+	var t_line = _get_token_prop(token, "line", null)
+	var t_col = _get_token_prop(token, "col", null)
+	var l_str := str(int(t_line)) if typeof(t_line) == TYPE_INT else (str(t_line) if t_line != null else "undefined")
+	var c_str := str(int(t_col)) if typeof(t_col) == TYPE_INT else (str(t_col) if t_col != null else "undefined")
+	return "at line %s col %s" % [l_str, c_str]
+
+func _record_diagnostic(code: String, msg: String, token) -> void:
+	var t_line = _get_token_prop(token, "line", null)
+	var t_col = _get_token_prop(token, "col", null)
+	var has_location: bool = (
+		t_line != null and (typeof(t_line) == TYPE_INT or (typeof(t_line) == TYPE_FLOAT and floor(t_line) == t_line and not is_nan(t_line) and not is_inf(t_line))) and t_line > 0
+		and t_col != null and (typeof(t_col) == TYPE_INT or (typeof(t_col) == TYPE_FLOAT and floor(t_col) == t_col and not is_nan(t_col) and not is_inf(t_col))) and t_col > 0
+	)
+	var diag := {
+		"code": code,
+		"stage": Diagnostics.stage(code),
+		"severity": Diagnostics.severity(code),
+		"message": msg,
+		"location": {"line": int(t_line), "column": int(t_col)} if has_location else null,
+		"span": null,
+	}
+	if last_diagnostic == null:
+		last_diagnostic = diag
+		last_error = msg
+		_last_diagnostic = diag
+		_last_error = msg
+	_fail(msg)
+
 func _expect(type: String, msg: String):
 	var token = _peek()
 	var t_type: String = _get_token_prop(token, "type", "")
 	if t_type == type:
 		return _advance()
 	var code := "P002" if type == "RPAREN" else "P001"
-	var t_line = _get_token_prop(token, "line", null)
-	var t_col = _get_token_prop(token, "col", null)
-	var err_msg := "%s at line %s col %s" % [msg, str(t_line) if t_line != null else "undefined", str(t_col) if t_col != null else "undefined"]
-	var has_location: bool = ((typeof(t_line) == TYPE_INT or (typeof(t_line) == TYPE_FLOAT and floor(t_line) == t_line)) and t_line > 0
-		and (typeof(t_col) == TYPE_INT or (typeof(t_col) == TYPE_FLOAT and floor(t_col) == t_col)) and t_col > 0)
-	var diag := {
-		"code": code,
-		"stage": Diagnostics.stage(code),
-		"severity": Diagnostics.severity(code),
-		"message": err_msg,
-		"location": {"line": int(t_line), "column": int(t_col)} if has_location else null,
-		"span": null,
-	}
-	if last_diagnostic == null:
-		last_diagnostic = diag
-		last_error = err_msg
-		_last_diagnostic = diag
-		_last_error = err_msg
-	_fail(err_msg)
+	var err_msg := "%s %s" % [msg, _format_coords(token)]
+	_record_diagnostic(code, err_msg, token)
 	return token
 
 func _fail(msg: String) -> void:
@@ -157,7 +169,9 @@ func _transform_osc(call: Dictionary, name_token) -> Dictionary:
 	}
 	for key in kwargs.keys():
 		if not valid_params.has(key):
-			_fail("osc() unknown parameter '%s' at line %d col %d. Valid: %s" % [key, name_token.line, name_token.col, ", ".join(param_order)])
+			var msg := "osc() unknown parameter '%s' %s. Valid: %s" % [key, _format_coords(name_token), ", ".join(param_order)]
+			_record_diagnostic("P003", msg, name_token)
+			return {}
 	var resolved := {}
 	for i in range(param_order.size()):
 		var pname: String = param_order[i]
@@ -175,7 +189,7 @@ func _transform_osc(call: Dictionary, name_token) -> Dictionary:
 		"speed": resolved.get("speed"),
 		"offset": resolved.get("offset"),
 		"seed": resolved.get("seed"),
-		"loc": {"line": name_token.line, "col": name_token.col},
+		"loc": {"line": _get_token_prop(name_token, "line"), "col": _get_token_prop(name_token, "col")},
 	}
 
 # midi(channel?, mode?, min?, max?, sensitivity?, name:?, id:?, cc:?, nrpn:?, zone:?, members:?)
@@ -186,10 +200,14 @@ func _transform_midi(call: Dictionary, name_token) -> Dictionary:
 	var keyword_only_params := ["name", "id", "cc", "nrpn", "zone", "members"]
 	var valid_params := param_order + keyword_only_params
 	if args.size() > param_order.size():
-		_fail("midi() name, id, cc, nrpn, zone and members are keyword-only at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "midi() name, id, cc, nrpn, zone and members are keyword-only %s" % [_format_coords(name_token)]
+		_record_diagnostic("P003", msg, name_token)
+		return {}
 	for key in kwargs.keys():
 		if not valid_params.has(key):
-			_fail("midi() unknown parameter '%s' at line %d col %d. Valid: %s" % [key, name_token.line, name_token.col, ", ".join(valid_params)])
+			var msg := "midi() unknown parameter '%s' %s. Valid: %s" % [key, _format_coords(name_token), ", ".join(valid_params)]
+			_record_diagnostic("P003", msg, name_token)
+			return {}
 	var defaults := {
 		"mode": {"type": "Member", "path": ["midiMode", "velocity"]},
 		"min": {"type": "Number", "value": 0},
@@ -208,30 +226,44 @@ func _transform_midi(call: Dictionary, name_token) -> Dictionary:
 		elif defaults.has(pname):
 			resolved[pname] = defaults[pname]
 	if pos_cursor < args.size():
-		_fail("midi() has an excess positional argument at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "midi() has an excess positional argument %s" % [_format_coords(name_token)]
+		_record_diagnostic("P003", msg, name_token)
+		return {}
 	if not resolved.has("channel") and not kwargs.has("zone"):
-		_fail("midi() requires 'channel' or 'zone' argument at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "midi() requires 'channel' or 'zone' argument %s" % [_format_coords(name_token)]
+		_record_diagnostic("P003", msg, name_token)
+		return {}
 	if resolved.has("channel") and kwargs.has("zone"):
-		_fail("midi() 'channel' and 'zone' are mutually exclusive at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "midi() 'channel' and 'zone' are mutually exclusive %s" % [_format_coords(name_token)]
+		_record_diagnostic("P003", msg, name_token)
+		return {}
 	if kwargs.has("members") and not kwargs.has("zone"):
-		_fail("midi() 'members' requires 'zone' at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "midi() 'members' requires 'zone' %s" % [_format_coords(name_token)]
+		_record_diagnostic("P003", msg, name_token)
+		return {}
 	if kwargs.has("id") and not kwargs.has("name"):
-		_fail("midi() 'id' requires readable 'name' at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "midi() 'id' requires readable 'name' %s" % [_format_coords(name_token)]
+		_record_diagnostic("P003", msg, name_token)
+		return {}
 	for pname in ["name", "id"]:
 		if not kwargs.has(pname):
 			continue
 		var value = kwargs[pname]
 		if not (value is Dictionary) or value.get("type") != "String":
-			_fail("midi() '%s' requires a quoted string at line %d col %d" % [pname, name_token.line, name_token.col])
+			var msg := "midi() '%s' requires a quoted string %s" % [pname, _format_coords(name_token)]
+			_record_diagnostic("P003", msg, name_token)
+			return {}
 		elif str(value.get("value", "")).is_empty():
-			_fail("midi() '%s' must not be empty at line %d col %d" % [pname, name_token.line, name_token.col])
+			var msg := "midi() '%s' must not be empty %s" % [pname, _format_coords(name_token)]
+			_record_diagnostic("P003", msg, name_token)
+			return {}
 	var node := {
 		"type": "Midi",
 		"mode": resolved.get("mode"),
 		"min": resolved.get("min"),
 		"max": resolved.get("max"),
 		"sensitivity": resolved.get("sensitivity"),
-		"loc": {"line": name_token.line, "col": name_token.col},
+		"loc": {"line": _get_token_prop(name_token, "line"), "col": _get_token_prop(name_token, "col")},
 	}
 	if resolved.has("channel"):
 		node["channel"] = resolved["channel"]
@@ -248,10 +280,14 @@ func _transform_audio(call: Dictionary, name_token) -> Dictionary:
 	var keyword_only_params := ["channel", "name", "id"]
 	var valid_params := param_order + keyword_only_params
 	if args.size() > param_order.size():
-		_fail("audio() channel, name and id are keyword-only at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "audio() channel, name and id are keyword-only %s" % [_format_coords(name_token)]
+		_record_diagnostic("P003", msg, name_token)
+		return {}
 	for key in kwargs.keys():
 		if not valid_params.has(key):
-			_fail("audio() unknown parameter '%s' at line %d col %d. Valid: %s" % [key, name_token.line, name_token.col, ", ".join(valid_params)])
+			var msg := "audio() unknown parameter '%s' %s. Valid: %s" % [key, _format_coords(name_token), ", ".join(valid_params)]
+			_record_diagnostic("P003", msg, name_token)
+			return {}
 	var defaults := {
 		"min": {"type": "Number", "value": 0},
 		"max": {"type": "Number", "value": 1},
@@ -268,27 +304,39 @@ func _transform_audio(call: Dictionary, name_token) -> Dictionary:
 		elif defaults.has(pname):
 			resolved[pname] = defaults[pname]
 	if pos_cursor < args.size():
-		_fail("audio() has an excess positional argument at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "audio() has an excess positional argument %s" % [_format_coords(name_token)]
+		_record_diagnostic("P003", msg, name_token)
+		return {}
 	if not resolved.has("band") or resolved.get("band") == null:
-		_fail("audio() requires 'band' argument at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "audio() requires 'band' argument %s" % [_format_coords(name_token)]
+		_record_diagnostic("P003", msg, name_token)
+		return {}
 	if kwargs.has("id") and not kwargs.has("name"):
-		_fail("audio() 'id' requires readable 'name' at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "audio() 'id' requires readable 'name' %s" % [_format_coords(name_token)]
+		_record_diagnostic("P003", msg, name_token)
+		return {}
 	if kwargs.has("name") and not kwargs.has("channel"):
-		_fail("audio() selected device requires both 'name' and 'channel' at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "audio() selected device requires both 'name' and 'channel' %s" % [_format_coords(name_token)]
+		_record_diagnostic("P003", msg, name_token)
+		return {}
 	for pname in ["name", "id"]:
 		if not kwargs.has(pname):
 			continue
 		var value = kwargs[pname]
 		if not (value is Dictionary) or value.get("type") != "String":
-			_fail("audio() '%s' requires a quoted string at line %d col %d" % [pname, name_token.line, name_token.col])
+			var msg := "audio() '%s' requires a quoted string %s" % [pname, _format_coords(name_token)]
+			_record_diagnostic("P003", msg, name_token)
+			return {}
 		elif str(value.get("value", "")).is_empty():
-			_fail("audio() '%s' must not be empty at line %d col %d" % [pname, name_token.line, name_token.col])
+			var msg := "audio() '%s' must not be empty %s" % [pname, _format_coords(name_token)]
+			_record_diagnostic("P003", msg, name_token)
+			return {}
 	var node := {
 		"type": "Audio",
 		"band": resolved.get("band"),
 		"min": resolved.get("min"),
 		"max": resolved.get("max"),
-		"loc": {"line": name_token.line, "col": name_token.col},
+		"loc": {"line": _get_token_prop(name_token, "line"), "col": _get_token_prop(name_token, "col")},
 	}
 	for pname in keyword_only_params:
 		if kwargs.has(pname):
@@ -379,7 +427,9 @@ func _parse_program() -> Dictionary:
 		if _peek().type == "SEARCH":
 			if plans.size() or vars.size() or render:
 				var t = _peek()
-				_fail("'search' directive must appear before other statements at line %d col %d" % [t.line, t.col])
+				var msg := "'search' directive must appear before other statements %s" % [_format_coords(t)]
+				_record_diagnostic("P004", msg, t)
+				break
 			_parse_search_directive()
 			continue
 		if _peek().type == "RENDER":
@@ -406,9 +456,11 @@ func _parse_program() -> Dictionary:
 		while _peek().type == "SEMICOLON":
 			_advance()
 
-	_expect("EOF", "Expected end of input")
-	if programSearchOrder == null or programSearchOrder.size() == 0:
-		_fail("Missing required 'search' directive. Every program must start with 'search <namespace>, ...' to specify namespace search order.")
+	if not _err:
+		var eof = _expect("EOF", "Expected end of input")
+		if programSearchOrder == null or programSearchOrder.size() == 0:
+			var msg := "Missing required 'search' directive. Every program must start with 'search <namespace>, ...' to specify namespace search order."
+			_record_diagnostic("P004", msg, eof)
 
 	var program := {"type": "Program", "plans": plans, "render": render}
 	if vars.size():
@@ -427,22 +479,32 @@ func _parse_program() -> Dictionary:
 func _parse_search_directive() -> void:
 	if programSearchOrder != null:
 		var t = _peek()
-		_fail("Only one search directive is allowed per program at line %d col %d" % [t.line, t.col])
+		var msg := "Only one search directive is allowed per program %s" % [_format_coords(t)]
+		_record_diagnostic("P004", msg, t)
+		return
 	_advance()  # consume 'search'
 	var namespaces: Array = []
 	var first = _peek()
 	if not NAMESPACE_TOKENS.has(first.type):
-		_fail("Expected namespace identifier after search at line %d col %d" % [first.line, first.col])
+		var msg := "Expected namespace identifier after search %s" % [_format_coords(first)]
+		_record_diagnostic("P004", msg, first)
+		return
 	_advance()
 	_validate_namespace(first)
+	if _err:
+		return
 	namespaces.push_back(first.lexeme)
-	while _peek().type == "COMMA":
+	while _peek().type == "COMMA" and not _err:
 		_advance()
 		var ns_token = _peek()
 		if not NAMESPACE_TOKENS.has(ns_token.type):
-			_fail("Expected namespace identifier after comma at line %d col %d" % [ns_token.line, ns_token.col])
+			var msg := "Expected namespace identifier after comma %s" % [_format_coords(ns_token)]
+			_record_diagnostic("P004", msg, ns_token)
+			return
 		_advance()
 		_validate_namespace(ns_token)
+		if _err:
+			return
 		namespaces.push_back(ns_token.lexeme)
 	programSearchOrder = namespaces
 	var imports: Array = []
@@ -456,7 +518,8 @@ func _parse_search_directive() -> void:
 func _validate_namespace(token) -> void:
 	var ns: String = token.lexeme
 	if not Tags.is_valid_namespace(ns):
-		_fail("Invalid namespace '%s' at line %d col %d. Valid namespaces: %s" % [ns, token.line, token.col, ", ".join(Tags.VALID_NAMESPACES)])
+		var msg := "Invalid namespace '%s' %s. Valid namespaces: %s" % [ns, _format_coords(token), ", ".join(Tags.VALID_NAMESPACES)]
+		_record_diagnostic("P004", msg, token)
 
 func _parse_block() -> Array:
 	_expect("LBRACE", "Expect '{'")
@@ -474,7 +537,8 @@ func _parse_statement():
 		return null
 	if _peek().type == "SEARCH":
 		var t = _peek()
-		_fail("'search' directive is only allowed at the start of the program at line %d col %d" % [t.line, t.col])
+		var msg := "'search' directive is only allowed at the start of the program %s" % [_format_coords(t)]
+		_record_diagnostic("P004", msg, t)
 		return null
 	if _peek().type == "LET":
 		_advance()

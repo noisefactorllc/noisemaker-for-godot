@@ -706,6 +706,95 @@ class CompilerAutomationTests(unittest.TestCase):
                 self.assertEqual(diag["location"], case["location"])
                 self.assertEqual(diag["span"], case["span"])
 
+    def test_structured_parser_automation_diagnostics(self):
+        cases = [
+            ("osc(type: oscKind.sine, bogus: 1)", "osc() unknown parameter 'bogus'", ". Valid: type, min, max, speed, offset, seed"),
+            ("midi(1, 2, 3, 4, 5, 6)", "midi() name, id, cc, nrpn, zone and members are keyword-only", ""),
+            ("midi(bogus: 1)", "midi() unknown parameter 'bogus'", ". Valid: channel, mode, min, max, sensitivity, name, id, cc, nrpn, zone, members"),
+            ("midi(1, 2, 3, 4, 5, channel: 1)", "midi() has an excess positional argument", ""),
+            ("midi()", "midi() requires 'channel' or 'zone' argument", ""),
+            ("midi(1, zone: 1)", "midi() 'channel' and 'zone' are mutually exclusive", ""),
+            ("midi(1, members: 2)", "midi() 'members' requires 'zone'", ""),
+            ("midi(1, id: \"port\")", "midi() 'id' requires readable 'name'", ""),
+            ("midi(1, name: 1)", "midi() 'name' requires a quoted string", ""),
+            ("midi(1, name: \"\")", "midi() 'name' must not be empty", ""),
+            ("midi(1, name: \"port\", id: 1)", "midi() 'id' requires a quoted string", ""),
+            ("midi(1, name: \"port\", id: \"\")", "midi() 'id' must not be empty", ""),
+            ("audio(1, 2, 3, 4)", "audio() channel, name and id are keyword-only", ""),
+            ("audio(bogus: 1)", "audio() unknown parameter 'bogus'", ". Valid: band, min, max, channel, name, id"),
+            ("audio(1, 2, 3, band: 1)", "audio() has an excess positional argument", ""),
+            ("audio()", "audio() requires 'band' argument", ""),
+            ("audio(1, id: \"device\")", "audio() 'id' requires readable 'name'", ""),
+            ("audio(1, name: \"device\")", "audio() selected device requires both 'name' and 'channel'", ""),
+            ("audio(1, channel: 1, name: 1)", "audio() 'name' requires a quoted string", ""),
+            ("audio(1, channel: 1, name: \"\")", "audio() 'name' must not be empty", ""),
+            ("audio(1, channel: 1, name: \"device\", id: 1)", "audio() 'id' requires a quoted string", ""),
+            ("audio(1, channel: 1, name: \"device\", id: \"\")", "audio() 'id' must not be empty", ""),
+        ]
+        programs = {}
+        expected_meta = []
+        for idx, (inv, prefix, suffix) in enumerate(cases):
+            key = f"auto_{idx}.dsl"
+            programs[key] = f"search synth\nlet x = {inv}"
+            msg = f"{prefix} at line 2 col 9{suffix}"
+            expected_meta.append((msg, {"line": 2, "column": 9}))
+
+        key_crlf = "auto_crlf.dsl"
+        programs[key_crlf] = 'search synth\r\n\tlet x = "😀"; let y = midi()'
+        expected_meta.append(("midi() requires 'channel' or 'zone' argument at line 2 col 24", {"line": 2, "column": 24}))
+
+        for dump_script in ("_parse_dump.gd", "_validate_dump.gd"):
+            dumped = self._dump(dump_script, programs)
+            for idx in range(len(cases)):
+                key = f"auto_{idx}.dsl"
+                exp_msg, exp_loc = expected_meta[idx]
+                res = dumped[key]
+                self.assertFalse(res["ok"], f"Expected {cases[idx][0]} to fail in {dump_script}")
+                self.assertEqual(res["error"], exp_msg)
+                diag = res["diagnostic"]
+                self.assertEqual(diag["code"], "P003")
+                self.assertEqual(diag["stage"], "parser")
+                self.assertEqual(diag["severity"], "error")
+                self.assertEqual(diag["message"], exp_msg)
+                self.assertEqual(diag["location"], exp_loc)
+                self.assertEqual(diag["span"], None)
+            res_crlf = dumped[key_crlf]
+            self.assertFalse(res_crlf["ok"])
+            exp_msg_crlf, exp_loc_crlf = expected_meta[-1]
+            self.assertEqual(res_crlf["error"], exp_msg_crlf)
+            self.assertEqual(res_crlf["diagnostic"]["code"], "P003")
+            self.assertEqual(res_crlf["diagnostic"]["location"], exp_loc_crlf)
+
+    def test_structured_parser_search_diagnostics(self):
+        missing_msg = "Missing required 'search' directive. Every program must start with 'search <namespace>, ...' to specify namespace search order."
+        cases = [
+            ("empty program", "", missing_msg, 1, 1),
+            ("missing directive after statements", "let x = 1", missing_msg, 1, 10),
+            ("duplicate directive", "search synth search filter", "Only one search directive is allowed per program at line 1 col 14", 1, 14),
+            ("invalid namespace", "search bogus", "Invalid namespace 'bogus' at line 1 col 8. Valid namespaces: io, classicNoisedeck, synth, mixer, filter, render, points, synth3d, filter3d, user", 1, 8),
+            ("missing first namespace", "search", "Expected namespace identifier after search at line 1 col 7", 1, 7),
+            ("missing additional namespace", "search synth,", "Expected namespace identifier after comma at line 1 col 14", 1, 14),
+            ("misplaced directive", "let x = 1; search synth", "'search' directive must appear before other statements at line 1 col 12", 1, 12),
+            ("nested directive", "search synth\nif(true) { search filter }", "'search' directive is only allowed at the start of the program at line 2 col 12", 2, 12),
+            ("CRLF and tab", "// 😀\r\n\tsearch 1", "Expected namespace identifier after search at line 2 col 9", 2, 9),
+            ("UTF-16 column", 'search synth\nlet x = "😀"; search filter', "'search' directive must appear before other statements at line 2 col 15", 2, 15),
+        ]
+        programs = {f"search_{idx}.dsl": src for idx, (_, src, _, _, _) in enumerate(cases)}
+        for dump_script in ("_parse_dump.gd", "_validate_dump.gd"):
+            dumped = self._dump(dump_script, programs)
+            for idx, (name, _, msg, line, col) in enumerate(cases):
+                key = f"search_{idx}.dsl"
+                res = dumped[key]
+                self.assertFalse(res["ok"], f"Expected {name} to fail in {dump_script}")
+                self.assertEqual(res["error"], msg)
+                diag = res["diagnostic"]
+                self.assertEqual(diag["code"], "P004")
+                self.assertEqual(diag["stage"], "parser")
+                self.assertEqual(diag["severity"], "error")
+                self.assertEqual(diag["message"], msg)
+                self.assertEqual(diag["location"], {"line": line, "column": col})
+                self.assertEqual(diag["span"], None)
+
 
 if __name__ == "__main__":
     unittest.main()

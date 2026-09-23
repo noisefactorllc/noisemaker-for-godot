@@ -72,6 +72,27 @@ func _init() -> void:
 	_expect(p3.last_diagnostic["code"] == "P001"
 		and p3.last_diagnostic["location"] == null
 		and p3.last_diagnostic["span"] == null, "parser.diag-unlocated")
+	var p4 = Parser.new()
+	p4.parse_tokens(Lexer.lex("search synth\nlet x = midi()"))
+	_expect(p4.last_diagnostic["code"] == "P003" and p4.last_diagnostic["stage"] == "parser"
+		and p4.last_diagnostic["severity"] == "error"
+		and p4.last_diagnostic["message"] == "midi() requires 'channel' or 'zone' argument at line 2 col 9"
+		and p4.last_diagnostic["location"] == {"line": 2, "column": 9}
+		and p4.last_diagnostic["span"] == null, "parser.diag-p003")
+	var p5 = Parser.new()
+	p5.parse_tokens(Lexer.lex("search bogus"))
+	_expect(p5.last_diagnostic["code"] == "P004" and p5.last_diagnostic["stage"] == "parser"
+		and p5.last_diagnostic["severity"] == "error"
+		and p5.last_diagnostic["message"] == "Invalid namespace 'bogus' at line 1 col 8. Valid namespaces: io, classicNoisedeck, synth, mixer, filter, render, points, synth3d, filter3d, user"
+		and p5.last_diagnostic["location"] == {"line": 1, "column": 8}
+		and p5.last_diagnostic["span"] == null, "parser.diag-p004")
+	var p6 = Parser.new()
+	p6.parse_tokens(Lexer.lex(""))
+	_expect(p6.last_diagnostic["code"] == "P004" and p6.last_diagnostic["stage"] == "parser"
+		and p6.last_diagnostic["severity"] == "error"
+		and p6.last_diagnostic["message"] == "Missing required 'search' directive. Every program must start with 'search <namespace>, ...' to specify namespace search order."
+		and p6.last_diagnostic["location"] == {"line": 1, "column": 1}
+		and p6.last_diagnostic["span"] == null, "parser.diag-p004-missing")
 
 	# Validator._push_diag column preservation
 	var v_probe = load("res://addons/noisemaker/compiler/lang/validator.gd").new(null)
