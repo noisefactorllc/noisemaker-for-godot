@@ -21,6 +21,9 @@ func _init() -> void:
 			continue
 		var p := Parser.new()
 		var ast = p.parse_tokens(toks)
+		if p.last_diagnostic != null:
+			out[f] = {"ok": false, "error": p.last_error, "diagnostic": p.last_diagnostic}
+			continue
 		var v := Validator.new(reg)
 		var res = v.validate(ast)
 		out[f] = {"ok": not p._err, "out": res}

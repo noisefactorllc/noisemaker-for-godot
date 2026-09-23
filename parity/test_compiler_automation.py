@@ -587,6 +587,125 @@ class CompilerAutomationTests(unittest.TestCase):
         ]
         self.assertEqual(dumped, expected)
 
+    def test_structured_parser_expectation_diagnostics(self):
+        cases = [
+            {
+                "name": "opening parenthesis",
+                "source": "search synth\nrender o0",
+                "code": "P001",
+                "stage": "parser",
+                "severity": "error",
+                "message": "Expect '(' at line 2 col 8",
+                "location": {"line": 2, "column": 8},
+                "span": None,
+            },
+            {
+                "name": "closing parenthesis at EOF",
+                "source": "search synth\nrender(o0",
+                "code": "P002",
+                "stage": "parser",
+                "severity": "error",
+                "message": "Expect ')' at line 2 col 10",
+                "location": {"line": 2, "column": 10},
+                "span": None,
+            },
+            {
+                "name": "identifier",
+                "source": "search synth\nlet = 1",
+                "code": "P001",
+                "stage": "parser",
+                "severity": "error",
+                "message": "Expected identifier at line 2 col 5",
+                "location": {"line": 2, "column": 5},
+                "span": None,
+            },
+            {
+                "name": "assignment sign",
+                "source": "search synth\nlet x 1",
+                "code": "P001",
+                "stage": "parser",
+                "severity": "error",
+                "message": "Expect '=' at line 2 col 7",
+                "location": {"line": 2, "column": 7},
+                "span": None,
+            },
+            {
+                "name": "block opening",
+                "source": "search synth\nif(true) return 1",
+                "code": "P001",
+                "stage": "parser",
+                "severity": "error",
+                "message": "Expect '{' at line 2 col 10",
+                "location": {"line": 2, "column": 10},
+                "span": None,
+            },
+            {
+                "name": "end of input",
+                "source": "search synth\nrender(o0) xyz",
+                "code": "P001",
+                "stage": "parser",
+                "severity": "error",
+                "message": "Expected end of input at line 2 col 12",
+                "location": {"line": 2, "column": 12},
+                "span": None,
+            },
+            {
+                "name": "call closing parenthesis",
+                "source": "search synth\nfoo(1",
+                "code": "P002",
+                "stage": "parser",
+                "severity": "error",
+                "message": "Expect ')' at line 2 col 6",
+                "location": {"line": 2, "column": 6},
+                "span": None,
+            },
+            {
+                "name": "write3d separator",
+                "source": "search synth\nfoo().write3d(tex3d0 geo0)",
+                "code": "P001",
+                "stage": "parser",
+                "severity": "error",
+                "message": "Expect ',' between tex3d and geo in write3d() at line 2 col 22",
+                "location": {"line": 2, "column": 22},
+                "span": None,
+            },
+            {
+                "name": "CRLF and tab",
+                "source": "// 😀\r\nsearch synth\r\n\trender(o0",
+                "code": "P002",
+                "stage": "parser",
+                "severity": "error",
+                "message": "Expect ')' at line 3 col 11",
+                "location": {"line": 3, "column": 11},
+                "span": None,
+            },
+            {
+                "name": "UTF-16 column",
+                "source": 'search synth\nlet x = "😀"; render o0',
+                "code": "P001",
+                "stage": "parser",
+                "severity": "error",
+                "message": "Expect '(' at line 2 col 22",
+                "location": {"line": 2, "column": 22},
+                "span": None,
+            },
+        ]
+        programs = {f"case_{idx}.dsl": case["source"] for idx, case in enumerate(cases)}
+        for dump_script in ("_parse_dump.gd", "_validate_dump.gd"):
+            dumped = self._dump(dump_script, programs)
+            for idx, case in enumerate(cases):
+                key = f"case_{idx}.dsl"
+                res = dumped[key]
+                self.assertFalse(res["ok"], f"Expected {case['name']} to fail in {dump_script}")
+                self.assertEqual(res["error"], case["message"])
+                diag = res["diagnostic"]
+                self.assertEqual(diag["code"], case["code"])
+                self.assertEqual(diag["stage"], case["stage"])
+                self.assertEqual(diag["severity"], case["severity"])
+                self.assertEqual(diag["message"], case["message"])
+                self.assertEqual(diag["location"], case["location"])
+                self.assertEqual(diag["span"], case["span"])
+
 
 if __name__ == "__main__":
     unittest.main()

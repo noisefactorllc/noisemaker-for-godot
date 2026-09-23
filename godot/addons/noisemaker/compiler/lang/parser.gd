@@ -20,6 +20,7 @@ extends RefCounted
 
 const Token := preload("res://addons/noisemaker/compiler/lang/token.gd")
 const Tags := preload("res://addons/noisemaker/compiler/lang/tags.gd")
+const Diagnostics := preload("res://addons/noisemaker/compiler/lang/diagnostics.gd")
 
 # Token types that can begin an expression (reference exprStartTokens).
 const EXPR_START := [
@@ -48,6 +49,17 @@ var current: int
 var _err: bool
 var programSearchOrder            # null until a search directive is parsed
 var programNamespace: Dictionary  # {imports:[], default:null}
+var last_diagnostic = null
+var last_error: String = ""
+
+static var _last_diagnostic = null
+static var _last_error: String = ""
+
+static func get_last_diagnostic():
+	return _last_diagnostic
+
+static func get_last_error() -> String:
+	return _last_error
 
 # ---------------------------------------------------------------- entry
 
@@ -55,11 +67,24 @@ func parse_tokens(toks: Array) -> Dictionary:
 	tokens = toks
 	current = 0
 	_err = false
+	last_diagnostic = null
+	last_error = ""
+	_last_diagnostic = null
+	_last_error = ""
 	programSearchOrder = null
 	programNamespace = {"imports": [], "default": null}
 	return _parse_program()
 
 # ---------------------------------------------------------------- token cursor
+
+static func _get_token_prop(tok, prop: String, default_val = null):
+	if tok == null:
+		return default_val
+	if typeof(tok) == TYPE_DICTIONARY:
+		return tok.get(prop, default_val)
+	if prop in tok:
+		return tok.get(prop)
+	return default_val
 
 func _peek():
 	return tokens[current] if current < tokens.size() else tokens[tokens.size() - 1]
@@ -70,16 +95,36 @@ func _advance():
 	return t
 
 func _type_at(i: int) -> String:
-	return tokens[i].type if (i >= 0 and i < tokens.size()) else ""
+	return _get_token_prop(tokens[i], "type", "") if (i >= 0 and i < tokens.size()) else ""
 
 func _tok(i: int):
 	return tokens[i] if (i >= 0 and i < tokens.size()) else null
 
 func _expect(type: String, msg: String):
 	var token = _peek()
-	if token.type == type:
+	var t_type: String = _get_token_prop(token, "type", "")
+	if t_type == type:
 		return _advance()
-	_fail("%s at line %d col %d" % [msg, token.line, token.col])
+	var code := "P002" if type == "RPAREN" else "P001"
+	var t_line = _get_token_prop(token, "line", null)
+	var t_col = _get_token_prop(token, "col", null)
+	var err_msg := "%s at line %s col %s" % [msg, str(t_line) if t_line != null else "undefined", str(t_col) if t_col != null else "undefined"]
+	var has_location: bool = ((typeof(t_line) == TYPE_INT or (typeof(t_line) == TYPE_FLOAT and floor(t_line) == t_line)) and t_line > 0
+		and (typeof(t_col) == TYPE_INT or (typeof(t_col) == TYPE_FLOAT and floor(t_col) == t_col)) and t_col > 0)
+	var diag := {
+		"code": code,
+		"stage": Diagnostics.stage(code),
+		"severity": Diagnostics.severity(code),
+		"message": err_msg,
+		"location": {"line": int(t_line), "column": int(t_col)} if has_location else null,
+		"span": null,
+	}
+	if last_diagnostic == null:
+		last_diagnostic = diag
+		last_error = err_msg
+		_last_diagnostic = diag
+		_last_error = err_msg
+	_fail(err_msg)
 	return token
 
 func _fail(msg: String) -> void:

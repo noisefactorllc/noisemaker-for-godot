@@ -12,8 +12,14 @@ func _init() -> void:
 	for f in OS.get_cmdline_user_args():
 		var src := FileAccess.get_file_as_string(f)
 		var toks := Lexer.lex(src)
+		if Lexer.last_diagnostic != null:
+			out[f] = {"ok": false, "error": Lexer.last_error, "diagnostic": Lexer.last_diagnostic}
+			continue
 		var p := Parser.new()
 		var ast = p.parse_tokens(toks)
+		if p.last_diagnostic != null:
+			out[f] = {"ok": false, "error": p.last_error, "diagnostic": p.last_diagnostic}
+			continue
 		out[f] = {"ok": not p._err, "ast": ast}
 	print("PARSEDUMP:", JSON.stringify(out))
 	quit(0)

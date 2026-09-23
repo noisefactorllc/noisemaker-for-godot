@@ -7,6 +7,7 @@ extends SceneTree
 const Token = preload("res://addons/noisemaker/compiler/lang/token.gd")
 const Lexer = preload("res://addons/noisemaker/compiler/lang/lexer.gd")
 const Ast = preload("res://addons/noisemaker/compiler/lang/ast.gd")
+const Parser = preload("res://addons/noisemaker/compiler/lang/parser.gd")
 const Diagnostics = preload("res://addons/noisemaker/compiler/lang/diagnostics.gd")
 const EnumPaths = preload("res://addons/noisemaker/compiler/lang/enum_paths.gd")
 const Enums = preload("res://addons/noisemaker/compiler/lang/enums.gd")
@@ -43,6 +44,34 @@ func _init() -> void:
 	_expect(Lexer.last_diagnostic["code"] == "L004" and Lexer.last_diagnostic["location"] == {"line": 2, "column": 8} and Lexer.last_diagnostic["span"] == {"start": 20, "end": 23}, "lexer.diag-output-ref-range")
 	Lexer.lex("\"😀\" @")
 	_expect(Lexer.last_diagnostic["code"] == "L001" and Lexer.last_diagnostic["location"] == {"line": 1, "column": 6} and Lexer.last_diagnostic["span"] == {"start": 5, "end": 6}, "lexer.diag-astral-span")
+
+	# Parser structured diagnostics
+	var p1 = Parser.new()
+	p1.parse_tokens(Lexer.lex("search synth\nrender o0"))
+	_expect(p1.last_diagnostic["code"] == "P001" and p1.last_diagnostic["stage"] == "parser"
+		and p1.last_diagnostic["severity"] == "error"
+		and p1.last_diagnostic["message"] == "Expect '(' at line 2 col 8"
+		and p1.last_diagnostic["location"] == {"line": 2, "column": 8}
+		and p1.last_diagnostic["span"] == null, "parser.diag-p001")
+	var p2 = Parser.new()
+	p2.parse_tokens(Lexer.lex("search synth\nrender(o0"))
+	_expect(p2.last_diagnostic["code"] == "P002" and p2.last_diagnostic["stage"] == "parser"
+		and p2.last_diagnostic["severity"] == "error"
+		and p2.last_diagnostic["message"] == "Expect ')' at line 2 col 10"
+		and p2.last_diagnostic["location"] == {"line": 2, "column": 10}
+		and p2.last_diagnostic["span"] == null, "parser.diag-p002")
+	var p3 = Parser.new()
+	var mock_tokens = [
+		{"type": "SEARCH", "lexeme": "search", "line": 1, "col": 1},
+		{"type": "IDENT", "lexeme": "synth", "line": 1, "col": 8},
+		{"type": "RENDER", "lexeme": "render", "line": 2, "col": 1},
+		{"type": "OUTPUT_REF", "lexeme": "o0"},
+		{"type": "EOF", "lexeme": "", "line": 2, "col": 10},
+	]
+	p3.parse_tokens(mock_tokens)
+	_expect(p3.last_diagnostic["code"] == "P001"
+		and p3.last_diagnostic["location"] == null
+		and p3.last_diagnostic["span"] == null, "parser.diag-unlocated")
 
 	# Validator._push_diag column preservation
 	var v_probe = load("res://addons/noisemaker/compiler/lang/validator.gd").new(null)
