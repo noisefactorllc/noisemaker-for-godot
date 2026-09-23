@@ -5,6 +5,8 @@
 
 # Noisemaker for Godot
 
+Current audit findings and acceptance criteria: [Completion gaps](docs/COMPLETION_GAPS.md).
+
 > Run **Noisemaker**'s procedural visuals inside **Godot 4**.
 
 > This package supports the "Export Shader Pipeline" feature in Noisedeck.app. The
