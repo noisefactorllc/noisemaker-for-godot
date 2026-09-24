@@ -30,6 +30,22 @@ The existing workflow only matches addon, export-kit, license, and workflow path
 These document changes do not dispatch CI, deploy a site, publish a package, create a tag, or move an alias.
 The shared audit result records the publication commit and remote file hashes.
 
+Daily review date: 2026-09-24 UTC. Review ID: `review-20260924-044918`.
+The review checked worker result `20260923-godot-05`, including failed checks, retries, and unavailable workflows.
+The earlier measurements remain evidence for their recorded revisions.
+
+| Review source | Revision |
+| --- | --- |
+| Current local and remote `main` | `6335960ea16d7a1231355eafe5086ad3c73afd58` |
+| Current published Godot kit | `0.1.17`, same source SHA |
+| Latest upstream checkpoint named by the port | `5b81e04f8a4b53c2be43b8e328cee0c3365f352f` |
+| Upstream head observed during review | `cc1ba2687f9a10d8aa8488323d155a5e0fccc338` |
+| Published shader runtime observed during review | `1.0.175`, source `5b81e04f8a4b53c2be43b8e328cee0c3365f352f` |
+
+Later source changes affect parser diagnostics, output deferral, and two classicNoisedeck shaders.
+The export scene, playback instructions, and graph orchestrator remain unchanged.
+This review does not qualify all upstream changes after the audit authority.
+
 ## 2. Completion claims
 
 | Claim ID | Claim source | Claimed scope | Finding | Evidence |
@@ -41,7 +57,8 @@ The shared audit result records the publication commit and remote file hashes.
 | C-005 | Addon README, troubleshooting | Developers receive useful errors and can recover | partial | Missing-device error explains recovery. Invalid effect reports a missing surface. Corrected DSL renders successfully. |
 | C-006 | Addon README, integration | Useful Godot scripting integration | partial | Public compiler, renderer, and `ImageTexture` path work. Cleanup reports resource warnings. Editor interaction remains unverified. |
 | C-007 | Export kit workflow and artifact | Release readiness | partial | Exact-source release succeeds. All 882 file hashes match. Rebuild inventory matches. CI does not run Godot behavior or pixel comparisons. |
-| C-008 | README and STATUS platform limits | Apple Silicon qualification | partial | GPU checks pass on M2, Metal, and Godot 4.7.2. Other platforms and the 4.7 floor remain unverified. |
+| C-008 | README and STATUS platform limits | Apple Silicon qualification | partial | Audit checks cover M2 and Godot 4.7.2. Review checks cover bounded M4 workflows on Godot 4.7. Other platforms remain unverified. |
+| C-009 | Root README, Install | Standalone addon distribution | contradicted | The instructed addon copy omits license notices. The export kit includes both notices. See GAP-008. |
 
 ## 3. Methods and evidence
 
@@ -115,22 +132,64 @@ Official ecosystem references, checked on 2026-09-23:
 - [Godot 4.7 compute shaders](https://docs.godotengine.org/en/4.7/tutorials/shaders/compute_shaders.html) describes RenderingDevice integration and supported renderers.
 - [Godot 4.7 system requirements](https://docs.godotengine.org/en/4.7/about/system_requirements.html) defines the host qualification baseline.
 
+The daily review retained evidence under `review-20260924-044918` in the same automation store.
+All 71 recorded evidence hashes matched. All 985 historical source hashes matched Git objects at the worker's source SHA.
+The review read raw compiler, runtime, installation, recovery, batch, and CI logs. It also checked the changed document against source.
+
+Review environment: macOS 26.5, arm64, Apple M4, Metal 4.0, Forward+, Godot `4.7.stable.official.5b4e0cb0f`.
+The review used the installed Godot executable without changing its installation.
+The existing scene observer and consumer probe ran against isolated kit copies.
+The copies matched all 882 entries in each version's manifest before execution.
+For kit 0.1.17, nine changed files came from immutable URLs. Other bytes matched the retained artifact and current manifest.
+Fresh responses also matched `main.gd`, `README.template.md`, and `project.godot`.
+This verifies the reconstructed candidate. It does not repeat every remote file download or the current build.
+
+| Review check | Result and evidence |
+| --- | --- |
+| Current source tests | `GODOT=/Applications/Godot.app/Contents/MacOS/Godot python3 -m unittest discover -s parity -p 'test_*.py' -v`: exit 0, 68/68 pass, no skips. `current-unit.log`. |
+| Installed kits 0.1.16 and 0.1.17 | Existing `kit-observe.gd`: exit 0, colored 512×512 output, unchanged texture across 120 process frames. `kit-observe-floor.log`, `current-kit-observe.log`. |
+| Current public API | Existing `consumer-api.gd`: exit 0, three samples per case, seed changes, 64×32 and 128×64 textures. Resource warnings remain. `current-consumer-api.log`. |
+| Current invalid input and recovery | Existing installed renderer: unknown effect exits 1 with missing-surface error and no image. Corrected DSL exits 0. `invalid-current.log`, `recovery-current.log`. |
+| Current missing device | Same renderer under `--headless`: exit 1 with `RD_NULL` recovery instruction. `no-device-current.log`. |
+| Retained pixel evidence | Existing comparator reproduces both passes and the perspective-point failure. No reference images changed. `runtime-checks.json`. |
+| Current perspective points | Kit 0.1.17 renders against the retained audit reference. Maximum difference 243.000, mean 0.7198, SSIM 0.99776. Comparator exits 1. `points-current-report.json`. |
+| Standalone addon notices | Documented copy includes no license filenames or complete MIT notice text. `addon-distribution.json`. |
+
+The current perspective comparison retains authority `893a9a558ad9fc1c8ae7b9849aa3b530cbc10d94`, time 0.25, and 256×256 dimensions.
+It does not measure parity against the latest upstream head.
+The review did not repeat full compiler comparisons, full catalog pixels, editor interaction, upgrades, removal, or other operating systems.
+External media remain outside the documented contract. Audio and MIDI claims still require explicit acceptance boundaries.
+
+[Current source CI 35951202302](https://github.com/noisefactorllc/noisemaker-for-godot/actions/runs/35951202302) passed for `6335960ea16d7a1231355eafe5086ad3c73afd58`.
+[Current release CI 35951211347](https://github.com/noisefactorllc/scaffold/actions/runs/35951211347) identifies that source and passes 99 builder tests.
+These jobs still do not execute Godot behavior or pixel comparisons.
+The review checked both earlier CI records and their retained logs. Their packaging success does not close GAP-006.
+
+The review checked the official Godot 4.7 references again on 2026-09-24.
+The official macOS download remains 4.7.2. Local floor checks cover only the stated M4 workflows.
+[Godot's resource guidance](https://docs.godotengine.org/en/4.7/tutorials/shaders/compute_shaders.html#freeing-memory) requires explicit RID cleanup.
+The observed warnings therefore remain relevant to normal host integration. They do not establish long-term memory growth.
+
 ## 4. Known gaps
 
 P1 means false completion or a major correctness gap. P2 means missing coverage or integration. P3 means documentation inconsistency.
-Every gap below was last checked on 2026-09-23. No gaps closed during this pass.
+The worker checked GAP-001 through GAP-007 on 2026-09-23.
+The reviewer checked all entries on 2026-09-24, with the coverage limits in section 3. No gaps closed.
 
 ### GAP-001: Published project does not implement documented playback
 
 - Status: open. Priority: P1. Category: implementation.
-- Scope: `export-kit/kit/main.gd`, its README template, and published kit 0.1.16.
+- Scope: `export-kit/kit/main.gd`, its README template, and published kits 0.1.16 and 0.1.17.
 - Expected: The exported project plays sampled animation and exposes the documented frame controls.
 - Observed: The project creates one image. It has no playback loop or the documented frame constants.
 - Evidence: `kit-observe.log` records identical texture hashes across 120 frames. Published source matches the local rebuild.
+- Review evidence: `current-kit-observe.log` reproduces static output on Godot 4.7. The unchanged scene still calls `render_samples(graph, 1, 1)`.
 - Next action: Define the intended existing export behavior. Correct the mismatch in the separate implementation job.
 - Dependencies: Preserve the current kit and reproduction. Do not expand the effect checkpoint.
 - Acceptance: A temporal program visibly evolves as documented. Every documented control exists and changes its stated behavior.
 - Required checks: Install the resulting artifact. Exercise Play, ordinary parameter edits, stateful evolution, cancellation, and recovery.
+- Executable check: `$GODOT --path "$KIT" --script "$WORKER/kit-observe.gd" --position 5000,5000 -- "$OUT/first.png"`.
+- Pass condition: Use a known temporal fixture. Require differing displayed frames and functioning `FRAMES`, `SAMPLE_EVERY`, and `PLAYBACK_FPS` controls.
 
 ### GAP-002: Rendered parity retains unresolved failures
 
@@ -139,11 +198,14 @@ Every gap below was last checked on 2026-09-23. No gaps closed during this pass.
 - Expected: Claimed parity satisfies the existing thresholds for the identified source and workload.
 - Observed: Perspective points fail the independent current-authority comparison with maximum difference 243.
 - Evidence: `differential/heightGrid_pointsRender_perspective.report.json`. The retained alpha row reports SSIM approximately 0.00001239.
+- Review evidence: Recomputed retained metrics agree. Kit 0.1.17 also fails against that reference with maximum difference 243.000.
 - Limit: Current standalone alpha and the 99-program prefix pass. They do not resolve the historical full-batch failure.
 - Next action: Preserve the failing point images. Diagnose differing pixels before attributing them to harmless numerical variation.
 - Dependencies: Identify the original reference snapshot and full batch order before evaluating the historical alpha failure.
 - Acceptance: Both failures pass their existing gates under source-bound reproductions, including standalone and full-order execution.
 - Required checks: Run the existing comparator with tolerance 2.001 and SSIM minimum 0.98. Preserve rejected cases and raw images.
+- Executable check: `python3 parity/compare.py "$GOLDEN" "$CANDIDATE" --tolerance 2.001 --ssim-min 0.98 --report "$OUT/report.json"`.
+- Pass condition: Exit 0 with both thresholds satisfied. A high SSIM alone cannot excuse the failing maximum difference.
 
 ### GAP-003: Backend teardown leaves GPU resources allocated
 
@@ -152,6 +214,7 @@ Every gap below was last checked on 2026-09-23. No gaps closed during this pass.
 - Expected: A developer can release backend-owned GPU resources while following a documented ownership contract.
 - Observed: `close()` closes sinks but does not release backend GPU handles. Freeing the device then reports resource leaks.
 - Evidence: `consumer-api.log` reports pipeline, uniform-set, buffer, shader, sampler, and texture warnings after `close()` and `rd.free()`.
+- Review evidence: `current-consumer-api.log` reproduces warnings with kit 0.1.17 on the Godot 4.7 floor.
 - Limit: The audit did not measure long-term memory growth. Device destruction ends the probe's resource lifetime.
 - Next action: Define backend and device ownership. Reproduce repeated creation, rendering, resize, and disposal with resource accounting.
 - Dependencies: Preserve output-sink and asynchronous export semantics.
@@ -165,6 +228,7 @@ Every gap below was last checked on 2026-09-23. No gaps closed during this pass.
 - Expected: Invalid DSL identifies the offending effect and location before rendering starts.
 - Observed: `notAnEffect()` reaches rendering and reports only a missing output surface.
 - Evidence: `invalid.log`, exit 1, no PNG. `recovery.log` records valid DSL success through the same installed renderer.
+- Review evidence: `invalid-current.log` and `recovery-current.log` reproduce both results with kit 0.1.17.
 - Cause evidence: `build_graph()` obtains validation diagnostics but does not expose or reject them before expansion.
 - Next action: Preserve the failing input. Trace diagnostic propagation through the public compiler and host entry points.
 - Dependencies: Preserve the structured lexer and validator contracts already covered by tests.
@@ -178,13 +242,14 @@ Every gap below was last checked on 2026-09-23. No gaps closed during this pass.
 - Expected: Completion evidence covers the stated modes, inputs, workflows, and host versions.
 - Observed: Three current pixel probes and a batch prefix do not qualify the catalog. Historical image provenance is incomplete.
 - Evidence: `checks.json`, `source-hashes.json`, `gui-blocker.json`, the retained ledger, and section 3.
-- Blockers: Historical source-bound images are unavailable. The Mac lock prevents editor interaction. Other host platforms are unavailable.
+- Blockers: Historical source-bound images and other host platforms remain unavailable. The worker's Mac lock prevented editor interaction.
+- Review limit: The reviewer did not repeat editor interaction. Bounded Godot 4.7 floor checks do not qualify the full host workflow.
 - Additional limit: Expansion differs in eight pass-define cases. Normalized graphs match, so these differences do not alone prove rendering defects.
 - Next action: Define accepted expansion differences. Recover historical image provenance. Qualify the current landscape filtering modes and representative stateful chains.
 - Dependencies: GAP-001 through GAP-004 define required behavior checks.
 - Acceptance: Evidence binds candidate, reference, inputs, time, seed, dimensions, exclusions, and thresholds to exact source revisions.
 - Required checks: Run public installation, Play, parameter edits, error recovery, keyboard access, upgrade, and removal on each supported host.
-- Packaging checks: Include required notices in the addon-only distribution. Test a packaged Godot game when the supported contract includes it.
+- Packaging checks: Resolve the standalone notice omission under GAP-008. Test a packaged Godot game when the supported contract includes it.
 - Editor evidence: `editor.log` contains repeated `ShaderFile` thread-access errors. The Mac lock prevents checks of their user impact.
 
 ### GAP-006: Release CI does not qualify Godot behavior
@@ -194,6 +259,7 @@ Every gap below was last checked on 2026-09-23. No gaps closed during this pass.
 - Expected: Release evidence identifies which runtime and parity requirements passed for the shipped source.
 - Observed: Both exact-source jobs pass, but their checks validate packaging rather than Godot execution or rendered parity.
 - Evidence: Source run `35810075402`, release run `35810082616`, and retained logs.
+- Review evidence: Source run `35951202302` and release run `35951211347` still qualify packaging only.
 - Next action: Define release acceptance through the existing systems. Keep package integrity, runtime correctness, and human usability separate.
 - Dependencies: GAP-001 through GAP-005. This audit does not authorize workflow changes.
 - Acceptance: The release record includes exact-source compiler and runtime results, platform limits, and unresolved parity failures.
@@ -212,16 +278,40 @@ Every gap below was last checked on 2026-09-23. No gaps closed during this pass.
 - Acceptance: Current summaries agree with the supported contract and explicitly retain failures, exclusions, and unavailable qualification.
 - Required checks: Cross-check every numerical claim against its source-bound evidence. Do not convert compiler passes into pixel-parity claims.
 
+### GAP-008: Documented standalone addon copy omits license notices
+
+- Status: open. Priority: P1. Category: release.
+- Scope: Root README installation steps and `godot/addons/noisemaker/`. The complete export kit is not affected.
+- Expected: The documented standalone distribution carries the required notices with the copied code.
+- Observed: The copied addon contains no license files or complete MIT notice text. The root license remains outside the instructed copy.
+- Evidence: `addon-distribution.json`, the root `LICENSE`, and the README installation steps at `6335960ea16d7a1231355eafe5086ad3c73afd58`.
+- Next action: Include the port and upstream notices in the standalone distribution through the separate implementation job.
+- Dependencies: Establish the copied directory as the distribution boundary. Preserve the export kit's existing `LICENSES/` entries.
+- Acceptance: A fresh installation contains both complete notices and produces the documented texture without repository files outside the addon.
+- Required checks: Copy the documented addon into an empty project. Compare each installed notice with its source text.
+- Executable check: `cmp LICENSE "$ADDON/LICENSE"` for the port notice. Use the same byte comparison for the identified upstream notice.
+- Runtime check: Execute the documented first render in that project. Require a nonempty texture and no missing dependencies.
+- Last verification: 2026-09-24. The review confirmed the notice omission. The corrected distribution does not yet exist.
+
 ## 5. Ordered next actions
 
-1. Preserve this source checkpoint, the published kit, and all raw evidence before implementation.
-2. Resolve GAP-001's playback contract in `main.gd` and its template. Require real temporal output from the installed artifact.
-3. Diagnose GAP-002 with the existing comparator and retained failing images. Recover full-order evidence before closing the alpha failure.
-4. Define ownership under GAP-003. Require warning-free repeated lifecycle checks and unchanged frame-export behavior.
-5. Trace GAP-004 through the public compiler. Require actionable errors and successful recovery from the same installed artifact.
-6. Resolve GAP-005's evidence dependencies. Qualify modes, stateful chains, editor operation, notices, upgrades, and supported hosts.
-7. Define GAP-006's acceptance through existing CI. Preserve failures and platform exclusions in the release record.
-8. Correct GAP-007's current summaries after the supported behavior is clear. Preserve historical status evidence.
+1. Preserve both source checkpoints, immutable kit manifests, raw images, and the worker's authority before implementation.
+2. Resolve GAP-001 in `export-kit/kit/main.gd` and its template. Execute the scene observer with a temporal fixture.
+   Require changing displayed frames and working documented controls. Then check cancellation and recovery from the installed artifact.
+3. Diagnose GAP-002 using the retained failing point images and the comparator command above. Require both existing thresholds.
+   Recover the historical reference and full execution order before evaluating the separate alpha failure.
+4. Correct GAP-008's standalone distribution independently of playback work. Require exact notice comparisons and the isolated first render.
+5. Define ownership under GAP-003. Repeat `consumer-api.gd` across creation, resize, rendering, and disposal.
+   Require no leaked-handle warnings or growing retained counts. Preserve frame-export cancellation and the existing runtime tests.
+6. Trace GAP-004 through `compiler/graph/orchestrator.gd` and both public entry points.
+   Require an unknown-effect diagnostic before rendering. Then require successful output from corrected DSL in the same installation.
+7. Resolve GAP-005's evidence dependencies after the behavior checks. Qualify filtering modes, stateful chains, editor operation, upgrades, and supported hosts.
+8. Define GAP-006's acceptance through existing CI after required behavior and distribution checks. Preserve failures and platform exclusions.
+9. Correct GAP-007's current summaries after the supported behavior is clear. Preserve historical status evidence.
+
+`KIT` identifies the installed candidate. `WORKER` identifies `evidence-20260923-godot-05` in the automation store.
+`OUT` identifies an isolated evidence directory. `ADDON` identifies the installed standalone addon.
+`GOLDEN` and `CANDIDATE` identify the preserved reference and candidate PNGs.
 
 These actions specify acceptance work. They do not authorize new effect ports or advancement beyond the current parity checkpoint.
 
@@ -230,6 +320,7 @@ These actions specify acceptance work. They do not authorize new effect ports or
 | Date | Source | Changes and evidence | Remaining limits |
 | --- | --- | --- | --- |
 | 2026-09-23 | `bbb2d0179c6e991bdeb2efba7ea733baae027f36` | Created this register and README link. Ran 66 tests, compiler gates, three differential probes, batch prefix, and installed-artifact checks. | Seven gaps remain. No completion approval. Full historical parity, editor interaction, additional platforms, upgrades, and removal remain unqualified. |
+| 2026-09-24 | `6335960ea16d7a1231355eafe5086ad3c73afd58` | Reviewed all available worker results. Passed 68 current tests. Reproduced playback, pixel, lifecycle, and diagnostic findings. Added GAP-008 and executable acceptance checks. | Eight gaps remain. No verified closures. Full compiler comparisons, latest-authority pixels, editor workflows, other platforms, upgrades, and removal remain unqualified. |
 
 The audit preserved implementation, tests, generators, fixtures, tolerances, workflows, and historical documents.
 It verified source identity before document publication. The shared result records remote publication verification.
