@@ -843,6 +843,62 @@ class CompilerAutomationTests(unittest.TestCase):
                 self.assertEqual(res["error"], msg)
                 self.assertEqual(res["diagnostic"]["code"], code)
 
+    def test_subchain_diagnostics_p006(self):
+        cases = [
+            ("non-string subchain name kwarg", "search synth\nnoise().subchain(name: 123) { .noise() }.write(o0)", "Expected string value for subchain name at line 2 col 24", 2, 24),
+            ("non-string subchain id kwarg", "search synth\nnoise().subchain(id: 456) { .noise() }.write(o0)", "Expected string value for subchain id at line 2 col 22", 2, 22),
+            ("subchain arg value at EOF", "search synth\nnoise().subchain(name: ", "Expected string value for subchain name at line 2 col 24", 2, 24),
+            ("missing dot before subchain element", 'search synth\nnoise().subchain("test") { noise() }.write(o0)', "Expected '.' before chain element in subchain body at line 2 col 28", 2, 28),
+            ("empty subchain body", 'search synth\nnoise().subchain("test") {}.write(o0)', "Subchain body cannot be empty at line 2 col 9", 2, 9),
+            ("comment-only subchain body", 'search synth\nnoise().subchain("test") {\n  /* empty */\n}.write(o0)', "Subchain body cannot be empty at line 2 col 9", 2, 9),
+            ("CRLF and tab subchain kwarg", "// 😀\r\nsearch synth\r\n\tnoise().subchain(name: 123) { .noise() }.write(o0)", "Expected string value for subchain name at line 3 col 25", 3, 25),
+            ("UTF-16 subchain missing dot column", 'search synth\nlet x = "😀"; noise().subchain("test") { noise() }.write(o0)', "Expected '.' before chain element in subchain body at line 2 col 42", 2, 42),
+        ]
+        programs = {f"subchain_{idx}.dsl": src for idx, (_, src, _, _, _) in enumerate(cases)}
+        for dump_script in ("_parse_dump.gd", "_validate_dump.gd"):
+            dumped = self._dump(dump_script, programs)
+            for idx, (name, _, msg, line, col) in enumerate(cases):
+                key = f"subchain_{idx}.dsl"
+                res = dumped[key]
+                self.assertFalse(res["ok"], f"Expected {name} to fail in {dump_script}")
+                self.assertEqual(res["error"], msg)
+                diag = res["diagnostic"]
+                self.assertEqual(diag["code"], "P006")
+                self.assertEqual(diag["stage"], "parser")
+                self.assertEqual(diag["severity"], "error")
+                self.assertEqual(diag["message"], msg)
+                self.assertEqual(diag["location"], {"line": line, "column": col})
+                self.assertEqual(diag["span"], None)
+
+    def test_subchain_expectation_precedence(self):
+        cases = [
+            ("missing lparen after subchain", 'search synth\nnoise().subchain "test" { .noise() }.write(o0)', "P001", "Expect '(' after subchain at line 2 col 18"),
+            ("non-string positional subchain arg", "search synth\nnoise().subchain(1) {}", "P002", "Expect ')' after subchain arguments at line 2 col 18"),
+            ("missing lbrace for subchain body", 'search synth\nnoise().subchain("test") .noise().write(o0)', "P001", "Expect '{' to start subchain body at line 2 col 26"),
+            ("trailing dot in subchain body", 'search synth\nnoise().subchain("test") { . }', "P001", "Expected identifier at line 2 col 30"),
+        ]
+        programs = {f"subchain_prec_{idx}.dsl": src for idx, (_, src, _, _) in enumerate(cases)}
+        for dump_script in ("_parse_dump.gd", "_validate_dump.gd"):
+            dumped = self._dump(dump_script, programs)
+            for idx, (name, _, code, msg) in enumerate(cases):
+                res = dumped[f"subchain_prec_{idx}.dsl"]
+                self.assertFalse(res["ok"], f"Expected {name} to fail in {dump_script}")
+                self.assertEqual(res["error"], msg)
+                self.assertEqual(res["diagnostic"]["code"], code)
+
+    def test_valid_subchains_compile(self):
+        cases = [
+            ("empty args", "search synth\nnoise().subchain() { .noise() }.write(o0)\nrender(o0)"),
+            ("positional name", 'search synth\nnoise().subchain("loop") { .noise() }.write(o0)\nrender(o0)'),
+            ("keyword args", 'search synth\nnoise().subchain(name: "loop", id: "sc1") { .noise() }.write(o0)\nrender(o0)'),
+        ]
+        programs = {f"valid_subchain_{idx}.dsl": src for idx, (_, src) in enumerate(cases)}
+        for dump_script in ("_parse_dump.gd", "_validate_dump.gd"):
+            dumped = self._dump(dump_script, programs)
+            for idx, (name, _) in enumerate(cases):
+                res = dumped[f"valid_subchain_{idx}.dsl"]
+                self.assertTrue(res["ok"], f"Expected {name} to succeed in {dump_script}: {res.get('error')}")
+
 
 if __name__ == "__main__":
     unittest.main()

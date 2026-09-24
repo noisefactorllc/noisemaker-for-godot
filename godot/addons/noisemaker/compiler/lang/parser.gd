@@ -633,6 +633,8 @@ func _parse_chain(context: String = "statement") -> Array:
 			continue
 		if next_type == "SUBCHAIN":
 			var subchain_node = _parse_subchain_call()
+			if _err:
+				return calls
 			if all_comments.size() > 0:
 				subchain_node["leadingComments"] = all_comments
 			calls.push_back(subchain_node)
@@ -724,10 +726,13 @@ func _parse_write_call() -> Dictionary:
 
 # subchain(name?, id?) { .effect1() .effect2() } -> Subchain node.
 func _parse_subchain_call() -> Dictionary:
-	var token_line: int = _peek().line
-	var token_col: int = _peek().col
+	var name_token = _peek()
+	var token_line = _get_token_prop(name_token, "line", null)
+	var token_col = _get_token_prop(name_token, "col", null)
 	_advance()  # consume 'subchain'
 	_expect("LPAREN", "Expect '(' after subchain")
+	if _err:
+		return {}
 	var kwargs := {}
 	if _peek().type != "RPAREN":
 		if _peek().type == "STRING":
@@ -737,33 +742,47 @@ func _parse_subchain_call() -> Dictionary:
 				var key = _advance().lexeme
 				_advance()  # consume ':'
 				if _peek().type != "STRING":
-					_fail("Expected string value for subchain %s at line %d col %d" % [key, _peek().line, _peek().col])
-					break
+					var t = _peek()
+					var msg := "Expected string value for subchain %s %s" % [key, _format_coords(t)]
+					_record_diagnostic("P006", msg, t)
+					return {}
 				kwargs[key] = {"type": "String", "value": _advance().lexeme}
 				if _peek().type == "COMMA":
 					_advance()
 	_expect("RPAREN", "Expect ')' after subchain arguments")
+	if _err:
+		return {}
 	_expect("LBRACE", "Expect '{' to start subchain body")
+	if _err:
+		return {}
 	var body: Array = []
 	while _peek().type != "RBRACE" and not _err:
 		var leading_comments := _collect_comments()
 		if _peek().type == "RBRACE":
 			break
 		if _peek().type != "DOT":
-			_fail("Expected '.' before chain element in subchain body at line %d col %d" % [_peek().line, _peek().col])
-			break
+			var t = _peek()
+			var msg := "Expected '.' before chain element in subchain body %s" % [_format_coords(t)]
+			_record_diagnostic("P006", msg, t)
+			return {}
 		_advance()  # consume '.'
 		var post_dot_comments := _collect_comments()
 		var all_comments: Array = []
 		all_comments.append_array(leading_comments)
 		all_comments.append_array(post_dot_comments)
 		var call = _parse_call()
+		if _err:
+			return {}
 		if all_comments.size() > 0:
 			call["leadingComments"] = all_comments
 		body.push_back(call)
 	_expect("RBRACE", "Expect '}' to end subchain body")
+	if _err:
+		return {}
 	if body.size() == 0:
-		_fail("Subchain body cannot be empty at line %d col %d" % [token_line, token_col])
+		var msg := "Subchain body cannot be empty %s" % [_format_coords(name_token)]
+		_record_diagnostic("P006", msg, name_token)
+		return {}
 	return {
 		"type": "Subchain",
 		"name": (kwargs["name"]["value"] if kwargs.has("name") else null),

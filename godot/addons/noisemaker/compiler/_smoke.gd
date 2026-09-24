@@ -34,6 +34,7 @@ func _init() -> void:
 	_expect(d2["severity"] == "warning" and d2["message"] == "Deprecated parameter alias" and not d2.has("line"), "diag.make-min")
 	_expect(Diagnostics.stage("L001") == "lexer" and Diagnostics.stage("L003") == "lexer" and Diagnostics.stage("L004") == "lexer", "diag.lexer-stage")
 	_expect(Diagnostics.stage("P005") == "parser" and Diagnostics.default_message("P005") == "Invalid output operation", "diag.p005-meta")
+	_expect(Diagnostics.stage("P006") == "parser" and Diagnostics.default_message("P006") == "Invalid subchain", "diag.p006-meta")
 	_expect(Diagnostics.default_message("L003") == "Unterminated comment" and Diagnostics.default_message("L004") == "Output surface reference out of range", "diag.lexer-messages")
 
 	# Lexer structured diagnostics
@@ -129,6 +130,46 @@ func _init() -> void:
 	_expect(p10.last_diagnostic["code"] == "P005"
 		and p10.last_diagnostic["location"] == null
 		and p10.last_diagnostic["span"] == null, "parser.diag-p005-unlocated")
+	var p11 = Parser.new()
+	p11.parse_tokens(Lexer.lex("search synth\nnoise().subchain(name: 1) { .noise() }"))
+	_expect(p11.last_diagnostic["code"] == "P006" and p11.last_diagnostic["stage"] == "parser"
+		and p11.last_diagnostic["severity"] == "error"
+		and p11.last_diagnostic["message"] == "Expected string value for subchain name at line 2 col 24"
+		and p11.last_diagnostic["location"] == {"line": 2, "column": 24}
+		and p11.last_diagnostic["span"] == null, "parser.diag-p006-arg-type")
+	var p12 = Parser.new()
+	p12.parse_tokens(Lexer.lex("search synth\nnoise().subchain(\"test\") { noise() }"))
+	_expect(p12.last_diagnostic["code"] == "P006" and p12.last_diagnostic["stage"] == "parser"
+		and p12.last_diagnostic["severity"] == "error"
+		and p12.last_diagnostic["message"] == "Expected '.' before chain element in subchain body at line 2 col 28"
+		and p12.last_diagnostic["location"] == {"line": 2, "column": 28}
+		and p12.last_diagnostic["span"] == null, "parser.diag-p006-missing-dot")
+	var p13 = Parser.new()
+	p13.parse_tokens(Lexer.lex("search synth\nnoise().subchain(\"test\") {}"))
+	_expect(p13.last_diagnostic["code"] == "P006" and p13.last_diagnostic["stage"] == "parser"
+		and p13.last_diagnostic["severity"] == "error"
+		and p13.last_diagnostic["message"] == "Subchain body cannot be empty at line 2 col 9"
+		and p13.last_diagnostic["location"] == {"line": 2, "column": 9}
+		and p13.last_diagnostic["span"] == null, "parser.diag-p006-empty-body")
+	var p14 = Parser.new()
+	var mock_tokens_p006 = [
+		{"type": "SEARCH", "lexeme": "search", "line": 1, "col": 1},
+		{"type": "IDENT", "lexeme": "synth", "line": 1, "col": 8},
+		{"type": "IDENT", "lexeme": "noise", "line": 2, "col": 1},
+		{"type": "LPAREN", "lexeme": "(", "line": 2, "col": 6},
+		{"type": "RPAREN", "lexeme": ")", "line": 2, "col": 7},
+		{"type": "DOT", "lexeme": ".", "line": 2, "col": 8},
+		{"type": "SUBCHAIN", "lexeme": "subchain"},
+		{"type": "LPAREN", "lexeme": "(", "line": 2, "col": 17},
+		{"type": "RPAREN", "lexeme": ")", "line": 2, "col": 18},
+		{"type": "LBRACE", "lexeme": "{", "line": 2, "col": 20},
+		{"type": "RBRACE", "lexeme": "}", "line": 2, "col": 21},
+		{"type": "EOF", "lexeme": "", "line": 2, "col": 22},
+	]
+	p14.parse_tokens(mock_tokens_p006)
+	_expect(p14.last_diagnostic["code"] == "P006"
+		and p14.last_diagnostic["location"] == null
+		and p14.last_diagnostic["span"] == null, "parser.diag-p006-unlocated")
 
 	# Validator._push_diag column preservation
 	var v_probe = load("res://addons/noisemaker/compiler/lang/validator.gd").new(null)
