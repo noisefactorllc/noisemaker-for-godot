@@ -33,6 +33,7 @@ func _init() -> void:
 	var d2 = Diagnostics.make("S007")
 	_expect(d2["severity"] == "warning" and d2["message"] == "Deprecated parameter alias" and not d2.has("line"), "diag.make-min")
 	_expect(Diagnostics.stage("L001") == "lexer" and Diagnostics.stage("L003") == "lexer" and Diagnostics.stage("L004") == "lexer", "diag.lexer-stage")
+	_expect(Diagnostics.stage("P005") == "parser" and Diagnostics.default_message("P005") == "Invalid output operation", "diag.p005-meta")
 	_expect(Diagnostics.default_message("L003") == "Unterminated comment" and Diagnostics.default_message("L004") == "Output surface reference out of range", "diag.lexer-messages")
 
 	# Lexer structured diagnostics
@@ -93,6 +94,41 @@ func _init() -> void:
 		and p6.last_diagnostic["message"] == "Missing required 'search' directive. Every program must start with 'search <namespace>, ...' to specify namespace search order."
 		and p6.last_diagnostic["location"] == {"line": 1, "column": 1}
 		and p6.last_diagnostic["span"] == null, "parser.diag-p004-missing")
+	var p7 = Parser.new()
+	p7.parse_tokens(Lexer.lex("search synth\nrender(1)"))
+	_expect(p7.last_diagnostic["code"] == "P005" and p7.last_diagnostic["stage"] == "parser"
+		and p7.last_diagnostic["severity"] == "error"
+		and p7.last_diagnostic["message"] == "Expected output reference in render()"
+		and p7.last_diagnostic["location"] == {"line": 2, "column": 8}
+		and p7.last_diagnostic["span"] == null, "parser.diag-p005-render")
+	var p8 = Parser.new()
+	p8.parse_tokens(Lexer.lex("search synth\nlet x = foo().write(o0)"))
+	_expect(p8.last_diagnostic["code"] == "P005" and p8.last_diagnostic["stage"] == "parser"
+		and p8.last_diagnostic["severity"] == "error"
+		and p8.last_diagnostic["message"] == "'.write()' is only allowed in statement context at line 2 col 15"
+		and p8.last_diagnostic["location"] == {"line": 2, "column": 15}
+		and p8.last_diagnostic["span"] == null, "parser.diag-p005-write-expr")
+	var p9 = Parser.new()
+	p9.parse_tokens(Lexer.lex("search synth\nfoo().write()"))
+	_expect(p9.last_diagnostic["code"] == "P005" and p9.last_diagnostic["stage"] == "parser"
+		and p9.last_diagnostic["severity"] == "error"
+		and p9.last_diagnostic["message"] == "write() requires an explicit surface reference (e.g., o0, o1, xyz0, vel0, rgba0, mesh0, none) at line 2 col 13"
+		and p9.last_diagnostic["location"] == {"line": 2, "column": 13}
+		and p9.last_diagnostic["span"] == null, "parser.diag-p005-write-surface")
+	var p10 = Parser.new()
+	var mock_tokens_p005 = [
+		{"type": "SEARCH", "lexeme": "search", "line": 1, "col": 1},
+		{"type": "IDENT", "lexeme": "synth", "line": 1, "col": 8},
+		{"type": "RENDER", "lexeme": "render", "line": 2, "col": 1},
+		{"type": "LPAREN", "lexeme": "(", "line": 2, "col": 7},
+		{"type": "NUMBER", "lexeme": "1"},
+		{"type": "RPAREN", "lexeme": ")", "line": 2, "col": 9},
+		{"type": "EOF", "lexeme": "", "line": 2, "col": 10},
+	]
+	p10.parse_tokens(mock_tokens_p005)
+	_expect(p10.last_diagnostic["code"] == "P005"
+		and p10.last_diagnostic["location"] == null
+		and p10.last_diagnostic["span"] == null, "parser.diag-p005-unlocated")
 
 	# Validator._push_diag column preservation
 	var v_probe = load("res://addons/noisemaker/compiler/lang/validator.gd").new(null)

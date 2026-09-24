@@ -795,6 +795,54 @@ class CompilerAutomationTests(unittest.TestCase):
                 self.assertEqual(diag["location"], {"line": line, "column": col})
                 self.assertEqual(diag["span"], None)
 
+    def test_structured_parser_output_diagnostics(self):
+        cases = [
+            ("invalid render target", "search synth\nrender(1)", "Expected output reference in render()", 2, 8),
+            ("render target at EOF", "search synth\nrender(", "Expected output reference in render()", 2, 8),
+            ("write in expression", "search synth\nlet x = noise().write(o0)", "'.write()' is only allowed in statement context at line 2 col 17", 2, 17),
+            ("write3d in expression", "search synth\nlet x = noise().write3d(vol0, geo0)", "'.write()' is only allowed in statement context at line 2 col 17", 2, 17),
+            ("missing write surface", "search synth\nnoise().write()", "write() requires an explicit surface reference (e.g., o0, o1, xyz0, vel0, rgba0, mesh0, none) at line 2 col 15", 2, 15),
+            ("write surface at EOF", "search synth\nnoise().write(", "write() requires an explicit surface reference (e.g., o0, o1, xyz0, vel0, rgba0, mesh0, none) at line 2 col 15", 2, 15),
+            ("invalid write surface", "search synth\nnoise().write(1)", "write() requires an explicit surface reference (e.g., o0, o1, xyz0, vel0, rgba0, mesh0, none) at line 2 col 15", 2, 15),
+            ("invalid write3d texture", "search synth\nnoise().write3d(1, geo0)", "Expected tex3d reference in write3d() at line 2 col 17", 2, 17),
+            ("write3d texture at EOF", "search synth\nnoise().write3d(", "Expected tex3d reference in write3d() at line 2 col 17", 2, 17),
+            ("invalid write3d geometry", "search synth\nnoise().write3d(vol0, 1)", "Expected geo reference in write3d() at line 2 col 23", 2, 23),
+            ("write3d geometry at EOF", "search synth\nnoise().write3d(vol0,", "Expected geo reference in write3d() at line 2 col 22", 2, 22),
+            ("CRLF and tab render target", "// 😀\r\nsearch synth\r\n\trender(\"😀\")", "Expected output reference in render()", 3, 9),
+            ("UTF-16 render target column", 'search synth\nlet x = "😀"; render(none)', "Expected output reference in render()", 2, 22),
+        ]
+        programs = {f"output_{idx}.dsl": src for idx, (_, src, _, _, _) in enumerate(cases)}
+        for dump_script in ("_parse_dump.gd", "_validate_dump.gd"):
+            dumped = self._dump(dump_script, programs)
+            for idx, (name, _, msg, line, col) in enumerate(cases):
+                key = f"output_{idx}.dsl"
+                res = dumped[key]
+                self.assertFalse(res["ok"], f"Expected {name} to fail in {dump_script}")
+                self.assertEqual(res["error"], msg)
+                diag = res["diagnostic"]
+                self.assertEqual(diag["code"], "P005")
+                self.assertEqual(diag["stage"], "parser")
+                self.assertEqual(diag["severity"], "error")
+                self.assertEqual(diag["message"], msg)
+                self.assertEqual(diag["location"], {"line": line, "column": col})
+                self.assertEqual(diag["span"], None)
+
+    def test_output_expectation_precedence(self):
+        cases = [
+            ("search synth\nrender o0", "P001", "Expect '(' at line 2 col 8"),
+            ("search synth\nrender(o0", "P002", "Expect ')' at line 2 col 10"),
+            ("search synth\nnoise().write(o0", "P002", "Expect ')' at line 2 col 17"),
+            ("search synth\nnoise().write3d(vol0 geo0)", "P001", "Expect ',' between tex3d and geo in write3d() at line 2 col 22"),
+        ]
+        programs = {f"prec_{idx}.dsl": src for idx, (src, _, _) in enumerate(cases)}
+        for dump_script in ("_parse_dump.gd", "_validate_dump.gd"):
+            dumped = self._dump(dump_script, programs)
+            for idx, (_, code, msg) in enumerate(cases):
+                res = dumped[f"prec_{idx}.dsl"]
+                self.assertFalse(res["ok"])
+                self.assertEqual(res["error"], msg)
+                self.assertEqual(res["diagnostic"]["code"], code)
+
 
 if __name__ == "__main__":
     unittest.main()

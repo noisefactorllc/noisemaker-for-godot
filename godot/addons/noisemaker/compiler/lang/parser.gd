@@ -404,8 +404,12 @@ func _has_call_after_dot(index: int) -> bool:
 func _parse_render_directive() -> Dictionary:
 	_advance()
 	_expect("LPAREN", "Expect '('")
+	if _err:
+		return {}
 	if _peek().type != "OUTPUT_REF":
-		_fail("Expected output reference in render()")
+		var t = _peek()
+		_record_diagnostic("P005", "Expected output reference in render()", t)
+		return {}
 	var out := {"type": "OutputRef", "name": _advance().lexeme}
 	_expect("RPAREN", "Expect ')'")
 	return out
@@ -437,8 +441,10 @@ func _parse_program() -> Dictionary:
 		if _peek().type == "RENDER":
 			if render:
 				var t = _peek()
-				_fail("Duplicate render() directive at line %d col %d" % [t.line, t.col])
+				_fail("Duplicate render() directive %s" % [_format_coords(t)])
 			render = _parse_render_directive()
+			if _err:
+				break
 			while _peek().type == "SEMICOLON":
 				_advance()
 			if leading_comments.size() > 0 and render:
@@ -615,8 +621,12 @@ func _parse_chain(context: String = "statement") -> Array:
 		if next_type == "WRITE" or next_type == "WRITE3D":
 			if context == "expression":
 				var t = _peek()
-				_fail("'.write()' is only allowed in statement context at line %d col %d" % [t.line, t.col])
+				var msg := "'.write()' is only allowed in statement context %s" % [_format_coords(t)]
+				_record_diagnostic("P005", msg, t)
+				return calls
 			var write_node = _parse_write_call()
+			if _err:
+				return calls
 			if all_comments.size() > 0:
 				write_node["leadingComments"] = all_comments
 			calls.push_back(write_node)
@@ -634,13 +644,16 @@ func _parse_chain(context: String = "statement") -> Array:
 	return calls
 
 func _parse_write_call() -> Dictionary:
-	var token_type: String = _peek().type
-	var token_line: int = _peek().line
-	var token_col: int = _peek().col
+	var write_token = _peek()
+	var token_type: String = _get_token_prop(write_token, "type", "")
+	var token_line = _get_token_prop(write_token, "line", null)
+	var token_col = _get_token_prop(write_token, "col", null)
 
 	if token_type == "WRITE":
 		_advance()  # consume 'write'
 		_expect("LPAREN", "Expect '('")
+		if _err:
+			return {}
 		var surface = null
 		var pt: String = _peek().type
 		if pt == "OUTPUT_REF":
@@ -656,12 +669,19 @@ func _parse_write_call() -> Dictionary:
 		elif pt == "IDENT" and _peek().lexeme == "none":
 			surface = {"type": "OutputRef", "name": _advance().lexeme}
 		else:
-			_fail("write() requires an explicit surface reference (e.g., o0, o1, xyz0, vel0, rgba0, mesh0, none) at line %d col %d" % [_peek().line, _peek().col])
+			var t = _peek()
+			var msg := "write() requires an explicit surface reference (e.g., o0, o1, xyz0, vel0, rgba0, mesh0, none) %s" % [_format_coords(t)]
+			_record_diagnostic("P005", msg, t)
+			return {}
 		_expect("RPAREN", "Expect ')'")
+		if _err:
+			return {}
 		return {"type": "Write", "surface": surface, "loc": {"line": token_line, "col": token_col}}
 	elif token_type == "WRITE3D":
 		_advance()  # consume 'write3d'
 		_expect("LPAREN", "Expect '('")
+		if _err:
+			return {}
 		var tex3d = null
 		var pt: String = _peek().type
 		if pt == "IDENT" or pt == "OUTPUT_REF" or pt == "VOL_REF":
@@ -672,8 +692,13 @@ func _parse_write_call() -> Dictionary:
 			else:
 				tex3d = {"type": "Ident", "name": _advance().lexeme}
 		else:
-			_fail("Expected tex3d reference in write3d() at line %d col %d" % [_peek().line, _peek().col])
+			var t = _peek()
+			var msg := "Expected tex3d reference in write3d() %s" % [_format_coords(t)]
+			_record_diagnostic("P005", msg, t)
+			return {}
 		_expect("COMMA", "Expect ',' between tex3d and geo in write3d()")
+		if _err:
+			return {}
 		var geo = null
 		var pt2: String = _peek().type
 		if pt2 == "IDENT" or pt2 == "OUTPUT_REF" or pt2 == "GEO_REF":
@@ -684,10 +709,17 @@ func _parse_write_call() -> Dictionary:
 			else:
 				geo = {"type": "Ident", "name": _advance().lexeme}
 		else:
-			_fail("Expected geo reference in write3d() at line %d col %d" % [_peek().line, _peek().col])
+			var t2 = _peek()
+			var msg2 := "Expected geo reference in write3d() %s" % [_format_coords(t2)]
+			_record_diagnostic("P005", msg2, t2)
+			return {}
 		_expect("RPAREN", "Expect ')'")
+		if _err:
+			return {}
 		return {"type": "Write3D", "tex3d": tex3d, "geo": geo, "loc": {"line": token_line, "col": token_col}}
-	_fail("Expected write or write3d at line %d col %d" % [token_line, token_col])
+	var t_fallback = _peek()
+	var fallback_msg := "Expected write or write3d %s" % [_format_coords(t_fallback)]
+	_record_diagnostic("P005", fallback_msg, t_fallback)
 	return {}
 
 # subchain(name?, id?) { .effect1() .effect2() } -> Subchain node.

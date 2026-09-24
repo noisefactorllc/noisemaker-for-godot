@@ -20,6 +20,7 @@ const _TABLE := {
 	"P002": ["Expected closing parenthesis", "error", "parser"],
 	"P003": ["Invalid automation arguments", "error", "parser"],
 	"P004": ["Invalid search directive", "error", "parser"],
+	"P005": ["Invalid output operation", "error", "parser"],
 	"S001": ["Unknown identifier", "error", "semantic"],
 	"S002": ["Argument out of range", "warning", "semantic"],
 	"S003": ["Variable used before assignment", "error", "semantic"],
