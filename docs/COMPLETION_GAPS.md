@@ -1,5 +1,7 @@
 # noisemaker-for-godot: completion gaps
 
+Current compatibility matrix: [compatibility report](COMPATIBILITY.md).
+
 ## 1. Scope and source revisions
 
 Audit date: 2026-09-23. Run ID: `20260923-godot-05`.
@@ -170,6 +172,15 @@ The official macOS download remains 4.7.2. Local floor checks cover only the sta
 [Godot's resource guidance](https://docs.godotengine.org/en/4.7/tutorials/shaders/compute_shaders.html#freeing-memory) requires explicit RID cleanup.
 The observed warnings therefore remain relevant to normal host integration. They do not establish long-term memory growth.
 
+### Native observations, 2026-09-24
+
+Godot 4.7, Forward+, Metal 4.0, Apple M4. 2 selected fixtures rendered. Exact comparison: 0 passes and 2 differences.
+The candidate source is the source listed in the [compatibility report](COMPATIBILITY.md#1-source-and-authority-revisions).
+These probes compare retained historical goldens. They do not establish full current-authority parity.
+340 of 342 tracked fixtures did not execute in this bounded pass.
+[Per-case measurements](COMPATIBILITY.md#native-observations-2026-09-24) retain every difference and the unexecuted fixture inventory.
+No gap closes. The next rendered gate must include all missing fixtures and resolve authority provenance without replacing goldens.
+
 ## 4. Known gaps
 
 P1 means false completion or a major correctness gap. P2 means missing coverage or integration. P3 means documentation inconsistency.
@@ -324,3 +335,5 @@ These actions specify acceptance work. They do not authorize new effect ports or
 
 The audit preserved implementation, tests, generators, fixtures, tolerances, workflows, and historical documents.
 It verified source identity before document publication. The shared result records remote publication verification.
+
+2026-09-24 report initialization: added the maintained compatibility report and bounded native measurements. No full-parity closure.

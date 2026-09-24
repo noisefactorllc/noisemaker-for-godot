@@ -5,6 +5,8 @@
 
 # Noisemaker for Godot
 
+Current measured support: [compatibility report](docs/COMPATIBILITY.md).
+
 Current audit findings and acceptance criteria: [Completion gaps](docs/COMPLETION_GAPS.md).
 
 > Run **Noisemaker**'s procedural visuals inside **Godot 4**.
