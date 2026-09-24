@@ -83,6 +83,34 @@ func submit(texture, timestamp: float) -> void:
 		_compact_registrations()
 
 
+func should_defer_render() -> bool:
+	if _closed:
+		return false
+	_iteration_depth += 1
+	var deferred := false
+	for registration in _registrations:
+		if not registration["active"]:
+			continue
+		var sink = registration["sink"]
+		var has_snake: bool = sink is Object and sink.has_method("defer_render")
+		var has_camel: bool = sink is Object and sink.has_method("deferRender")
+		if not (has_snake or has_camel):
+			continue
+		var method_name: String = "defer_render" if has_snake else "deferRender"
+		var result = sink.call(method_name)
+		if result is bool and result:
+			deferred = true
+			break
+	_iteration_depth -= 1
+	if _iteration_depth == 0:
+		_compact_registrations()
+	return deferred
+
+
+func shouldDeferRender() -> bool:
+	return should_defer_render()
+
+
 func close(options := {}) -> void:
 	if _closed:
 		return

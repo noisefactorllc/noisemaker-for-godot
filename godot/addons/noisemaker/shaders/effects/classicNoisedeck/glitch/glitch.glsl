@@ -148,29 +148,31 @@ float offsets(vec2 st) {
 
 vec4 glitch(vec2 st_in, float ar, float timeArg, float xChonkArg, float yChonkArg, float glitchinessArg, float aspectLensArg, float distortionArg, float aberrationArg) {
 	vec2 st = st_in;
-	vec2 freq = vec2(1.0);
-	freq.x = freq.x * map(xChonkArg, 1.0, 100.0, 50.0, 1.0);
-	freq.y = freq.y * map(yChonkArg, 1.0, 100.0, 50.0, 1.0);
+	if (glitchinessArg != 0.0) {
+		vec2 freq = vec2(1.0);
+		freq.x = freq.x * map(xChonkArg, 1.0, 100.0, 50.0, 1.0);
+		freq.y = freq.y * map(yChonkArg, 1.0, 100.0, 50.0, 1.0);
 
-	freq = freq * vec2(periodicFunction(prng(vec3(floor(st * freq), 0.0)).x - timeArg));
+		freq = freq * vec2(periodicFunction(prng(vec3(floor(st * freq), 0.0)).x - timeArg));
 
-	float g = map(glitchinessArg, 0.0, 100.0, 0.0, 1.0);
+		float g = map(glitchinessArg, 0.0, 100.0, 0.0, 1.0);
 
-	// get drift value from somewhere far away
-	float xDrift = prng(vec3(floor(st * freq) + 10.0, 0.0)).x * g;
-	float yDrift = prng(vec3(floor(st * freq) - 10.0, 0.0)).x * g;
+		// get drift value from somewhere far away
+		float xDrift = prng(vec3(floor(st * freq) + 10.0, 0.0)).x * g;
+		float yDrift = prng(vec3(floor(st * freq) - 10.0, 0.0)).x * g;
 
-	float sparseness = map(glitchinessArg, 0.0, 100.0, 8.0, 2.0);
+		float sparseness = map(glitchinessArg, 0.0, 100.0, 8.0, 2.0);
 
-	// clamp for sparseness
-	float rand = prng(vec3(floor(st * freq), 0.0)).x;
-	float xOffset = clamp((periodicFunction(rand + xDrift - timeArg) - periodicFunction(xDrift - timeArg) * sparseness) * 4.0, 0.0, 1.0);
-	float yOffset = clamp((periodicFunction(rand + yDrift - timeArg) - periodicFunction(yDrift - timeArg) * sparseness) * 4.0, 0.0, 1.0);
+		// clamp for sparseness
+		float rand = prng(vec3(floor(st * freq), 0.0)).x;
+		float xOffset = clamp((periodicFunction(rand + xDrift - timeArg) - periodicFunction(xDrift - timeArg) * sparseness) * 4.0, 0.0, 1.0);
+		float yOffset = clamp((periodicFunction(rand + yDrift - timeArg) - periodicFunction(yDrift - timeArg) * sparseness) * 4.0, 0.0, 1.0);
 
-	float refr = g * 0.125;
+		float refr = g * 0.125;
 
-	st.x = mod(st.x + sin(xOffset * GLITCH_TAU) * refr, 1.0);
-	st.y = mod(st.y + sin(yOffset * GLITCH_TAU) * refr, 1.0);
+		st.x = mod(st.x + sin(xOffset * GLITCH_TAU) * refr, 1.0);
+		st.y = mod(st.y + sin(yOffset * GLITCH_TAU) * refr, 1.0);
+	}
 
 	// aberration and lensing
 	vec2 diff = vec2(0.5 - st.x, 0.5 - st.y);
@@ -211,8 +213,12 @@ void main() {
 	vec2 uv = gl_FragCoord.xy / res;
 
 	vec4 color = glitch(uv, ar, time, xChonk, yChonk, glitchiness, aspectLens, distortion, aberration);
-	color = scanlines(color, uv, res, scanlinesAmt, time, int(seed));
-	color = snow(color, gl_FragCoord.xy, snowAmt, time);
+	if (scanlinesAmt != 0.0) {
+		color = scanlines(color, uv, res, scanlinesAmt, time, int(seed));
+	}
+	if (snowAmt != 0.0) {
+		color = snow(color, gl_FragCoord.xy, snowAmt, time);
+	}
 
 	// vignette
 	if (vignetteAmt < 0.0) {

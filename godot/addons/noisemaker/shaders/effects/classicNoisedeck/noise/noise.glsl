@@ -589,7 +589,7 @@ vec3 multires(vec2 st_in, vec2 freq, int oct, float s, float blend) {
 		float nominalBase = nominalFreq.x * 0.5 * multiplier;
 		multiplicand = multiplicand + 1.0 / multiplier;
 
-		if (REFRACT_MODE == 1 || REFRACT_MODE == 2) {
+		if ((REFRACT_MODE == 1 || REFRACT_MODE == 2) && refractAmt != 0.0) {
 			vec2 xRefractFreq = vec2(baseFreq.x, nominalBase);
 			vec2 yRefractFreq = vec2(nominalBase, baseFreq.y);
 			float xRef = value(st, xRefractFreq, s + 10.0 * float(i), blend) - 0.5;
@@ -600,7 +600,7 @@ vec3 multires(vec2 st_in, vec2 freq, int oct, float s, float blend) {
 
 		vec3 layer = generate_octave(st, baseFreq, s + 10.0 * float(i), blend, float(i));
 
-		if (REFRACT_MODE == 0 || REFRACT_MODE == 2) {
+		if ((REFRACT_MODE == 0 || REFRACT_MODE == 2) && refractAmt != 0.0) {
 			float xOff = cos(layer.z) * 0.5 + 0.5;
 			float yOff = sin(layer.z) * 0.5 + 0.5;
 			vec3 refLayer = generate_octave(vec2(st.x + xOff, st.y + yOff), baseFreq, s + 15.0 * float(i), blend, float(i));

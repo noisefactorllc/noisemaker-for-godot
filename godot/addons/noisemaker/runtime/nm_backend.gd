@@ -201,6 +201,14 @@ func add_sink(sink) -> Callable:
 	return sink_manager.add(sink)
 
 
+func should_defer_render() -> bool:
+	return sink_manager.should_defer_render()
+
+
+func shouldDeferRender() -> bool:
+	return should_defer_render()
+
+
 func create_frame_export_queue(options := {}):
 	if _closed or rd == null:
 		push_error("Noisemaker backend must be set up before creating a frame export queue")

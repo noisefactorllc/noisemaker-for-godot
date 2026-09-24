@@ -103,8 +103,10 @@ func _tok(i: int):
 static func _format_coords(token) -> String:
 	var t_line = _get_token_prop(token, "line", null)
 	var t_col = _get_token_prop(token, "col", null)
-	var l_str := str(int(t_line)) if typeof(t_line) == TYPE_INT else (str(t_line) if t_line != null else "undefined")
-	var c_str := str(int(t_col)) if typeof(t_col) == TYPE_INT else (str(t_col) if t_col != null else "undefined")
+	var is_int_line: bool = typeof(t_line) == TYPE_INT or (typeof(t_line) == TYPE_FLOAT and floor(t_line) == t_line and not is_nan(t_line) and not is_inf(t_line))
+	var is_int_col: bool = typeof(t_col) == TYPE_INT or (typeof(t_col) == TYPE_FLOAT and floor(t_col) == t_col and not is_nan(t_col) and not is_inf(t_col))
+	var l_str := str(int(t_line)) if is_int_line else (str(t_line) if t_line != null else "undefined")
+	var c_str := str(int(t_col)) if is_int_col else (str(t_col) if t_col != null else "undefined")
 	return "at line %s col %s" % [l_str, c_str]
 
 func _record_diagnostic(code: String, msg: String, token) -> void:

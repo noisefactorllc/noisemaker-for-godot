@@ -11,6 +11,7 @@ class FakeSink extends RefCounted:
 	var closes := 0
 	var on_submit := Callable()
 	var accept := true
+	var defer := false
 
 	func configure(descriptor: Dictionary) -> void:
 		configured.append(descriptor)
@@ -21,8 +22,20 @@ class FakeSink extends RefCounted:
 			on_submit.call()
 		return accept
 
+	func defer_render() -> bool:
+		return defer
+
 	func close() -> void:
 		closes += 1
+
+
+class FakeCamelSink extends RefCounted:
+	var defer := false
+
+	func configure(_descriptor: Dictionary) -> void: pass
+	func submit(_texture, _timestamp: float) -> bool: return true
+	func deferRender() -> bool: return defer
+	func close() -> void: pass
 
 
 class FakeAdapter extends RefCounted:
@@ -108,6 +121,24 @@ func _test_sink_manager() -> void:
 	manager.close()
 	_expect(first.closes == 1 and second.closes == 1, "removal and manager close are idempotent")
 
+	var defer_manager = SinkManager.new()
+	var deferring_sink := FakeSink.new()
+	var camel_sink := FakeCamelSink.new()
+	_expect(not defer_manager.should_defer_render(), "empty sink manager does not defer")
+	var remove_deferring: Callable = defer_manager.add(deferring_sink)
+	defer_manager.add(camel_sink)
+	_expect(not defer_manager.should_defer_render(), "sinks returning false do not defer")
+	deferring_sink.defer = true
+	_expect(defer_manager.should_defer_render() and defer_manager.shouldDeferRender(), "defer_render returning true defers render")
+	deferring_sink.defer = false
+	camel_sink.defer = true
+	_expect(defer_manager.should_defer_render() and defer_manager.shouldDeferRender(), "deferRender camelCase returning true defers render")
+	remove_deferring.call()
+	camel_sink.defer = false
+	_expect(not defer_manager.should_defer_render(), "cleared sinks do not defer")
+	defer_manager.close()
+	_expect(not defer_manager.should_defer_render(), "closed manager does not defer")
+
 
 func _test_frame_export_queue() -> void:
 	var adapter := FakeAdapter.new()
@@ -159,6 +190,7 @@ func _test_frame_export_queue() -> void:
 func _test_backend_api() -> void:
 	var backend = Backend.new()
 	_expect(backend.has_method("add_sink"), "backend exposes sink registration")
+	_expect(backend.has_method("should_defer_render") and backend.has_method("shouldDeferRender"), "backend exposes sink deferral queries")
 	_expect(backend.has_method("create_frame_export_queue"), "backend exposes asynchronous frame export")
 	_expect(backend.has_method("close"), "backend exposes terminal sink cleanup")
 
