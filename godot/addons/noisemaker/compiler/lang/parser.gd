@@ -47,6 +47,8 @@ const NAMESPACE_TOKENS := [
 var tokens: Array
 var current: int
 var _err: bool
+var options: Dictionary = {}
+var strict_subchain_arguments: bool = false
 var programSearchOrder            # null until a search directive is parsed
 var programNamespace: Dictionary  # {imports:[], default:null}
 var last_diagnostic = null
@@ -63,8 +65,10 @@ static func get_last_error() -> String:
 
 # ---------------------------------------------------------------- entry
 
-func parse_tokens(toks: Array) -> Dictionary:
+func parse_tokens(toks: Array, opts: Dictionary = {}) -> Dictionary:
 	tokens = toks
+	options = opts
+	strict_subchain_arguments = opts.get("subchainArguments") == "strict"
 	current = 0
 	_err = false
 	last_diagnostic = null
@@ -109,20 +113,49 @@ static func _format_coords(token) -> String:
 	var c_str := str(int(t_col)) if is_int_col else (str(t_col) if t_col != null else "undefined")
 	return "at line %s col %s" % [l_str, c_str]
 
-func _record_diagnostic(code: String, msg: String, token) -> void:
+func _record_diagnostic(code: String, msg: String, token, severity_override = null) -> void:
+	var position = null
+	if token != null:
+		if typeof(token) == TYPE_DICTIONARY:
+			position = token.get("position", null)
+		elif "position" in token:
+			position = token.position
+
+	var has_position: bool = false
+	if position is Dictionary:
+		var p_line = position.get("line")
+		var p_col = position.get("column")
+		var p_start = position.get("start")
+		var p_end = position.get("end")
+		var is_int_pline: bool = typeof(p_line) == TYPE_INT or (typeof(p_line) == TYPE_FLOAT and floor(p_line) == p_line and not is_nan(p_line) and not is_inf(p_line))
+		var is_int_pcol: bool = typeof(p_col) == TYPE_INT or (typeof(p_col) == TYPE_FLOAT and floor(p_col) == p_col and not is_nan(p_col) and not is_inf(p_col))
+		var is_int_pstart: bool = typeof(p_start) == TYPE_INT or (typeof(p_start) == TYPE_FLOAT and floor(p_start) == p_start and not is_nan(p_start) and not is_inf(p_start))
+		var is_int_pend: bool = typeof(p_end) == TYPE_INT or (typeof(p_end) == TYPE_FLOAT and floor(p_end) == p_end and not is_nan(p_end) and not is_inf(p_end))
+		if is_int_pline and p_line > 0 and is_int_pcol and p_col > 0 and is_int_pstart and p_start >= 0 and is_int_pend and p_end >= p_start:
+			has_position = true
+
 	var t_line = _get_token_prop(token, "line", null)
 	var t_col = _get_token_prop(token, "col", null)
-	var has_location: bool = (
-		t_line != null and (typeof(t_line) == TYPE_INT or (typeof(t_line) == TYPE_FLOAT and floor(t_line) == t_line and not is_nan(t_line) and not is_inf(t_line))) and t_line > 0
-		and t_col != null and (typeof(t_col) == TYPE_INT or (typeof(t_col) == TYPE_FLOAT and floor(t_col) == t_col and not is_nan(t_col) and not is_inf(t_col))) and t_col > 0
-	)
+	var is_int_tline: bool = typeof(t_line) == TYPE_INT or (typeof(t_line) == TYPE_FLOAT and floor(t_line) == t_line and not is_nan(t_line) and not is_inf(t_line))
+	var is_int_tcol: bool = typeof(t_col) == TYPE_INT or (typeof(t_col) == TYPE_FLOAT and floor(t_col) == t_col and not is_nan(t_col) and not is_inf(t_col))
+	var has_location: bool = is_int_tline and t_line > 0 and is_int_tcol and t_col > 0
+
+	var loc = null
+	var span = null
+	if has_position:
+		loc = {"line": int(position["line"]), "column": int(position["column"])}
+		span = {"start": int(position["start"]), "end": int(position["end"])}
+	elif has_location:
+		loc = {"line": int(t_line), "column": int(t_col)}
+
+	var sev = severity_override if severity_override != null else Diagnostics.severity(code)
 	var diag := {
 		"code": code,
 		"stage": Diagnostics.stage(code),
-		"severity": Diagnostics.severity(code),
+		"severity": sev,
 		"message": msg,
-		"location": {"line": int(t_line), "column": int(t_col)} if has_location else null,
-		"span": null,
+		"location": loc,
+		"span": span,
 	}
 	if last_diagnostic == null:
 		last_diagnostic = diag
@@ -733,6 +766,8 @@ func _parse_write_call() -> Dictionary:
 	_record_diagnostic("P005", fallback_msg, t_fallback)
 	return {}
 
+const SUBCHAIN_KEYS := ["name", "id"]
+
 # subchain(name?, id?) { .effect1() .effect2() } -> Subchain node.
 func _parse_subchain_call() -> Dictionary:
 	var name_token = _peek()
@@ -742,22 +777,81 @@ func _parse_subchain_call() -> Dictionary:
 	_expect("LPAREN", "Expect '(' after subchain")
 	if _err:
 		return {}
+
+	var arg_diagnostics: Array = []
+	var report_arg_issue = func(code: String, message: String, tok) -> void:
+		if strict_subchain_arguments:
+			_record_diagnostic(code, message, tok, "error")
+			return
+		var pos = null
+		if tok != null:
+			if typeof(tok) == TYPE_DICTIONARY:
+				pos = tok.get("position", null)
+			elif "position" in tok:
+				pos = tok.position
+		var has_pos: bool = false
+		if pos is Dictionary:
+			var p_line = pos.get("line")
+			var p_col = pos.get("column")
+			var p_start = pos.get("start")
+			var p_end = pos.get("end")
+			var is_int_pline: bool = typeof(p_line) == TYPE_INT or (typeof(p_line) == TYPE_FLOAT and floor(p_line) == p_line and not is_nan(p_line) and not is_inf(p_line))
+			var is_int_pcol: bool = typeof(p_col) == TYPE_INT or (typeof(p_col) == TYPE_FLOAT and floor(p_col) == p_col and not is_nan(p_col) and not is_inf(p_col))
+			var is_int_pstart: bool = typeof(p_start) == TYPE_INT or (typeof(p_start) == TYPE_FLOAT and floor(p_start) == p_start and not is_nan(p_start) and not is_inf(p_start))
+			var is_int_pend: bool = typeof(p_end) == TYPE_INT or (typeof(p_end) == TYPE_FLOAT and floor(p_end) == p_end and not is_nan(p_end) and not is_inf(p_end))
+			if is_int_pline and p_line > 0 and is_int_pcol and p_col > 0 and is_int_pstart and p_start >= 0 and is_int_pend and p_end >= p_start:
+				has_pos = true
+
+		var t_line = _get_token_prop(tok, "line", null)
+		var t_col = _get_token_prop(tok, "col", null)
+		var is_int_tline: bool = typeof(t_line) == TYPE_INT or (typeof(t_line) == TYPE_FLOAT and floor(t_line) == t_line and not is_nan(t_line) and not is_inf(t_line))
+		var is_int_tcol: bool = typeof(t_col) == TYPE_INT or (typeof(t_col) == TYPE_FLOAT and floor(t_col) == t_col and not is_nan(t_col) and not is_inf(t_col))
+		var has_loc: bool = is_int_tline and t_line > 0 and is_int_tcol and t_col > 0
+
+		var report := {
+			"code": code,
+			"message": message,
+			"severity": Diagnostics.severity(code),
+		}
+		if has_pos:
+			report["location"] = {"line": int(pos["line"]), "column": int(pos["column"])}
+			report["span"] = {"start": int(pos["start"]), "end": int(pos["end"])}
+		elif has_loc:
+			report["location"] = {"line": int(t_line), "column": int(t_col)}
+		arg_diagnostics.push_back(report)
+
 	var kwargs := {}
 	if _peek().type != "RPAREN":
 		if _peek().type == "STRING":
 			kwargs["name"] = {"type": "String", "value": _advance().lexeme}
 		elif _peek().type == "IDENT" and _type_at(current + 1) == "COLON":
 			while _peek().type == "IDENT" and _type_at(current + 1) == "COLON" and not _err:
-				var key = _advance().lexeme
+				var key_token = _advance()
+				var key: String = key_token.lexeme
 				_advance()  # consume ':'
 				if _peek().type != "STRING":
 					var t = _peek()
 					var msg := "Expected string value for subchain %s %s" % [key, _format_coords(t)]
 					_record_diagnostic("P006", msg, t)
 					return {}
-				kwargs[key] = {"type": "String", "value": _advance().lexeme}
+				var val_token = _advance()
+				var value: String = val_token.lexeme
+				if not SUBCHAIN_KEYS.has(key):
+					report_arg_issue.call("P008", "Unknown subchain argument '%s' %s. Valid keys: name, id. The value is discarded." % [key, _format_coords(key_token)], key_token)
+					if _err:
+						return {}
+				elif kwargs.has(key):
+					report_arg_issue.call("P009", "Duplicate subchain argument '%s' %s. The last value wins." % [key, _format_coords(key_token)], key_token)
+					if _err:
+						return {}
+				kwargs[key] = {"type": "String", "value": value}
 				if _peek().type == "COMMA":
 					_advance()
+				elif _peek().type == "IDENT" and _type_at(current + 1) == "COLON":
+					var next_tok = _peek()
+					report_arg_issue.call("P010", "Missing ',' between subchain arguments %s" % [_format_coords(next_tok)], next_tok)
+					if _err:
+						return {}
 	_expect("RPAREN", "Expect ')' after subchain arguments")
 	if _err:
 		return {}
@@ -792,13 +886,16 @@ func _parse_subchain_call() -> Dictionary:
 		var msg := "Subchain body cannot be empty %s" % [_format_coords(name_token)]
 		_record_diagnostic("P006", msg, name_token)
 		return {}
-	return {
+	var node := {
 		"type": "Subchain",
 		"name": (kwargs["name"]["value"] if kwargs.has("name") else null),
 		"id": (kwargs["id"]["value"] if kwargs.has("id") else null),
 		"body": body,
 		"loc": {"line": token_line, "col": token_col},
 	}
+	if arg_diagnostics.size() > 0:
+		node["subchainArgumentDiagnostics"] = arg_diagnostics
+	return node
 
 func _parse_call():
 	var name_token = _expect("IDENT", "Expected identifier")
@@ -984,7 +1081,20 @@ func _parse_primary():
 				_advance()
 			var start_line = _get_token_prop(start_token, "line", null)
 			var start_col = _get_token_prop(start_token, "col", null)
-			return {"type": "ArrayLiteral", "elements": elements, "loc": {"line": start_line, "col": start_col} if (start_line != null and start_col != null) else null}
+			var bracket_pos = _get_token_prop(start_token, "position", null)
+			var arr_node := {
+				"type": "ArrayLiteral",
+				"elements": elements,
+				"loc": {"line": start_line, "col": start_col} if (start_line != null and start_col != null) else null
+			}
+			if bracket_pos is Dictionary:
+				arr_node["position"] = {
+					"line": bracket_pos.get("line"),
+					"column": bracket_pos.get("column"),
+					"start": bracket_pos.get("start"),
+					"end": bracket_pos.get("end"),
+				}
+			return arr_node
 		"FUNC":
 			_advance()
 			return {"type": "Func", "src": token.lexeme}
@@ -1056,9 +1166,12 @@ func _parse_primary():
 func _to_number(node) -> float:
 	if not (node is Dictionary) or node.get("type") != "Number":
 		var loc = node.get("loc") if (node is Dictionary and node.has("loc") and node.get("loc") is Dictionary) else null
-		var token = null
-		if loc != null and loc.has("line") and loc.has("col"):
-			token = {"line": loc.get("line"), "col": loc.get("col")}
+		var pos = node.get("position") if (node is Dictionary and node.has("position") and node.get("position") is Dictionary) else null
+		var token = {
+			"line": loc.get("line") if loc != null else null,
+			"col": loc.get("col") if loc != null else null,
+			"position": pos,
+		}
 		_record_diagnostic("P001", "Expected number", token)
 		return 0.0
 	return float(node.get("value"))

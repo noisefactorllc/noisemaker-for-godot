@@ -80,6 +80,43 @@ static func _is_hex(c: String) -> bool:
 static func _at(s: String, k: int, n: int) -> String:
 	return s[k] if (k >= 0 and k < n) else _NUL
 
+static func _add(tokens: Array, s: String, anchor_state: Array, type: String, lexeme: String, line: int, col: int, tok_start: int, tok_end: int) -> void:
+	var anchor: int = anchor_state[2]
+	var src_line: int = anchor_state[0]
+	var src_col: int = anchor_state[1]
+	var u16_offset: int = anchor_state[3]
+	for offset in range(anchor, tok_start):
+		var code_pt := s.unicode_at(offset)
+		if code_pt == 10:
+			src_line += 1
+			src_col = 1
+		else:
+			src_col += 2 if code_pt > 0xFFFF else 1
+		u16_offset += 2 if code_pt > 0xFFFF else 1
+	var start_l := src_line
+	var start_c := src_col
+	var u16_start := u16_offset
+	for offset in range(tok_start, tok_end):
+		var code_pt := s.unicode_at(offset)
+		if code_pt == 10:
+			src_line += 1
+			src_col = 1
+		else:
+			src_col += 2 if code_pt > 0xFFFF else 1
+		u16_offset += 2 if code_pt > 0xFFFF else 1
+	var u16_end := u16_offset
+	anchor_state[0] = src_line
+	anchor_state[1] = src_col
+	anchor_state[2] = tok_end
+	anchor_state[3] = u16_offset
+	var pos := {
+		"line": start_l,
+		"column": start_c,
+		"start": u16_start,
+		"end": u16_end,
+	}
+	tokens.append(Token.new(type, lexeme, line, col, pos))
+
 # Tokenize `src` into an Array of Token, ending in one EOF token (reference/01 §1).
 static func lex(src) -> Array:
 	last_diagnostic = null
@@ -92,6 +129,7 @@ static func lex(src) -> Array:
 	var i := 0
 	var line := 1
 	var col := 1
+	var anchor_state: Array = [1, 1, 0, 0]
 
 	while i < n:
 		var ch := s[i]
@@ -110,7 +148,7 @@ static func lex(src) -> Array:
 			j = i + 2
 			while j < n and s[j] != "\n":
 				j += 1
-			tokens.append(Token.new("COMMENT", s.substr(i, j - i), start_line, start_col))
+			_add(tokens, s, anchor_state, "COMMENT", s.substr(i, j - i), start_line, start_col, i, j)
 			col += s.substr(i, j - i).to_utf16_buffer().size() / 2; i = j; continue
 
 		# block comment /* ... */
@@ -127,7 +165,7 @@ static func lex(src) -> Array:
 			if j >= n:
 				return _fail("L003", "Unterminated comment at line %d col %d" % [start_line, start_col], i, n, s, tokens)
 			j += 2
-			tokens.append(Token.new("COMMENT", s.substr(i, j - i), start_line, start_col))
+			_add(tokens, s, anchor_state, "COMMENT", s.substr(i, j - i), start_line, start_col, i, j)
 			line = end_line; col = end_col + 2; i = j; continue
 
 		# output or source reference (o/s + digit)
@@ -140,7 +178,7 @@ static func lex(src) -> Array:
 			var is_member_segment := tokens.size() > 0 and (tokens[tokens.size() - 1] as Token).type == "DOT"
 			if tt == "OUTPUT_REF" and not is_member_segment and not (lexeme.length() == 2 and lexeme[1] >= "0" and lexeme[1] <= "7"):
 				return _fail("L004", "Output surface reference '%s' is out of range; expected o0-o7 at line %d col %d" % [lexeme, start_line, start_col], i, j, s, tokens)
-			tokens.append(Token.new(tt, lexeme, start_line, start_col))
+			_add(tokens, s, anchor_state, tt, lexeme, start_line, start_col, i, j)
 			col += j - i; i = j; continue
 
 		# vol reference (vol + digit) — tested BEFORE vel
@@ -148,7 +186,7 @@ static func lex(src) -> Array:
 			j = i + 3
 			while j < n and _is_digit(s[j]):
 				j += 1
-			tokens.append(Token.new("VOL_REF", s.substr(i, j - i), start_line, start_col))
+			_add(tokens, s, anchor_state, "VOL_REF", s.substr(i, j - i), start_line, start_col, i, j)
 			col += j - i; i = j; continue
 
 		# geo reference (geo + digit)
@@ -156,7 +194,7 @@ static func lex(src) -> Array:
 			j = i + 3
 			while j < n and _is_digit(s[j]):
 				j += 1
-			tokens.append(Token.new("GEO_REF", s.substr(i, j - i), start_line, start_col))
+			_add(tokens, s, anchor_state, "GEO_REF", s.substr(i, j - i), start_line, start_col, i, j)
 			col += j - i; i = j; continue
 
 		# xyz reference (xyz + digit)
@@ -164,7 +202,7 @@ static func lex(src) -> Array:
 			j = i + 3
 			while j < n and _is_digit(s[j]):
 				j += 1
-			tokens.append(Token.new("XYZ_REF", s.substr(i, j - i), start_line, start_col))
+			_add(tokens, s, anchor_state, "XYZ_REF", s.substr(i, j - i), start_line, start_col, i, j)
 			col += j - i; i = j; continue
 
 		# vel reference (vel + digit) — v disambiguated from vol by 3rd char
@@ -172,7 +210,7 @@ static func lex(src) -> Array:
 			j = i + 3
 			while j < n and _is_digit(s[j]):
 				j += 1
-			tokens.append(Token.new("VEL_REF", s.substr(i, j - i), start_line, start_col))
+			_add(tokens, s, anchor_state, "VEL_REF", s.substr(i, j - i), start_line, start_col, i, j)
 			col += j - i; i = j; continue
 
 		# rgba reference (rgba + digit)
@@ -180,7 +218,7 @@ static func lex(src) -> Array:
 			j = i + 4
 			while j < n and _is_digit(s[j]):
 				j += 1
-			tokens.append(Token.new("RGBA_REF", s.substr(i, j - i), start_line, start_col))
+			_add(tokens, s, anchor_state, "RGBA_REF", s.substr(i, j - i), start_line, start_col, i, j)
 			col += j - i; i = j; continue
 
 		# mesh reference (mesh + digit)
@@ -188,7 +226,7 @@ static func lex(src) -> Array:
 			j = i + 4
 			while j < n and _is_digit(s[j]):
 				j += 1
-			tokens.append(Token.new("MESH_REF", s.substr(i, j - i), start_line, start_col))
+			_add(tokens, s, anchor_state, "MESH_REF", s.substr(i, j - i), start_line, start_col, i, j)
 			col += j - i; i = j; continue
 
 		# hex color literal (#) — only emit for total length 4/7/9
@@ -198,7 +236,7 @@ static func lex(src) -> Array:
 				j += 1
 			var hex_len := j - i
 			if hex_len == 4 or hex_len == 7 or hex_len == 9:
-				tokens.append(Token.new("HEX", s.substr(i, hex_len), start_line, start_col))
+				_add(tokens, s, anchor_state, "HEX", s.substr(i, hex_len), start_line, start_col, i, j)
 				col += hex_len; i = j; continue
 			# else fall through ('#' matches no later rule -> final error)
 
@@ -226,7 +264,7 @@ static func lex(src) -> Array:
 							break
 					j += 1
 				var expr := s.substr(expr_start, j - expr_start).strip_edges()
-				tokens.append(Token.new("FUNC", expr, start_line, start_col))
+				_add(tokens, s, anchor_state, "FUNC", expr, start_line, start_col, i, j)
 				col += j - i; i = j; continue
 			# else fall through: '(' handled by single-char punctuation below
 
@@ -235,13 +273,13 @@ static func lex(src) -> Array:
 			j = i + 1
 			while j < n and _is_digit(s[j]):
 				j += 1
-			tokens.append(Token.new("NUMBER", s.substr(i, j - i), start_line, start_col))
+			_add(tokens, s, anchor_state, "NUMBER", s.substr(i, j - i), start_line, start_col, i, j)
 			col += j - i; i = j; continue
 
 		# single-char punctuation
 		var punct: String = _SINGLE.get(ch, "")
 		if punct != "":
-			tokens.append(Token.new(punct, ch, start_line, start_col))
+			_add(tokens, s, anchor_state, punct, ch, start_line, start_col, i, i + 1)
 			i += 1; col += 1; continue
 
 		# triple-quoted string """ ... """ (checked before single quotes)
@@ -256,7 +294,7 @@ static func lex(src) -> Array:
 			if j >= n - 2 or not (_at(s, j, n) == '"' and _at(s, j + 1, n) == '"' and _at(s, j + 2, n) == '"'):
 				return _fail("L002", "Unterminated triple-quoted string at line %d col %d" % [start_line, start_col], i, n, s, tokens)
 			var tri_content := s.substr(i + 3, j - (i + 3))
-			tokens.append(Token.new("STRING", tri_content, start_line, start_col))
+			_add(tokens, s, anchor_state, "STRING", tri_content, start_line, start_col, i, j + 3)
 			var clines := tri_content.split("\n")
 			if clines.size() > 1:
 				col = clines[clines.size() - 1].to_utf16_buffer().size() / 2 + 4  # +3 closing """ +1 next char
@@ -276,7 +314,7 @@ static func lex(src) -> Array:
 			if j >= n or s[j] == "\n":
 				return _fail("L002", "Unterminated string literal at line %d col %d" % [line, col], i, j, s, tokens)
 			var str_content := s.substr(i + 1, j - (i + 1))
-			tokens.append(Token.new("STRING", str_content, start_line, start_col))
+			_add(tokens, s, anchor_state, "STRING", str_content, start_line, start_col, i, j + 1)
 			col += s.substr(i, j - i + 1).to_utf16_buffer().size() / 2; i = j + 1; continue
 
 		# number D...
@@ -288,7 +326,7 @@ static func lex(src) -> Array:
 				j += 1
 				while j < n and _is_digit(s[j]):
 					j += 1
-			tokens.append(Token.new("NUMBER", s.substr(i, j - i), start_line, start_col))
+			_add(tokens, s, anchor_state, "NUMBER", s.substr(i, j - i), start_line, start_col, i, j)
 			col += j - i; i = j; continue
 
 		# identifier / keyword
@@ -298,11 +336,11 @@ static func lex(src) -> Array:
 				j += 1
 			var lexeme := s.substr(i, j - i)
 			var kw: String = KEYWORDS.get(lexeme, "")
-			tokens.append(Token.new(kw if kw != "" else "IDENT", lexeme, start_line, start_col))
+			_add(tokens, s, anchor_state, kw if kw != "" else "IDENT", lexeme, start_line, start_col, i, j)
 			col += j - i; i = j; continue
 
 		# anything else
 		return _fail("L001", "Unexpected character '%s' at line %d col %d" % [ch, line, col], i, i + 1, s, tokens)
 
-	tokens.append(Token.new("EOF", "", line, col))
+	_add(tokens, s, anchor_state, "EOF", "", line, col, n, n)
 	return tokens

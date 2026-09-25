@@ -630,6 +630,17 @@ func _process_chain(calls, input, chain: Array, states: Array, write_name, allow
 			continue
 
 		if ot == "Subchain":
+			if original.has("subchainArgumentDiagnostics") and original.get("subchainArgumentDiagnostics") is Array:
+				for report in original.get("subchainArgumentDiagnostics"):
+					var entry := {
+						"code": report.get("code"),
+						"message": report.get("message"),
+						"severity": report.get("severity"),
+						"nodeId": original.get("id"),
+					}
+					if report.has("location") and report.get("location") != null:
+						entry["location"] = report.get("location")
+					_diagnostics.push_back(entry)
 			if current == null:
 				_push_diag("S005", original, "subchain() requires an input - cannot be first in chain")
 				continue

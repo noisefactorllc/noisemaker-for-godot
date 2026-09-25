@@ -68,12 +68,14 @@ var type: String
 var lexeme: String
 var line: int
 var col: int
+var position = null
 
-func _init(t: String, lx: String, ln: int, c: int) -> void:
+func _init(t: String, lx: String, ln: int, c: int, pos = null) -> void:
 	type = t
 	lexeme = lx
 	line = ln
 	col = c
+	position = pos
 
 func _to_string() -> String:
 	return "%s('%s' @%d:%d)" % [type, lexeme, line, col]

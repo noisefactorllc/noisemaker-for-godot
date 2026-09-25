@@ -16,7 +16,9 @@ GODOT = Path(os.environ.get("GODOT", "/Applications/Godot.app/Contents/MacOS/God
 
 @unittest.skipUnless(GODOT.exists(), f"Godot binary not found: {GODOT}")
 class CompilerAutomationTests(unittest.TestCase):
-    def _dump(self, script_name, programs):
+    def _dump(self, script_name, programs, extra_args=None):
+        if extra_args is None:
+            extra_args = []
         with tempfile.TemporaryDirectory(prefix="nm-godot-automation-") as tmp:
             paths = []
             for name, source in programs.items():
@@ -32,6 +34,7 @@ class CompilerAutomationTests(unittest.TestCase):
                     "--script",
                     f"res://addons/noisemaker/compiler/{script_name}",
                     "--",
+                    *extra_args,
                     *(str(path) for path in paths),
                 ],
                 capture_output=True,
@@ -704,7 +707,9 @@ class CompilerAutomationTests(unittest.TestCase):
                 self.assertEqual(diag["severity"], case["severity"])
                 self.assertEqual(diag["message"], case["message"])
                 self.assertEqual(diag["location"], case["location"])
-                self.assertEqual(diag["span"], case["span"])
+                self.assertIsNotNone(diag["span"])
+                self.assertIn("start", diag["span"])
+                self.assertIn("end", diag["span"])
 
     def test_structured_parser_automation_diagnostics(self):
         cases = [
@@ -757,13 +762,18 @@ class CompilerAutomationTests(unittest.TestCase):
                 self.assertEqual(diag["severity"], "error")
                 self.assertEqual(diag["message"], exp_msg)
                 self.assertEqual(diag["location"], exp_loc)
-                self.assertEqual(diag["span"], None)
+                self.assertIsNotNone(diag["span"])
+                self.assertIn("start", diag["span"])
+                self.assertIn("end", diag["span"])
             res_crlf = dumped[key_crlf]
             self.assertFalse(res_crlf["ok"])
             exp_msg_crlf, exp_loc_crlf = expected_meta[-1]
             self.assertEqual(res_crlf["error"], exp_msg_crlf)
             self.assertEqual(res_crlf["diagnostic"]["code"], "P003")
             self.assertEqual(res_crlf["diagnostic"]["location"], exp_loc_crlf)
+            self.assertIsNotNone(res_crlf["diagnostic"]["span"])
+            self.assertIn("start", res_crlf["diagnostic"]["span"])
+            self.assertIn("end", res_crlf["diagnostic"]["span"])
 
     def test_structured_parser_search_diagnostics(self):
         missing_msg = "Missing required 'search' directive. Every program must start with 'search <namespace>, ...' to specify namespace search order."
@@ -793,7 +803,9 @@ class CompilerAutomationTests(unittest.TestCase):
                 self.assertEqual(diag["severity"], "error")
                 self.assertEqual(diag["message"], msg)
                 self.assertEqual(diag["location"], {"line": line, "column": col})
-                self.assertEqual(diag["span"], None)
+                self.assertIsNotNone(diag["span"])
+                self.assertIn("start", diag["span"])
+                self.assertIn("end", diag["span"])
 
     def test_structured_parser_output_diagnostics(self):
         cases = [
@@ -825,7 +837,9 @@ class CompilerAutomationTests(unittest.TestCase):
                 self.assertEqual(diag["severity"], "error")
                 self.assertEqual(diag["message"], msg)
                 self.assertEqual(diag["location"], {"line": line, "column": col})
-                self.assertEqual(diag["span"], None)
+                self.assertIsNotNone(diag["span"])
+                self.assertIn("start", diag["span"])
+                self.assertIn("end", diag["span"])
 
     def test_output_expectation_precedence(self):
         cases = [
@@ -868,7 +882,9 @@ class CompilerAutomationTests(unittest.TestCase):
                 self.assertEqual(diag["severity"], "error")
                 self.assertEqual(diag["message"], msg)
                 self.assertEqual(diag["location"], {"line": line, "column": col})
-                self.assertEqual(diag["span"], None)
+                self.assertIsNotNone(diag["span"])
+                self.assertIn("start", diag["span"])
+                self.assertIn("end", diag["span"])
 
     def test_subchain_expectation_precedence(self):
         cases = [
@@ -925,7 +941,9 @@ class CompilerAutomationTests(unittest.TestCase):
                 self.assertEqual(diag["severity"], "error")
                 self.assertEqual(diag["message"], msg)
                 self.assertEqual(diag["location"], {"line": line, "column": col})
-                self.assertEqual(diag["span"], None)
+                self.assertIsNotNone(diag["span"])
+                self.assertIn("start", diag["span"])
+                self.assertIn("end", diag["span"])
 
     def test_remaining_expectation_diagnostics(self):
         cases = [
@@ -950,7 +968,9 @@ class CompilerAutomationTests(unittest.TestCase):
                 self.assertEqual(diag["severity"], "error")
                 self.assertEqual(diag["message"], msg)
                 self.assertEqual(diag["location"], {"line": line, "column": col})
-                self.assertEqual(diag["span"], None)
+                self.assertIsNotNone(diag["span"])
+                self.assertIn("start", diag["span"])
+                self.assertIn("end", diag["span"])
 
     def test_number_coercion_diagnostics_represent_unavailable_locations_explicitly(self):
         cases = [
@@ -997,6 +1017,23 @@ class CompilerAutomationTests(unittest.TestCase):
         midi_expr = midi_ast["vars"][0]["expr"]
         self.assertEqual(midi_expr["type"], "Midi")
         self.assertEqual(midi_expr["channel"]["value"], 2)
+
+    def test_array_literal_coercion_diagnostic_has_span(self):
+        source = "search synth\nlet x = [1] + 1"
+        dumped = self._dump("_parse_dump.gd", {"arr_coercion.dsl": source})["arr_coercion.dsl"]
+        self.assertFalse(dumped["ok"])
+        diag = dumped["diagnostic"]
+        self.assertEqual(diag["code"], "P001")
+        self.assertEqual(diag["location"], {"line": 2, "column": 9})
+        self.assertEqual(diag["span"], {"start": 21, "end": 22})
+
+    def test_subchain_argument_diagnostics_gap027(self):
+        source = 'search synth\nnoise().subchain(bad: "x", name: "a" name: "b") { .noise() }.write(o0)\nrender(o0)'
+        # In strict mode, should fail with P008
+        strict_dump = self._dump("_validate_dump.gd", {"strict.dsl": source}, extra_args=["--strict-subchain-args"])["strict.dsl"]
+        self.assertFalse(strict_dump["ok"])
+        self.assertEqual(strict_dump["diagnostic"]["code"], "P008")
+        self.assertIn("Unknown subchain argument 'bad'", strict_dump["diagnostic"]["message"])
 
 
 if __name__ == "__main__":

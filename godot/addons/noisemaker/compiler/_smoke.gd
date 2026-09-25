@@ -49,20 +49,26 @@ func _init() -> void:
 	_expect(Lexer.last_diagnostic["code"] == "L001" and Lexer.last_diagnostic["location"] == {"line": 1, "column": 6} and Lexer.last_diagnostic["span"] == {"start": 5, "end": 6}, "lexer.diag-astral-span")
 
 	# Parser structured diagnostics
+	var source_position = func(source: String, line: int, col: int) -> Dictionary:
+		for tok in Lexer.lex(source):
+			if tok.position is Dictionary and tok.position.get("line") == line and tok.position.get("column") == col:
+				return {"start": tok.position["start"], "end": tok.position["end"]}
+		return {}
+
 	var p1 = Parser.new()
 	p1.parse_tokens(Lexer.lex("search synth\nrender o0"))
 	_expect(p1.last_diagnostic["code"] == "P001" and p1.last_diagnostic["stage"] == "parser"
 		and p1.last_diagnostic["severity"] == "error"
 		and p1.last_diagnostic["message"] == "Expect '(' at line 2 col 8"
 		and p1.last_diagnostic["location"] == {"line": 2, "column": 8}
-		and p1.last_diagnostic["span"] == null, "parser.diag-p001")
+		and p1.last_diagnostic["span"] == source_position.call("search synth\nrender o0", 2, 8), "parser.diag-p001")
 	var p2 = Parser.new()
 	p2.parse_tokens(Lexer.lex("search synth\nrender(o0"))
 	_expect(p2.last_diagnostic["code"] == "P002" and p2.last_diagnostic["stage"] == "parser"
 		and p2.last_diagnostic["severity"] == "error"
 		and p2.last_diagnostic["message"] == "Expect ')' at line 2 col 10"
 		and p2.last_diagnostic["location"] == {"line": 2, "column": 10}
-		and p2.last_diagnostic["span"] == null, "parser.diag-p002")
+		and p2.last_diagnostic["span"] == source_position.call("search synth\nrender(o0", 2, 10), "parser.diag-p002")
 	var p3 = Parser.new()
 	var mock_tokens = [
 		{"type": "SEARCH", "lexeme": "search", "line": 1, "col": 1},
@@ -81,42 +87,42 @@ func _init() -> void:
 		and p4.last_diagnostic["severity"] == "error"
 		and p4.last_diagnostic["message"] == "midi() requires 'channel' or 'zone' argument at line 2 col 9"
 		and p4.last_diagnostic["location"] == {"line": 2, "column": 9}
-		and p4.last_diagnostic["span"] == null, "parser.diag-p003")
+		and p4.last_diagnostic["span"] == source_position.call("search synth\nlet x = midi()", 2, 9), "parser.diag-p003")
 	var p5 = Parser.new()
 	p5.parse_tokens(Lexer.lex("search bogus"))
 	_expect(p5.last_diagnostic["code"] == "P004" and p5.last_diagnostic["stage"] == "parser"
 		and p5.last_diagnostic["severity"] == "error"
 		and p5.last_diagnostic["message"] == "Invalid namespace 'bogus' at line 1 col 8. Valid namespaces: io, classicNoisedeck, synth, mixer, filter, render, points, synth3d, filter3d, user"
 		and p5.last_diagnostic["location"] == {"line": 1, "column": 8}
-		and p5.last_diagnostic["span"] == null, "parser.diag-p004")
+		and p5.last_diagnostic["span"] == source_position.call("search bogus", 1, 8), "parser.diag-p004")
 	var p6 = Parser.new()
 	p6.parse_tokens(Lexer.lex(""))
 	_expect(p6.last_diagnostic["code"] == "P004" and p6.last_diagnostic["stage"] == "parser"
 		and p6.last_diagnostic["severity"] == "error"
 		and p6.last_diagnostic["message"] == "Missing required 'search' directive. Every program must start with 'search <namespace>, ...' to specify namespace search order."
 		and p6.last_diagnostic["location"] == {"line": 1, "column": 1}
-		and p6.last_diagnostic["span"] == null, "parser.diag-p004-missing")
+		and p6.last_diagnostic["span"] == source_position.call("", 1, 1), "parser.diag-p004-missing")
 	var p7 = Parser.new()
 	p7.parse_tokens(Lexer.lex("search synth\nrender(1)"))
 	_expect(p7.last_diagnostic["code"] == "P005" and p7.last_diagnostic["stage"] == "parser"
 		and p7.last_diagnostic["severity"] == "error"
 		and p7.last_diagnostic["message"] == "Expected output reference in render()"
 		and p7.last_diagnostic["location"] == {"line": 2, "column": 8}
-		and p7.last_diagnostic["span"] == null, "parser.diag-p005-render")
+		and p7.last_diagnostic["span"] == source_position.call("search synth\nrender(1)", 2, 8), "parser.diag-p005-render")
 	var p8 = Parser.new()
 	p8.parse_tokens(Lexer.lex("search synth\nlet x = foo().write(o0)"))
 	_expect(p8.last_diagnostic["code"] == "P005" and p8.last_diagnostic["stage"] == "parser"
 		and p8.last_diagnostic["severity"] == "error"
 		and p8.last_diagnostic["message"] == "'.write()' is only allowed in statement context at line 2 col 15"
 		and p8.last_diagnostic["location"] == {"line": 2, "column": 15}
-		and p8.last_diagnostic["span"] == null, "parser.diag-p005-write-expr")
+		and p8.last_diagnostic["span"] == source_position.call("search synth\nlet x = foo().write(o0)", 2, 15), "parser.diag-p005-write-expr")
 	var p9 = Parser.new()
 	p9.parse_tokens(Lexer.lex("search synth\nfoo().write()"))
 	_expect(p9.last_diagnostic["code"] == "P005" and p9.last_diagnostic["stage"] == "parser"
 		and p9.last_diagnostic["severity"] == "error"
 		and p9.last_diagnostic["message"] == "write() requires an explicit surface reference (e.g., o0, o1, xyz0, vel0, rgba0, mesh0, none) at line 2 col 13"
 		and p9.last_diagnostic["location"] == {"line": 2, "column": 13}
-		and p9.last_diagnostic["span"] == null, "parser.diag-p005-write-surface")
+		and p9.last_diagnostic["span"] == source_position.call("search synth\nfoo().write()", 2, 13), "parser.diag-p005-write-surface")
 	var p10 = Parser.new()
 	var mock_tokens_p005 = [
 		{"type": "SEARCH", "lexeme": "search", "line": 1, "col": 1},
@@ -137,21 +143,21 @@ func _init() -> void:
 		and p11.last_diagnostic["severity"] == "error"
 		and p11.last_diagnostic["message"] == "Expected string value for subchain name at line 2 col 24"
 		and p11.last_diagnostic["location"] == {"line": 2, "column": 24}
-		and p11.last_diagnostic["span"] == null, "parser.diag-p006-arg-type")
+		and p11.last_diagnostic["span"] == source_position.call("search synth\nnoise().subchain(name: 1) { .noise() }", 2, 24), "parser.diag-p006-arg-type")
 	var p12 = Parser.new()
 	p12.parse_tokens(Lexer.lex("search synth\nnoise().subchain(\"test\") { noise() }"))
 	_expect(p12.last_diagnostic["code"] == "P006" and p12.last_diagnostic["stage"] == "parser"
 		and p12.last_diagnostic["severity"] == "error"
 		and p12.last_diagnostic["message"] == "Expected '.' before chain element in subchain body at line 2 col 28"
 		and p12.last_diagnostic["location"] == {"line": 2, "column": 28}
-		and p12.last_diagnostic["span"] == null, "parser.diag-p006-missing-dot")
+		and p12.last_diagnostic["span"] == source_position.call("search synth\nnoise().subchain(\"test\") { noise() }", 2, 28), "parser.diag-p006-missing-dot")
 	var p13 = Parser.new()
 	p13.parse_tokens(Lexer.lex("search synth\nnoise().subchain(\"test\") {}"))
 	_expect(p13.last_diagnostic["code"] == "P006" and p13.last_diagnostic["stage"] == "parser"
 		and p13.last_diagnostic["severity"] == "error"
 		and p13.last_diagnostic["message"] == "Subchain body cannot be empty at line 2 col 9"
 		and p13.last_diagnostic["location"] == {"line": 2, "column": 9}
-		and p13.last_diagnostic["span"] == null, "parser.diag-p006-empty-body")
+		and p13.last_diagnostic["span"] == source_position.call("search synth\nnoise().subchain(\"test\") {}", 2, 9), "parser.diag-p006-empty-body")
 	var p14 = Parser.new()
 	var mock_tokens_p006 = [
 		{"type": "SEARCH", "lexeme": "search", "line": 1, "col": 1},
@@ -177,21 +183,21 @@ func _init() -> void:
 		and p15.last_diagnostic["severity"] == "error"
 		and p15.last_diagnostic["message"] == "'from' does not support named arguments at line 2 col 9"
 		and p15.last_diagnostic["location"] == {"line": 2, "column": 9}
-		and p15.last_diagnostic["span"] == null, "parser.diag-p007-from-named")
+		and p15.last_diagnostic["span"] == source_position.call("search synth\nlet x = from(a: 1, b: 2)", 2, 9), "parser.diag-p007-from-named")
 	var p16 = Parser.new()
 	p16.parse_tokens(Lexer.lex("search synth\nnd.noise()"))
 	_expect(p16.last_diagnostic["code"] == "P007" and p16.last_diagnostic["stage"] == "parser"
 		and p16.last_diagnostic["severity"] == "error"
 		and p16.last_diagnostic["message"] == "Inline namespace syntax 'nd.noise()' is not allowed. Use 'search nd' at the start of the program instead, at line 2 col 1"
 		and p16.last_diagnostic["location"] == {"line": 2, "column": 1}
-		and p16.last_diagnostic["span"] == null, "parser.diag-p007-inline-ns")
+		and p16.last_diagnostic["span"] == source_position.call("search synth\nnd.noise()", 2, 1), "parser.diag-p007-inline-ns")
 	var p17 = Parser.new()
 	p17.parse_tokens(Lexer.lex("search synth\ndiagProbe(1, x: 2)"))
 	_expect(p17.last_diagnostic["code"] == "P007" and p17.last_diagnostic["stage"] == "parser"
 		and p17.last_diagnostic["severity"] == "error"
 		and p17.last_diagnostic["message"] == "Cannot mix positional and keyword arguments at line 2 col 14"
 		and p17.last_diagnostic["location"] == {"line": 2, "column": 14}
-		and p17.last_diagnostic["span"] == null, "parser.diag-p007-mixed-args")
+		and p17.last_diagnostic["span"] == source_position.call("search synth\ndiagProbe(1, x: 2)", 2, 14), "parser.diag-p007-mixed-args")
 	var p18 = Parser.new()
 	p18.parse_tokens(Lexer.lex("search synth\nlet x = 1 + o0"))
 	_expect(p18.last_diagnostic["code"] == "P001" and p18.last_diagnostic["stage"] == "parser"
@@ -199,6 +205,28 @@ func _init() -> void:
 		and p18.last_diagnostic["message"] == "Expected number"
 		and p18.last_diagnostic["location"] == null
 		and p18.last_diagnostic["span"] == null, "parser.diag-p001-to-number-unlocated")
+
+	var p19 = Parser.new()
+	p19.parse_tokens(Lexer.lex("search synth\nlet x = [1] + 1"))
+	_expect(p19.last_diagnostic["code"] == "P001" and p19.last_diagnostic["stage"] == "parser"
+		and p19.last_diagnostic["severity"] == "error"
+		and p19.last_diagnostic["message"] == "Expected number"
+		and p19.last_diagnostic["location"] == {"line": 2, "column": 9}
+		and p19.last_diagnostic["span"] == source_position.call("search synth\nlet x = [1] + 1", 2, 9), "parser.diag-p001-to-number-array-span")
+
+	# Subchain argument diagnostics GAP-027
+	var p_subchain_permissive = Parser.new()
+	var ast_p = p_subchain_permissive.parse_tokens(Lexer.lex("search synth\nnoise().subchain(bad: \"x\", name: \"a\" name: \"b\") { .noise() }.write(o0)"))
+	_expect(not p_subchain_permissive._err, "parser.subchain-permissive-ok")
+	var subchain_node = ast_p["plans"][0]["chain"][1]
+	_expect(subchain_node["subchainArgumentDiagnostics"].size() == 3, "parser.subchain-permissive-diag-count")
+	_expect(subchain_node["subchainArgumentDiagnostics"][0]["code"] == "P008", "parser.subchain-p008")
+	_expect(subchain_node["subchainArgumentDiagnostics"][1]["code"] == "P010", "parser.subchain-p010")
+	_expect(subchain_node["subchainArgumentDiagnostics"][2]["code"] == "P009", "parser.subchain-p009")
+
+	var p_subchain_strict = Parser.new()
+	p_subchain_strict.parse_tokens(Lexer.lex("search synth\nnoise().subchain(bad: \"x\") { .noise() }.write(o0)"), {"subchainArguments": "strict"})
+	_expect(p_subchain_strict.last_diagnostic["code"] == "P008" and p_subchain_strict.last_diagnostic["severity"] == "error", "parser.subchain-strict-p008")
 
 	# Validator._push_diag column preservation
 	var v_probe = load("res://addons/noisemaker/compiler/lang/validator.gd").new(null)

@@ -48,6 +48,13 @@ so unlike the sibling ports it carried real shader-math risk, not just mechanica
 
 *Incrementally synced 2026-09-24 to reference `4891b995` (`13fa8b540025..4891b9953f9f`) — ported upstream commit `4891b995` structured parser call expression diagnostics `P007` and remaining expectation diagnostics `P001` into `godot/addons/noisemaker/compiler/lang/diagnostics.gd` and `godot/addons/noisemaker/compiler/lang/parser.gd` (`_transform_from()` argument validation, `_parse_call()` inline namespace and mixed positional/keyword arguments, `_parse_statement()` and `_parse_kwarg()` missing expression after '=', `_parse_primary()` array bracket, member dot, and token fallbacks, and `_to_number()` number coercion). Audited upstream commits across the range (shaders/effects inventory unchanged at 210 effects, definitions and registries identical). Added smoke tests in `godot/addons/noisemaker/compiler/_smoke.gd` and regression/compilation tests in `parity/test_compiler_automation.py`. All parity gates verified: definitions (210/210 PASS), registry (210/210 PASS), smoke (43/43 PASS), and parity unittests (25/25 PASS, pytest 77/77 PASS).*
 
+*Incrementally synced 2026-09-25 to reference `240740dd` (`4891b9953f9f..240740dd676a`) — ported upstream DSL compiler updates:
+- Lexer: Token carries `position: {"line", "column", "start", "end"}` with UTF-16 code unit offset tracking across surrogate pairs and line breaks.
+- Parser: Structured diagnostics derive line, column, and span coordinates from source token positions, while preserving null locations/spans for caller-supplied unlocated tokens.
+- Numeric coercion: diagnostics derive line, column, and span coordinates from array literal positions (`[1] + 1`), preserving null locations for unlocated expressions.
+- GAP-027 subchain argument validation contract: registered `P008` (unknown/discarded key), `P009` (duplicate key), and `P010` (missing comma separator) in `diagnostics.gd`, surfaced `subchainArgumentDiagnostics` on `Subchain` nodes in parser and validator, and enforced SyntaxError rejection under strict opt-in mode (`subchainArguments: "strict"` via `--strict-subchain-args`).
+- All parity gates verified: definitions (210/210 PASS), registry (210/210 PASS), lex (352/352 PASS), parse (352/352 PASS), validate (352/352 PASS), smoke (50/50 PASS), and pytest compiler automation (27/27 PASS).*
+
 
 
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
