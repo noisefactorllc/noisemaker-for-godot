@@ -899,6 +899,105 @@ class CompilerAutomationTests(unittest.TestCase):
                 res = dumped[f"valid_subchain_{idx}.dsl"]
                 self.assertTrue(res["ok"], f"Expected {name} to succeed in {dump_script}: {res.get('error')}")
 
+    def test_call_form_diagnostics_p007(self):
+        cases = [
+            ("from named arguments", "search synth\nlet x = from(a: 1, b: 2)", "'from' does not support named arguments at line 2 col 9", 2, 9),
+            ("from missing second argument", "search synth\nlet x = from(synth)", "'from' requires exactly two arguments (namespace, call) at line 2 col 9", 2, 9),
+            ("from namespace not an identifier", "search synth\nlet x = from(1, probe())", "'from' namespace argument must be an identifier at line 2 col 9", 2, 9),
+            ("from second argument not a call", "search synth\nlet x = from(synth, 1)", "'from' second argument must be a call expression at line 2 col 9", 2, 9),
+            ("inline namespace", "search synth\nnd.noise()", "Inline namespace syntax 'nd.noise()' is not allowed. Use 'search nd' at the start of the program instead, at line 2 col 1", 2, 1),
+            ("positional then keyword", "search synth\ndiagProbe(1, x: 2)", "Cannot mix positional and keyword arguments at line 2 col 14", 2, 14),
+            ("keyword then positional", "search synth\ndiagProbe(x: 1, 2)", "Cannot mix positional and keyword arguments at line 2 col 17", 2, 17),
+            ("CRLF tab and UTF-16", "// 😀\r\nsearch synth\r\n\tdiagProbe(1, x: 2)", "Cannot mix positional and keyword arguments at line 3 col 15", 3, 15),
+            ("UTF-16 inline namespace column", 'search synth\nlet x = "😀"; nd.noise()', "Inline namespace syntax 'nd.noise()' is not allowed. Use 'search nd' at the start of the program instead, at line 2 col 15", 2, 15),
+        ]
+        programs = {f"call_form_{idx}.dsl": src for idx, (_, src, _, _, _) in enumerate(cases)}
+        for dump_script in ("_parse_dump.gd", "_validate_dump.gd"):
+            dumped = self._dump(dump_script, programs)
+            for idx, (name, _, msg, line, col) in enumerate(cases):
+                key = f"call_form_{idx}.dsl"
+                res = dumped[key]
+                self.assertFalse(res["ok"], f"Expected {name} to fail in {dump_script}")
+                self.assertEqual(res["error"], msg)
+                diag = res["diagnostic"]
+                self.assertEqual(diag["code"], "P007")
+                self.assertEqual(diag["stage"], "parser")
+                self.assertEqual(diag["severity"], "error")
+                self.assertEqual(diag["message"], msg)
+                self.assertEqual(diag["location"], {"line": line, "column": col})
+                self.assertEqual(diag["span"], None)
+
+    def test_remaining_expectation_diagnostics(self):
+        cases = [
+            ("expected expression in assignment", "search synth\nlet x = ;", "Expected expression after '=' at line 2 col 9", 2, 9),
+            ("expected expression in keyword argument", "search synth\ndiagProbe(a: )", "Expected expression after '=' at line 2 col 14", 2, 14),
+            ("expected closing bracket", "search synth\nlet x = [1 2]", "Expected ']' at line 2 col 12", 2, 12),
+            ("expected identifier after dot", "search synth\nlet x = foo.+", "Expected identifier after '.' at line 2 col 13", 2, 13),
+            ("unexpected primary token", "search synth\ndiagProbe(; 1)", "Unexpected token SEMICOLON at line 2 col 11", 2, 11),
+            ("UTF-16 column", 'search synth\nlet x = "😀"; let y = [1 2]', "Expected ']' at line 2 col 26", 2, 26),
+        ]
+        programs = {f"expect_{idx}.dsl": src for idx, (_, src, _, _, _) in enumerate(cases)}
+        for dump_script in ("_parse_dump.gd", "_validate_dump.gd"):
+            dumped = self._dump(dump_script, programs)
+            for idx, (name, _, msg, line, col) in enumerate(cases):
+                key = f"expect_{idx}.dsl"
+                res = dumped[key]
+                self.assertFalse(res["ok"], f"Expected {name} to fail in {dump_script}")
+                self.assertEqual(res["error"], msg)
+                diag = res["diagnostic"]
+                self.assertEqual(diag["code"], "P001")
+                self.assertEqual(diag["stage"], "parser")
+                self.assertEqual(diag["severity"], "error")
+                self.assertEqual(diag["message"], msg)
+                self.assertEqual(diag["location"], {"line": line, "column": col})
+                self.assertEqual(diag["span"], None)
+
+    def test_number_coercion_diagnostics_represent_unavailable_locations_explicitly(self):
+        cases = [
+            ("binary add left number right output", "search synth\nlet x = 1 + o0"),
+            ("binary add left call right number", "search synth\nlet x = diagProbe() + 1"),
+        ]
+        programs = {f"to_num_{idx}.dsl": src for idx, (_, src) in enumerate(cases)}
+        for dump_script in ("_parse_dump.gd", "_validate_dump.gd"):
+            dumped = self._dump(dump_script, programs)
+            for idx, (name, _) in enumerate(cases):
+                key = f"to_num_{idx}.dsl"
+                res = dumped[key]
+                self.assertFalse(res["ok"], f"Expected {name} to fail in {dump_script}")
+                self.assertEqual(res["error"], "Expected number")
+                diag = res["diagnostic"]
+                self.assertEqual(diag["code"], "P001")
+                self.assertEqual(diag["stage"], "parser")
+                self.assertEqual(diag["severity"], "error")
+                self.assertEqual(diag["message"], "Expected number")
+                self.assertEqual(diag["location"], None)
+                self.assertEqual(diag["span"], None)
+
+    def test_valid_call_forms_compile(self):
+        cases = [
+            ("from override namespace", "search synth\nlet x = from(synth, probe())"),
+            ("mixed automation arguments", "search synth\nlet a = midi(1, channel: 2)"),
+        ]
+        programs = {f"valid_call_{idx}.dsl": src for idx, (_, src) in enumerate(cases)}
+        dumped = self._dump("_parse_dump.gd", programs)
+        for idx, (name, _) in enumerate(cases):
+            res = dumped[f"valid_call_{idx}.dsl"]
+            self.assertTrue(res["ok"], f"Expected {name} to succeed in _parse_dump.gd: {res.get('error')}")
+
+        from_ast = dumped["valid_call_0.dsl"]["ast"]
+        from_expr = from_ast["vars"][0]["expr"]
+        self.assertEqual(from_expr["type"], "Call")
+        self.assertEqual(from_expr["name"], "probe")
+        self.assertEqual(from_expr["namespace"]["name"], "synth")
+        self.assertEqual(from_expr["namespace"]["explicit"], True)
+        self.assertEqual(from_expr["namespace"]["source"], "from")
+        self.assertEqual(from_expr["namespace"]["fromOverride"], True)
+
+        midi_ast = dumped["valid_call_1.dsl"]["ast"]
+        midi_expr = midi_ast["vars"][0]["expr"]
+        self.assertEqual(midi_expr["type"], "Midi")
+        self.assertEqual(midi_expr["channel"]["value"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

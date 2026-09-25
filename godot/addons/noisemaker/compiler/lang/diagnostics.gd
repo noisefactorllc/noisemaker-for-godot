@@ -22,6 +22,7 @@ const _TABLE := {
 	"P004": ["Invalid search directive", "error", "parser"],
 	"P005": ["Invalid output operation", "error", "parser"],
 	"P006": ["Invalid subchain", "error", "parser"],
+	"P007": ["Invalid call expression", "error", "parser"],
 	"S001": ["Unknown identifier", "error", "semantic"],
 	"S002": ["Argument out of range", "warning", "semantic"],
 	"S003": ["Variable used before assignment", "error", "semantic"],

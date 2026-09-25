@@ -35,6 +35,7 @@ func _init() -> void:
 	_expect(Diagnostics.stage("L001") == "lexer" and Diagnostics.stage("L003") == "lexer" and Diagnostics.stage("L004") == "lexer", "diag.lexer-stage")
 	_expect(Diagnostics.stage("P005") == "parser" and Diagnostics.default_message("P005") == "Invalid output operation", "diag.p005-meta")
 	_expect(Diagnostics.stage("P006") == "parser" and Diagnostics.default_message("P006") == "Invalid subchain", "diag.p006-meta")
+	_expect(Diagnostics.stage("P007") == "parser" and Diagnostics.default_message("P007") == "Invalid call expression", "diag.p007-meta")
 	_expect(Diagnostics.default_message("L003") == "Unterminated comment" and Diagnostics.default_message("L004") == "Output surface reference out of range", "diag.lexer-messages")
 
 	# Lexer structured diagnostics
@@ -170,6 +171,34 @@ func _init() -> void:
 	_expect(p14.last_diagnostic["code"] == "P006"
 		and p14.last_diagnostic["location"] == null
 		and p14.last_diagnostic["span"] == null, "parser.diag-p006-unlocated")
+	var p15 = Parser.new()
+	p15.parse_tokens(Lexer.lex("search synth\nlet x = from(a: 1, b: 2)"))
+	_expect(p15.last_diagnostic["code"] == "P007" and p15.last_diagnostic["stage"] == "parser"
+		and p15.last_diagnostic["severity"] == "error"
+		and p15.last_diagnostic["message"] == "'from' does not support named arguments at line 2 col 9"
+		and p15.last_diagnostic["location"] == {"line": 2, "column": 9}
+		and p15.last_diagnostic["span"] == null, "parser.diag-p007-from-named")
+	var p16 = Parser.new()
+	p16.parse_tokens(Lexer.lex("search synth\nnd.noise()"))
+	_expect(p16.last_diagnostic["code"] == "P007" and p16.last_diagnostic["stage"] == "parser"
+		and p16.last_diagnostic["severity"] == "error"
+		and p16.last_diagnostic["message"] == "Inline namespace syntax 'nd.noise()' is not allowed. Use 'search nd' at the start of the program instead, at line 2 col 1"
+		and p16.last_diagnostic["location"] == {"line": 2, "column": 1}
+		and p16.last_diagnostic["span"] == null, "parser.diag-p007-inline-ns")
+	var p17 = Parser.new()
+	p17.parse_tokens(Lexer.lex("search synth\ndiagProbe(1, x: 2)"))
+	_expect(p17.last_diagnostic["code"] == "P007" and p17.last_diagnostic["stage"] == "parser"
+		and p17.last_diagnostic["severity"] == "error"
+		and p17.last_diagnostic["message"] == "Cannot mix positional and keyword arguments at line 2 col 14"
+		and p17.last_diagnostic["location"] == {"line": 2, "column": 14}
+		and p17.last_diagnostic["span"] == null, "parser.diag-p007-mixed-args")
+	var p18 = Parser.new()
+	p18.parse_tokens(Lexer.lex("search synth\nlet x = 1 + o0"))
+	_expect(p18.last_diagnostic["code"] == "P001" and p18.last_diagnostic["stage"] == "parser"
+		and p18.last_diagnostic["severity"] == "error"
+		and p18.last_diagnostic["message"] == "Expected number"
+		and p18.last_diagnostic["location"] == null
+		and p18.last_diagnostic["span"] == null, "parser.diag-p001-to-number-unlocated")
 
 	# Validator._push_diag column preservation
 	var v_probe = load("res://addons/noisemaker/compiler/lang/validator.gd").new(null)

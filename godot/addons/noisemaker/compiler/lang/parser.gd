@@ -349,20 +349,24 @@ func _transform_audio(call: Dictionary, name_token) -> Dictionary:
 func _transform_from(call: Dictionary, name_token):
 	var kwargs: Dictionary = call.get("kwargs", {})
 	if not kwargs.is_empty():
-		_fail("'from' does not support named arguments at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "'from' does not support named arguments %s" % [_format_coords(name_token)]
+		_record_diagnostic("P007", msg, name_token)
 		return call
 	var args: Array = call.get("args", []) if call.get("args") is Array else []
 	if args.size() != 2:
-		_fail("'from' requires exactly two arguments (namespace, call) at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "'from' requires exactly two arguments (namespace, call) %s" % [_format_coords(name_token)]
+		_record_diagnostic("P007", msg, name_token)
 		return call
 	var namespace_arg = args[0]
 	var target_arg = args[1]
 	if namespace_arg == null or (namespace_arg.get("type") != "Ident" and namespace_arg.get("type") != "Member"):
-		_fail("'from' namespace argument must be an identifier at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "'from' namespace argument must be an identifier %s" % [_format_coords(name_token)]
+		_record_diagnostic("P007", msg, name_token)
 		return call
 	var namespace_name = ".".join(namespace_arg.get("path")) if namespace_arg.get("type") == "Member" else namespace_arg.get("name")
 	if namespace_name == null or namespace_name == "":
-		_fail("'from' namespace argument must be non-empty at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "'from' namespace argument must be non-empty %s" % [_format_coords(name_token)]
+		_record_diagnostic("P007", msg, name_token)
 		return call
 	var target_call = null
 	if target_arg != null and target_arg.get("type") == "Call":
@@ -372,7 +376,8 @@ func _transform_from(call: Dictionary, name_token):
 		if head != null and head.get("type") == "Call":
 			target_call = head
 	if target_call == null:
-		_fail("'from' second argument must be a call expression at line %d col %d" % [name_token.line, name_token.col])
+		var msg := "'from' second argument must be a call expression %s" % [_format_coords(name_token)]
+		_record_diagnostic("P007", msg, name_token)
 		return call
 	var replacement: Dictionary = target_call.duplicate()
 	replacement["args"] = (target_call.get("args").duplicate() if target_call.get("args") is Array else [])
@@ -441,7 +446,9 @@ func _parse_program() -> Dictionary:
 		if _peek().type == "RENDER":
 			if render:
 				var t = _peek()
-				_fail("Duplicate render() directive %s" % [_format_coords(t)])
+				var msg := "Duplicate render() directive %s" % [_format_coords(t)]
+				_record_diagnostic("P005", msg, t)
+				break
 			render = _parse_render_directive()
 			if _err:
 				break
@@ -554,7 +561,9 @@ func _parse_statement():
 		_expect("EQUAL", "Expect '='")
 		if not EXPR_START.has(_peek().type):
 			var t = _peek()
-			_fail("Expected expression after '=' at line %d col %d" % [t.line, t.col])
+			var msg := "Expected expression after '=' %s" % [_format_coords(t)]
+			_record_diagnostic("P001", msg, t)
+			return null
 		var expr = _parse_additive()
 		return {"type": "VarAssign", "name": name, "expr": expr}
 
@@ -799,8 +808,12 @@ func _parse_call():
 		if next != null and next.type == "IDENT":
 			var after = _tok(current + 2)
 			if after != null and after.type == "LPAREN":
-				_fail("Inline namespace syntax '%s.%s()' is not allowed. Use 'search %s' at the start of the program instead, at line %d col %d" % [name_token.lexeme, next.lexeme, name_token.lexeme, name_token.line, name_token.col])
+				var msg := "Inline namespace syntax '%s.%s()' is not allowed. Use 'search %s' at the start of the program instead, %s" % [name_token.lexeme, next.lexeme, name_token.lexeme, _format_coords(name_token)]
+				_record_diagnostic("P007", msg, name_token)
+				return {}
 	_expect("LPAREN", "Expect '('")
+	if _err:
+		return {}
 	var args: Array = []
 	var kwargs := {}
 	var keyword := false
@@ -811,21 +824,31 @@ func _parse_call():
 			if _peek().type == "IDENT" and _type_at(current + 1) == "COLON":
 				if positional and not allow_mixed:
 					var t = _peek()
-					_fail("Cannot mix positional and keyword arguments at line %d col %d" % [t.line, t.col])
+					var msg := "Cannot mix positional and keyword arguments %s" % [_format_coords(t)]
+					_record_diagnostic("P007", msg, t)
+					return {}
 				keyword = true
 				_parse_kwarg(kwargs)
+				if _err:
+					return {}
 			else:
 				if keyword and not allow_mixed:
 					var t = _peek()
-					_fail("Cannot mix positional and keyword arguments at line %d col %d" % [t.line, t.col])
+					var msg := "Cannot mix positional and keyword arguments %s" % [_format_coords(t)]
+					_record_diagnostic("P007", msg, t)
+					return {}
 				positional = true
 				args.push_back(_parse_arg())
+				if _err:
+					return {}
 			if _peek().type != "COMMA":
 				break
 			_advance()
 			if _peek().type == "RPAREN":
 				break
 	_expect("RPAREN", "Expect ')'")
+	if _err:
+		return {}
 	var call := {"type": "Call", "name": name_token.lexeme, "args": args}
 	if keyword:
 		call["kwargs"] = kwargs
@@ -944,8 +967,7 @@ func _parse_primary():
 				a = float(hex.substr(6, 2).hex_to_int()) / 255.0
 			return {"type": "Color", "value": [r / 255.0, g / 255.0, b / 255.0, a]}
 		"LBRACKET":
-			var start_line: int = token.line
-			var start_col: int = token.col
+			var start_token = token
 			_advance()
 			var elements: Array = []
 			if _peek().type != "RBRACKET":
@@ -955,10 +977,14 @@ func _parse_primary():
 					elements.push_back(_parse_arg())
 			if _peek().type != "RBRACKET":
 				var t = _peek()
-				_fail("Expected ']' at line %d col %d" % [t.line, t.col])
+				var msg := "Expected ']' %s" % [_format_coords(t)]
+				_record_diagnostic("P001", msg, t)
+				return {}
 			else:
 				_advance()
-			return {"type": "ArrayLiteral", "elements": elements, "loc": {"line": start_line, "col": start_col}}
+			var start_line = _get_token_prop(start_token, "line", null)
+			var start_col = _get_token_prop(start_token, "col", null)
+			return {"type": "ArrayLiteral", "elements": elements, "loc": {"line": start_line, "col": start_col} if (start_line != null and start_col != null) else null}
 		"FUNC":
 			_advance()
 			return {"type": "Func", "src": token.lexeme}
@@ -984,8 +1010,9 @@ func _parse_primary():
 				if _type_at(current + 2) == "LPAREN":
 					break
 				if not MEMBER_TOKENS.has(next.type):
-					_fail("Expected identifier after '.' at line %d col %d" % [next.line, next.col])
-					break
+					var msg := "Expected identifier after '.' %s" % [_format_coords(next)]
+					_record_diagnostic("P001", msg, next)
+					return {}
 				_advance()  # consume '.'
 				_advance()  # consume segment token
 				path.push_back(next.lexeme)
@@ -1021,13 +1048,18 @@ func _parse_primary():
 			var expr = _parse_additive()
 			_expect("RPAREN", "Expect ')'")
 			return expr
-	_fail("Unexpected token %s at line %d col %d" % [token.type, token.line, token.col])
+	var msg := "Unexpected token %s %s" % [token.type, _format_coords(token)]
+	_record_diagnostic("P001", msg, token)
 	_advance()
 	return {"type": "Ident", "name": ""}
 
 func _to_number(node) -> float:
 	if not (node is Dictionary) or node.get("type") != "Number":
-		_fail("Expected number")
+		var loc = node.get("loc") if (node is Dictionary and node.has("loc") and node.get("loc") is Dictionary) else null
+		var token = null
+		if loc != null and loc.has("line") and loc.has("col"):
+			token = {"line": loc.get("line"), "col": loc.get("col")}
+		_record_diagnostic("P001", "Expected number", token)
 		return 0.0
 	return float(node.get("value"))
 
@@ -1036,5 +1068,7 @@ func _parse_kwarg(obj: Dictionary) -> void:
 	_expect("COLON", "Expect ':'")
 	if not EXPR_START.has(_peek().type):
 		var t = _peek()
-		_fail("Expected expression after '=' at line %d col %d" % [t.line, t.col])
+		var msg := "Expected expression after '=' %s" % [_format_coords(t)]
+		_record_diagnostic("P001", msg, t)
+		return
 	obj[key] = _parse_arg()
