@@ -65,6 +65,13 @@ so unlike the sibling ports it carried real shader-math risk, not just mechanica
 - `parity/test_compiler_automation.py`: added `test_expander_propagates_gap005_pass_fields` verifying pass-level preservation across AST expansion.
 - All parity gates verified: definitions (210/210 PASS), graph (352/352 PASS), and full test suite (82/82 pytest PASS).*
 
+*Incrementally synced 2026-09-25 to reference `2f47612c` (`9d3474dfdc6c..2f47612c2904`; the declared source range `fca611fd8f91..2f47612c2904` is the same endpoint force-pushed — `fca611fd` is the pre-rebase SHA of the already-synced `240740dd` content, re-derived from the observed range `13a8a0491dcf..2f47612c2904` by content audit) — ported upstream texture-allocation policies (GAP-004) and the two follow-up fixes:
+- Authorable texture policies: 3D texture specs accept `filter: 'nearest'|'linear'`; 2D texture specs accept `mipmaps: true` (full mip chain allocated up front, regenerated from level 0 after each frame's passes, before endFrame) and `persistent: true` (contents resampled through a NEAREST blit when the texture is recreated at a new size). Effect inventory unchanged: **no effect definition in the range uses these keys**, so compiled graphs, definitions (210/210), and registries are byte-identical; the propagation is exercised by smoke tests, and the runtime path activates only on opt-in.
+- Compiler parity: `orchestrator.gd` `_extract_texture_specs()` now propagates `filter` (3D, only when truthy) and `mipmaps`/`persistent` (2D, only when authored) exactly as reference `compiler.js extractTextureSpecs`; `mipLevelCount`/`mipLevelSize` helpers and `refreshMipTargets` (global surfaces map one spec to both double-buffer halves) ported into `nm_backend.gd`.
+- Runtime: mip regeneration draws a 2x2 box downsample per level (reference webgpu.js `fsMip`; texelFetch so unfilterable float formats work) into a scratch texture and `texture_copy`s it into the mip level (RenderingDevice framebuffers attach mip 0 only); mipmapped inputs sample through a new linear+mipmap sampler (reference legacyDefault 'mipmap'). Odd-sized levels use the scale blit (`fsScale`).
+- Audited upstream commits `62eb56fa` (WebGL2 mip-chain allocation fix + WebGPU cached mip bind groups — the allocation-half ported above; bind-group caching is a WebGPU-perf detail with no RenderingDevice analogue) and `2f47612c` (stop double-creating global surfaces on allocation change — the port's `allocate_textures` now keeps a mipmapped texture whose allocation matches, the same "matching allocation, preserve it" rule; no double-create existed in the port).
+- Audited docs-only commits `fa4b2f02`, `69d83b80`, `13a8a04` (GAP-003 closure records, checkpoint notes — no shader source or definitions changed).*
+
 
 
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
@@ -126,18 +133,18 @@ see the [README](README.md).
 
 ## Coverage
 
-**209 effect definitions** and 231 GLSL shaders across 8 namespaces. (Shader count is 231, not the
+**210 effect definitions** and 231 GLSL shaders across 8 namespaces. (Shader count is 231, not the
 earlier 233: `filter/median` was re-derived from a 3-pass approximation to the reference's single-pass
 exact quickselect, −2 files.)
 
 | Namespace | Definitions | State |
 |---|---|---|
 | `synth` | 29 | renders (generators, df64 fractals, value/simplex/cell/gabor/curl noise) |
-| `filter` | 116 | renders (color ops, convolutions, warps, multi-pass, feedback) — 26 Photoshop-parity artistic filters, **re-crystallized against `75507112`** (see Parity). The `75507112` pass re-ported drifted algorithms (strokes, photocopy, chrome, wind, mosaicTiles, plasticWrap, halftone, lensFlare, spinBlur, median), extended `texture` to 15 material modes and `dither` with error-diffusion, added `emboss` gray / `edge` contourSide / `plasticWrap` lightDirection, fixed a define-vs-uniform class across pondRipples/relief/scatter/morphology/stipple/extrude, and **reverted** `grain`'s round-1 grain-types back to the pinned alpha/pause form |
+| `filter` | 113 | renders (color ops, convolutions, warps, multi-pass, feedback) — 26 Photoshop-parity artistic filters, **re-crystallized against `75507112`** (see Parity). The `75507112` pass re-ported drifted algorithms (strokes, photocopy, chrome, wind, mosaicTiles, plasticWrap, halftone, lensFlare, spinBlur, median), extended `texture` to 15 material modes and `dither` with error-diffusion, added `emboss` gray / `edge` contourSide / `plasticWrap` lightDirection, fixed a define-vs-uniform class across pondRipples/relief/scatter/morphology/stipple/extrude, and **reverted** `grain`'s round-1 grain-types back to the pinned alpha/pause form |
 | `mixer` | 15 | renders (whole namespace) |
 | `classicNoisedeck` | 20 | renders (legacy generators) |
-| `points` / `render` | 10 / 11 | renders — agents (MRT/scatter); chaotic flows chaos-gated. `points/lenia` ships a definition but no shaders yet (staged, pre-existing gap) |
-| `synth3d` / `filter3d` | 7 / 1 | **staged** (definitions only — 3D volumes/raymarch/meshes) |
+| `points` / `render` | 11 / 12 | renders — agents (MRT/scatter); chaotic flows chaos-gated. `points/lenia` ships a definition but no shaders yet (staged, pre-existing gap) |
+| `synth3d` / `filter3d` | 8 / 2 | **staged** (definitions only — 3D volumes/raymarch/meshes) |
 
 ## Parity
 

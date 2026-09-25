@@ -326,6 +326,31 @@ func _init() -> void:
 	]
 	_expect(Resources.allocate_resources(passes2) == {"t_c": "phys_0"}, "resources.global-excluded")
 
+	# Orchestrator texture-spec policies (reference compiler.js extractTextureSpecs, GAP-004):
+	# 3D specs carry an authorable `filter`; 2D specs carry `mipmaps`/`persistent` when authored.
+	var Orchestrator = preload("res://addons/noisemaker/compiler/graph/orchestrator.gd")
+	var o = Orchestrator.new(EffectRegistry.new())
+	var specs := {
+		"vol": {"width": 64, "is3D": true, "filter": "nearest"},
+		"volNoFilter": {"width": 64, "is3D": true},
+		"m": {"width": 128, "mipmaps": true, "persistent": true},
+		"plain": {"width": 64},
+	}
+	var extracted: Dictionary = o._extract_texture_specs([], specs)
+	_expect(extracted["vol"].get("filter") == "nearest", "orchestrator.tex-3d-filter")
+	_expect(not extracted["volNoFilter"].has("filter"), "orchestrator.tex-3d-no-filter")
+	_expect(extracted["m"].get("mipmaps") == true and extracted["m"].get("persistent") == true, "orchestrator.tex-2d-policies")
+	_expect(not extracted["plain"].has("mipmaps") and not extracted["plain"].has("persistent"), "orchestrator.tex-2d-defaults")
+	_expect(extracted["plain"]["width"] == 64 and extracted["plain"]["format"] == "rgba16f", "orchestrator.tex-spec-shape")
+
+	# Runtime mip helpers (nm_backend mipLevelCount/mipLevelSize parity).
+	var Backend = preload("res://addons/noisemaker/runtime/nm_backend.gd")
+	_expect(Backend._mip_level_count(1, 1) == 1, "nm.mip-count-1")
+	_expect(Backend._mip_level_count(128, 64) == 8, "nm.mip-count")
+	_expect(Backend._mip_level_count(5, 3) == 3, "nm.mip-count-nonpow2")
+	_expect(Backend._mip_level_size(128, 1) == 64 and Backend._mip_level_size(128, 7) == 1, "nm.mip-size")
+	_expect(Backend._mip_level_size(3, 4) == 1, "nm.mip-size-clamp")
+
 	print("SMOKE: ", "ALL PASS" if _ok else "FAILURES ABOVE")
 	quit(0 if _ok else 1)
 

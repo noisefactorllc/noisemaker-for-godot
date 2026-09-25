@@ -39,6 +39,34 @@ layout(location = 0) out vec4 frag;
 void main() { frag = texture(src, v_uv); }
 """
 
+# Shared resample shader (reference webgpu.js RESAMPLE_WGSL, mode 0 = fsMip):
+# a fullscreen triangle reading the source with texelFetch (works for filterable
+# and unfilterable float formats alike). Mode 0 downsamples the bound mip level
+# by a 2x2 box average into the destination mip level; mode 1 (fsScale) resamples
+# the source to the destination size (persistent-texture recreation at a new size).
+# Params = (srcWidth, srcHeight, srcMip, mode); Dims = (dstWidth, dstHeight, _, _).
+const MIP_FS := """#version 450
+layout(set = 0, binding = 0) uniform sampler2D src;
+layout(set = 0, binding = 1) uniform Params { ivec4 p; ivec4 d; };
+layout(location = 0) out vec4 frag;
+void main() {
+	ivec2 px = ivec2(gl_FragCoord.xy);
+	if (p.w == 0) {
+		ivec2 base = px * 2;
+		vec4 a = texelFetch(src, base, p.z);
+		vec4 b = texelFetch(src, base + ivec2(1, 0), p.z);
+		vec4 c = texelFetch(src, base + ivec2(0, 1), p.z);
+		vec4 e = texelFetch(src, base + ivec2(1, 1), p.z);
+		frag = (a + b + c + e) * 0.25;
+	} else {
+		vec2 ratio = vec2(p.x, p.y) / vec2(d.x, d.y);
+		vec2 scaled = vec2(px) * ratio;
+		ivec2 maxCoord = ivec2(max(vec2(p.x - 1.0, p.y - 1.0), vec2(0.0)));
+		frag = texelFetch(src, min(ivec2(scaled), maxCoord), p.z);
+	}
+}
+"""
+
 # Engine-provided globals (reference/04 §10.1), sourced from the runtime.
 const ENGINE_GLOBALS := {
 	"resolution": true, "time": true, "aspectRatio": true, "tileOffset": true,
@@ -138,6 +166,15 @@ var _midi_state = null
 var _audio_state = null
 var _max_texture_size_2d := 0
 var _max_color_bytes_per_sample := 0
+# Texture allocation policies (reference GAP-004, compiler.js extractTextureSpecs):
+# `mipmaps: true` allocates a full mip chain regenerated after each frame's passes;
+# `persistent: true` preserves contents when a texture is recreated at a new size.
+var _mip_sampler: RID     # linear + linear mipmap filtering for mipmapped inputs
+var _tex_mip := {}        # texId -> mip level count (1 = no chain)
+var _mip_targets: Array = []  # texture ids whose chains regenerate each frame
+var _mip_shader: RID
+var _mip_pipelines := {}  # fb format -> render pipeline
+var _mip_scratch := {}    # Vector2i -> RID temp textures for mip-level renders
 
 func setup(p_rd: RenderingDevice, p_addon_dir: String, p_screen: Vector2i) -> void:
 	if _closed:
@@ -160,6 +197,14 @@ func setup(p_rd: RenderingDevice, p_addon_dir: String, p_screen: Vector2i) -> vo
 	ss.repeat_u = RenderingDevice.SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE
 	ss.repeat_v = RenderingDevice.SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE
 	_sampler = rd.sampler_create(ss)
+	# Mipmap-capable sampler for inputs to textures authored with `mipmaps: true`
+	# (reference webgpu.js 'mipmap' sampler: linear min/mag/mipmap, clamp-to-edge).
+	var ms := RDSamplerState.new()
+	ms.min_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
+	ms.mag_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
+	ms.repeat_u = RenderingDevice.SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE
+	ms.repeat_v = RenderingDevice.SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE
+	_mip_sampler = rd.sampler_create(ms)
 	# 1x1 zero texture bound for "none" sampler inputs so binding indices stay aligned
 	# with the shader's declared samplers (matches the reference backend's BlackTex).
 	_black_tex = _make_tex(1, 1, _data_format("rgba16f"))
@@ -359,11 +404,12 @@ func _apply_mrt_format_budget(graph: Dictionary, max_color_bytes_per_sample: int
 				textures[texture_id] = spec
 				total -= 8
 
-func _make_tex(w: int, h: int, fmt: int) -> RID:
+func _make_tex(w: int, h: int, fmt: int, mip_levels: int = 1) -> RID:
 	var tf := RDTextureFormat.new()
 	tf.width = w
 	tf.height = h
 	tf.format = fmt
+	tf.mipmaps = mip_levels
 	tf.usage_bits = RenderingDevice.TEXTURE_USAGE_COLOR_ATTACHMENT_BIT \
 		| RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT \
 		| RenderingDevice.TEXTURE_USAGE_CAN_COPY_TO_BIT \
@@ -371,8 +417,17 @@ func _make_tex(w: int, h: int, fmt: int) -> RID:
 	var rid := rd.texture_create(tf, RDTextureView.new())
 	# Zero-init (matches the reference's null-data textures). Deterministic first-frame
 	# read for feedback/state surfaces; harmless for transients (fully overwritten).
-	rd.texture_clear(rid, Color(0, 0, 0, 0), 0, 1, 0, 1)
+	rd.texture_clear(rid, Color(0, 0, 0, 0), 0, mip_levels, 0, 1)
 	return rid
+
+# Full mip chain length for a 2D texture dimension pair (reference mipLevelCount).
+static func _mip_level_count(w: int, h: int) -> int:
+	var max_dim := max(1, max(w, h))
+	return max(1, int(floor(log(float(max_dim)) / log(2.0))) + 1)
+
+# Size (>= 1) of one mip level for a dimension (reference mipLevelSize).
+static func _mip_level_size(dim: int, level: int) -> int:
+	return max(1, int(floor(float(dim) / pow(2.0, level))))
 
 func _make_sampled_float_tex(w: int, h: int, values: PackedFloat32Array) -> RID:
 	var tf := RDTextureFormat.new()
@@ -472,6 +527,8 @@ func allocate_textures(graph: Dictionary) -> void:
 	_pingpong.clear()
 	_tex_dims.clear()
 	_tex_fmt.clear()
+	_tex_mip.clear()
+	_mip_targets.clear()
 	var merged := _merge_uniforms(graph)
 	var pp := _pingpong_surfaces(graph)
 	var texs: Dictionary = graph.get("textures", {})
@@ -480,12 +537,28 @@ func allocate_textures(graph: Dictionary) -> void:
 		var w := _resolve_dim(spec.get("width", "screen"), screen.x, merged)
 		var h := _resolve_dim(spec.get("height", "screen"), screen.y, merged)
 		var fmt := _data_format(str(spec.get("format", "rgba16f")))
+		var prior_dims: Vector2i = _tex_dims.get(tex_id, Vector2i())
 		_tex_dims[tex_id] = Vector2i(w, h)
 		_tex_fmt[tex_id] = fmt
 		if pp.has(tex_id):
-			_alloc_pingpong(tex_id, w, h, fmt)
+			_alloc_pingpong(tex_id, w, h, fmt, _mip_levels_for(spec, w, h))
 		else:
-			_textures[tex_id] = _make_tex(w, h, fmt)
+			var levels := _mip_levels_for(spec, w, h)
+			var existing: RID = _textures.get(tex_id, RID())
+			if levels > 1 and existing.is_valid() \
+					and _tex_mip.get(tex_id, 1) == levels and Vector2i(w, h) == prior_dims:
+				# Matching allocation: keep the texture (reference createSurfaces
+				# "matching allocation, preserve it" / recreateTextures "no change needed").
+				pass
+			else:
+				var new_rid := _make_tex(w, h, fmt, levels)
+				if spec.get("persistent", false) == true and existing.is_valid():
+					# Persistent textures preserve their contents across recreation
+					# (reference Pipeline.recreateTexturePreserving): resample the
+					# old contents into the replacement through a NEAREST blit.
+					_resample_tex(existing, new_rid, prior_dims, Vector2i(w, h), fmt)
+				_textures[tex_id] = new_rid
+			_tex_mip[tex_id] = levels
 	var rs = graph.get("renderSurface", null)
 	if rs != null:
 		render_surface_tex = "global_" + str(rs)
@@ -501,6 +574,7 @@ func allocate_textures(graph: Dictionary) -> void:
 			var t := str(p["inputs"][k])
 			if t != "none":
 				_ensure_tex(t)
+	_refresh_mip_targets(graph)
 
 # A global_<name> surface needs double-buffering ONLY when a pass reads it AT OR BEFORE
 # its first write (same-pass read+write, or a prior-frame/feedback read) — i.e. there is a
@@ -539,14 +613,145 @@ func _pingpong_surfaces(graph: Dictionary) -> Dictionary:
 				out[t] = true
 	return out
 
-func _alloc_pingpong(tex_id: String, w: int, h: int, fmt: int) -> void:
+func _alloc_pingpong(tex_id: String, w: int, h: int, fmt: int, mip_levels: int = 1) -> void:
 	var read_key := tex_id + "_read"
 	var write_key := tex_id + "_write"
-	_textures[read_key] = _make_tex(w, h, fmt)
-	_textures[write_key] = _make_tex(w, h, fmt)
+	_textures[read_key] = _make_tex(w, h, fmt, mip_levels)
+	_textures[write_key] = _make_tex(w, h, fmt, mip_levels)
+	_tex_mip[read_key] = mip_levels
+	_tex_mip[write_key] = mip_levels
 	var bare := tex_id.substr("global_".length())
 	_surfaces[bare] = {"read": read_key, "write": write_key}
 	_pingpong[tex_id] = bare
+
+# Mip chain level count a texture spec requests at these resolved dimensions.
+# Only 2D textures may opt in (reference validateTextureMap: `mipmaps` is 2D-only).
+func _mip_levels_for(spec: Dictionary, w: int, h: int) -> int:
+	if spec.get("is3D", false):
+		return 1
+	return _mip_level_count(w, h) if spec.get("mipmaps", false) == true else 1
+
+# Recompute the list of texture ids whose mip chains regenerate after each frame
+# (reference Pipeline.refreshMipTargets): global surfaces map their single graph
+# spec to both halves of the double-buffered surface.
+func _refresh_mip_targets(graph: Dictionary) -> void:
+	_mip_targets.clear()
+	var texs: Dictionary = graph.get("textures", {})
+	for tex_id in texs:
+		var spec: Dictionary = texs[tex_id]
+		if spec.get("mipmaps", false) != true or spec.get("is3D", false):
+			continue
+		if _pingpong.has(tex_id):
+			var bare: String = _pingpong[tex_id]
+			var s: Dictionary = _surfaces.get(bare, {})
+			if s.has("read") and s.has("write"):
+				_mip_targets.append(s["read"])
+				_mip_targets.append(s["write"])
+		else:
+			_mip_targets.append(tex_id)
+
+# Render a fullscreen NEAREST resample of `src` (mip level `src_mip`) into `dst`.
+# mode 0 = 2x2 box downsample (mip chain regeneration), mode 1 = scaled resample
+# (persistent-texture recreation). Mirrors reference webgpu.js fsMip/fsScale.
+func _draw_resample(src: RID, dst: RID, src_dims: Vector2i, dst_dims: Vector2i,
+		src_mip: int, mode: int) -> void:
+	var shader: RID = _mip_shader
+	if not shader.is_valid():
+		shader = _get_shader("__mip", FULLSCREEN_VS, MIP_FS)
+		if not shader.is_valid():
+			return
+		_mip_shader = shader
+	var fb := rd.framebuffer_create([dst])
+	var fmt := rd.framebuffer_get_format(fb)
+	var pipeline: RID = _mip_pipelines.get(fmt, RID())
+	if not pipeline.is_valid():
+		var blend := RDPipelineColorBlendState.new()
+		blend.attachments.push_back(RDPipelineColorBlendStateAttachment.new())
+		pipeline = rd.render_pipeline_create(shader, fmt, _vfmt,
+			RenderingDevice.RENDER_PRIMITIVE_TRIANGLES, RDPipelineRasterizationState.new(),
+			RDPipelineMultisampleState.new(), RDPipelineDepthStencilState.new(), blend)
+		_mip_pipelines[fmt] = pipeline
+	var pbytes := PackedByteArray()
+	pbytes.resize(16)
+	pbytes.encode_s32(0, src_dims.x)
+	pbytes.encode_s32(4, src_dims.y)
+	pbytes.encode_s32(8, src_mip)
+	pbytes.encode_s32(12, mode)
+	var dbytes := PackedByteArray()
+	dbytes.resize(16)
+	dbytes.encode_s32(0, dst_dims.x)
+	dbytes.encode_s32(4, dst_dims.y)
+	var ubo := rd.uniform_buffer_create(pbytes.size(), pbytes)
+	var ubo2 := rd.uniform_buffer_create(dbytes.size(), dbytes)
+	var u0 := RDUniform.new()
+	u0.uniform_type = RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE
+	u0.binding = 0
+	u0.add_id(_sampler)
+	u0.add_id(src)
+	var u1 := RDUniform.new()
+	u1.uniform_type = RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER
+	u1.binding = 1
+	u1.add_id(ubo)
+	var u2 := RDUniform.new()
+	u2.uniform_type = RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER
+	u2.binding = 2
+	u2.add_id(ubo2)
+	var set0 := rd.uniform_set_create([u0, u1, u2], shader, 0)
+	var dl := rd.draw_list_begin(fb, RenderingDevice.DRAW_CLEAR_COLOR_ALL, PackedColorArray([Color(0, 0, 0, 0)]))
+	rd.draw_list_bind_render_pipeline(dl, pipeline)
+	rd.draw_list_bind_uniform_set(dl, set0, 0)
+	rd.draw_list_bind_vertex_array(dl, _varr)
+	rd.draw_list_draw(dl, false, 1)
+	rd.draw_list_end()
+
+# Scratch texture for one mip-level render, cached per (size, format).
+func _scratch_tex(size: Vector2i, fmt: int) -> RID:
+	var key := Vector3i(size.x, size.y, fmt)
+	var rid: RID = _mip_scratch.get(key, RID())
+	if not rid.is_valid():
+		rid = _make_tex(size.x, size.y, fmt, 1)
+		_mip_scratch[key] = rid
+	return rid
+
+# Copy/resample a source texture into `dst` (level 0) — same dimensions use a
+# direct copy, differing dimensions go through the NEAREST scale blit.
+func _resample_tex(src: RID, dst: RID, src_dims: Vector2i, dst_dims: Vector2i, fmt: int) -> void:
+	if src_dims == dst_dims:
+		rd.texture_copy(src, dst, Vector3(0, 0, 0), Vector3(0, 0, 0),
+			Vector3(dst_dims.x, dst_dims.y, 1), 0, 0, 0, 0)
+	else:
+		var tmp := _scratch_tex(dst_dims, fmt)
+		_draw_resample(src, tmp, src_dims, dst_dims, 0, 1)
+		rd.texture_copy(tmp, dst, Vector3(0, 0, 0), Vector3(0, 0, 0),
+			Vector3(dst_dims.x, dst_dims.y, 1), 0, 0, 0, 0)
+
+# Regenerate the mip chains of every mipmapped texture from the level-0 contents
+# written by this frame's passes (reference backend.generateMipmaps, called before
+# endFrame). Each level renders a 2x2 box downsample of the previous level into a
+# scratch texture, then copies it into that mip level (RenderingDevice framebuffers
+# attach mip 0 only, so the level write goes through texture_copy).
+func _generate_mipmaps() -> void:
+	if _mip_targets.is_empty():
+		return
+	for tex_id in _mip_targets:
+		var levels: int = _tex_mip.get(tex_id, 1)
+		var rid: RID = _textures.get(tex_id, RID())
+		if levels <= 1 or not rid.is_valid():
+			continue
+		var dims: Vector2i = _tex_dims.get(tex_id, screen)
+		var fmt: int = _tex_fmt.get(tex_id, RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT)
+		for level in range(1, levels):
+			var dw := _mip_level_size(dims.x, level)
+			var dh := _mip_level_size(dims.y, level)
+			var sw := _mip_level_size(dims.x, level - 1)
+			var sh := _mip_level_size(dims.y, level - 1)
+			var tmp := _scratch_tex(Vector2i(dw, dh), fmt)
+			if sw == dw * 2 and sh == dh * 2:
+				_draw_resample(rid, tmp, Vector2i(sw, sh), Vector2i(dw, dh), level - 1, 0)
+			else:
+				_draw_resample(rid, tmp, Vector2i(sw, sh), Vector2i(dw, dh), level - 1, 1)
+			rd.texture_copy(tmp, rid, Vector3(0, 0, 0), Vector3(0, 0, 0),
+				Vector3(dw, dh, 1), 0, level, 0, 0)
 
 # Merge every pass.uniforms (last write wins) — the divisor/param source for sub-resolution
 # texture sizing (reference collectDefaultUniforms, §9).
@@ -1587,7 +1792,9 @@ func execute_pass(p: Dictionary) -> void:
 		var su := RDUniform.new()
 		su.uniform_type = RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE
 		su.binding = 0
-		su.add_id(_sampler)
+		# Mipmapped inputs sample through the mipmap-capable sampler
+		# (reference legacyDefault 'mipmap' for textures with a mip chain).
+		su.add_id(_mip_sampler if _tex_mip.get(_resolve_read(src_id), 1) > 1 else _sampler)
 		su.add_id(_resolve_read(src_id))
 		set0_uniforms.append(su)
 	else:
@@ -1609,7 +1816,9 @@ func execute_pass(p: Dictionary) -> void:
 			var u := RDUniform.new()
 			u.uniform_type = RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE
 			u.binding = int(s["binding"])
-			u.add_id(_sampler)
+			# Mipmapped inputs sample through the mipmap-capable sampler
+			# (reference legacyDefault 'mipmap' for textures with a mip chain).
+			u.add_id(_mip_sampler if _tex_mip.get(_resolve_read(tid), 1) > 1 else _sampler)
 			u.add_id(_resolve_read(tid))
 			set0_uniforms.append(u)
 	var set0 := rd.uniform_set_create(set0_uniforms, shader, 0)
@@ -1715,6 +1924,9 @@ func render(graph: Dictionary, normalized_time: float = 0.25, presentation_times
 				_update_frame_bindings(p)
 				if rc > 1:
 					_adopt_iteration_bindings(p)
+		# Regenerate mip chains of mipmapped textures from this frame's level-0
+		# contents (reference Pipeline.render -> backend.generateMipmaps).
+		_generate_mipmaps()
 		_end_frame()
 	rd.submit()
 	rd.sync()
@@ -1745,6 +1957,9 @@ func render_samples(graph: Dictionary, total_frames: int, sample_every: int) -> 
 				_update_frame_bindings(p)
 				if rc > 1:
 					_adopt_iteration_bindings(p)
+		# Regenerate mip chains of mipmapped textures from this frame's level-0
+		# contents (reference Pipeline.render -> backend.generateMipmaps).
+		_generate_mipmaps()
 		_end_frame()
 		# Submit/sync each frame: keeps command buffers small (a 40-iteration nsPressure
 		# solve over hundreds of accumulated frames would otherwise overflow one buffer) and
