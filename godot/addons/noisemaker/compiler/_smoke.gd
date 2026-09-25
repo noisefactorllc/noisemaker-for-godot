@@ -8,6 +8,8 @@ const Token = preload("res://addons/noisemaker/compiler/lang/token.gd")
 const Lexer = preload("res://addons/noisemaker/compiler/lang/lexer.gd")
 const Ast = preload("res://addons/noisemaker/compiler/lang/ast.gd")
 const Parser = preload("res://addons/noisemaker/compiler/lang/parser.gd")
+const Validator = preload("res://addons/noisemaker/compiler/lang/validator.gd")
+const EffectRegistry = preload("res://addons/noisemaker/compiler/lang/effect_registry.gd")
 const Diagnostics = preload("res://addons/noisemaker/compiler/lang/diagnostics.gd")
 const EnumPaths = preload("res://addons/noisemaker/compiler/lang/enum_paths.gd")
 const Enums = preload("res://addons/noisemaker/compiler/lang/enums.gd")
@@ -177,6 +179,27 @@ func _init() -> void:
 	_expect(p14.last_diagnostic["code"] == "P006"
 		and p14.last_diagnostic["location"] == null
 		and p14.last_diagnostic["span"] == null, "parser.diag-p006-unlocated")
+
+	var p14_loc = Parser.new()
+	var mock_tokens_p006_loc = [
+		{"type": "SEARCH", "lexeme": "search", "line": 1, "col": 1},
+		{"type": "IDENT", "lexeme": "synth", "line": 1, "col": 8},
+		{"type": "IDENT", "lexeme": "noise", "line": 2, "col": 1},
+		{"type": "LPAREN", "lexeme": "(", "line": 2, "col": 6},
+		{"type": "RPAREN", "lexeme": ")", "line": 2, "col": 7},
+		{"type": "DOT", "lexeme": ".", "line": 2, "col": 8},
+		{"type": "SUBCHAIN", "lexeme": "subchain", "line": 2, "col": 9},
+		{"type": "LPAREN", "lexeme": "(", "line": 2, "col": 17},
+		{"type": "RPAREN", "lexeme": ")", "line": 2, "col": 18},
+		{"type": "LBRACE", "lexeme": "{", "line": 2, "col": 20},
+		{"type": "RBRACE", "lexeme": "}", "line": 2, "col": 21},
+		{"type": "EOF", "lexeme": "", "line": 2, "col": 22},
+	]
+	p14_loc.parse_tokens(mock_tokens_p006_loc)
+	_expect(p14_loc.last_diagnostic["code"] == "P006"
+		and p14_loc.last_diagnostic["location"] == {"line": 2, "column": 9}
+		and p14_loc.last_diagnostic["span"] == null, "parser.diag-p006-located-no-span")
+
 	var p15 = Parser.new()
 	p15.parse_tokens(Lexer.lex("search synth\nlet x = from(a: 1, b: 2)"))
 	_expect(p15.last_diagnostic["code"] == "P007" and p15.last_diagnostic["stage"] == "parser"
@@ -227,6 +250,24 @@ func _init() -> void:
 	var p_subchain_strict = Parser.new()
 	p_subchain_strict.parse_tokens(Lexer.lex("search synth\nnoise().subchain(bad: \"x\") { .noise() }.write(o0)"), {"subchainArguments": "strict"})
 	_expect(p_subchain_strict.last_diagnostic["code"] == "P008" and p_subchain_strict.last_diagnostic["severity"] == "error", "parser.subchain-strict-p008")
+
+	# Validator surfaces subchain argument diagnostics in permissive mode
+	var reg_val = EffectRegistry.new()
+	reg_val.load_all()
+	var val_subchain = Validator.new(reg_val)
+	var val_res = val_subchain.validate(ast_p)
+	_expect(val_res.has("diagnostics"), "validator.subchain-permissive-ok")
+	var p008_found := false
+	var p010_found := false
+	var p009_found := false
+	for sub_d in val_res.get("diagnostics", []):
+		if sub_d.get("code") == "P008":
+			p008_found = true
+		elif sub_d.get("code") == "P010":
+			p010_found = true
+		elif sub_d.get("code") == "P009":
+			p009_found = true
+	_expect(p008_found and p010_found and p009_found, "validator.subchain-permissive-surfaced")
 
 	# Validator._push_diag column preservation
 	var v_probe = load("res://addons/noisemaker/compiler/lang/validator.gd").new(null)

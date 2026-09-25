@@ -1029,11 +1029,33 @@ class CompilerAutomationTests(unittest.TestCase):
 
     def test_subchain_argument_diagnostics_gap027(self):
         source = 'search synth\nnoise().subchain(bad: "x", name: "a" name: "b") { .noise() }.write(o0)\nrender(o0)'
-        # In strict mode, should fail with P008
+        # In permissive mode, validator surfaces all 3 subchain argument diagnostics
+        permissive_dump = self._dump("_validate_dump.gd", {"permissive.dsl": source})["permissive.dsl"]
+        self.assertTrue(permissive_dump["ok"])
+        diags = permissive_dump["out"]["diagnostics"]
+        codes = [d["code"] for d in diags if d["code"] in ("P008", "P009", "P010")]
+        self.assertEqual(codes, ["P008", "P010", "P009"])
+
+        # In strict mode, unknown key fails with P008
         strict_dump = self._dump("_validate_dump.gd", {"strict.dsl": source}, extra_args=["--strict-subchain-args"])["strict.dsl"]
         self.assertFalse(strict_dump["ok"])
-        self.assertEqual(strict_dump["diagnostic"]["code"], "P008")
-        self.assertIn("Unknown subchain argument 'bad'", strict_dump["diagnostic"]["message"])
+        diag = strict_dump["diagnostic"]
+        self.assertEqual(diag["code"], "P008")
+        self.assertEqual(diag["location"], {"line": 2, "column": 18})
+        self.assertIsNotNone(diag["span"])
+        self.assertIn("Unknown subchain argument 'bad'", diag["message"])
+
+        # In strict mode, duplicate key fails with P009
+        dup_src = 'search synth\nnoise().subchain(name: "a", name: "b") { .noise() }.write(o0)\nrender(o0)'
+        dup_dump = self._dump("_validate_dump.gd", {"dup.dsl": dup_src}, extra_args=["--strict-subchain-args"])["dup.dsl"]
+        self.assertFalse(dup_dump["ok"])
+        self.assertEqual(dup_dump["diagnostic"]["code"], "P009")
+
+        # In strict mode, missing comma fails with P010
+        comma_src = 'search synth\nnoise().subchain(name: "a" id: "b") { .noise() }.write(o0)\nrender(o0)'
+        comma_dump = self._dump("_validate_dump.gd", {"comma.dsl": comma_src}, extra_args=["--strict-subchain-args"])["comma.dsl"]
+        self.assertFalse(comma_dump["ok"])
+        self.assertEqual(comma_dump["diagnostic"]["code"], "P010")
 
 
 if __name__ == "__main__":

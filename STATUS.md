@@ -53,7 +53,7 @@ so unlike the sibling ports it carried real shader-math risk, not just mechanica
 - Parser: Structured diagnostics derive line, column, and span coordinates from source token positions, while preserving null locations/spans for caller-supplied unlocated tokens.
 - Numeric coercion: diagnostics derive line, column, and span coordinates from array literal positions (`[1] + 1`), preserving null locations for unlocated expressions.
 - GAP-027 subchain argument validation contract: registered `P008` (unknown/discarded key), `P009` (duplicate key), and `P010` (missing comma separator) in `diagnostics.gd`, surfaced `subchainArgumentDiagnostics` on `Subchain` nodes in parser and validator, and enforced SyntaxError rejection under strict opt-in mode (`subchainArguments: "strict"` via `--strict-subchain-args`).
-- All parity gates verified: definitions (210/210 PASS), registry (210/210 PASS), lex (352/352 PASS), parse (352/352 PASS), validate (352/352 PASS), smoke (50/50 PASS), and pytest compiler automation (27/27 PASS).*
+- All parity gates verified: definitions (210/210 PASS), registry (210/210 PASS), lex (352/352 PASS), parse (352/352 PASS), validate (352/352 PASS), smoke (63/63 PASS), and pytest compiler automation (27/27 PASS).*
 
 
 
