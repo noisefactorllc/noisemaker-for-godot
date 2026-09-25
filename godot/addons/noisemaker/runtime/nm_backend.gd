@@ -554,8 +554,8 @@ func allocate_textures(graph: Dictionary) -> void:
 			var levels := _mip_levels_for(spec, w, h)
 			var persistent: bool = spec.get("persistent", false) == true and not spec.get("is3D", false)
 			var existing: RID = _textures.get(tex_id, RID())
-			if levels > 1 and prev_mip.get(tex_id, 1) == levels \\\
-					and prior_dims == Vector2i(w, h) and existing.is_valid():
+			if levels > 1 and prev_mip.get(tex_id, 1) == levels \
+						and prior_dims == Vector2i(w, h) and existing.is_valid():
 				# Matching allocation: keep the texture (reference createSurfaces
 				# "matching allocation, preserve it" / recreateTextures "no change
 				# needed"). Only opt-in policies keep state; plain textures are
