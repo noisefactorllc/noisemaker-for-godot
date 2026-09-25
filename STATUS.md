@@ -55,6 +55,8 @@ so unlike the sibling ports it carried real shader-math risk, not just mechanica
 - GAP-027 subchain argument validation contract: registered `P008` (unknown/discarded key), `P009` (duplicate key), and `P010` (missing comma separator) in `diagnostics.gd`, surfaced `subchainArgumentDiagnostics` on `Subchain` nodes in parser and validator, and enforced SyntaxError rejection under strict opt-in mode (`subchainArguments: "strict"` via `--strict-subchain-args`).
 - All parity gates verified: definitions (210/210 PASS), registry (210/210 PASS), lex (352/352 PASS), parse (352/352 PASS), validate (352/352 PASS), smoke (63/63 PASS), and pytest compiler automation (27/27 PASS).*
 
+*Incrementally synced 2026-09-25 to reference `9d3474df` (`240740dd676a..9d3474dfdc6c`, v1.0.181) — audited upstream commit `9d3474df` (GAP-003: runtime validation of effect definitions against spec via `validateEffectDefinition` in `shaders/src/runtime/effect-validator.js`). Integrated `validateEffectDefinition` into `tools/convert-definitions.mjs` to validate all effect definitions against spec before writing. Added `test_registered_effect_definitions_satisfy_specification` in `parity/test_shader_coverage.py` asserting that all 210 registered effect definitions satisfy the specification contract (`name`, `namespace`, `func`, `passes`, `program`, `globals`, `paramAliases`). All 210 effect definitions match and pass validation cleanly.*
+
 
 
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,

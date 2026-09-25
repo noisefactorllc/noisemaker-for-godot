@@ -64,6 +64,17 @@ try {
   process.exit(1)
 }
 
+let validateEffectDefinition = null
+const validatorPath = join(REFERENCE_ROOT, 'shaders', 'src', 'runtime', 'effect-validator.js')
+if (existsSync(validatorPath)) {
+  try {
+    const validatorMod = await import(pathToFileURL(validatorPath).href)
+    validateEffectDefinition = validatorMod.validateEffectDefinition || null
+  } catch (err) {
+    process.stderr.write(`[convert] WARNING: failed to load effect-validator.js: ${err?.message || err}\n`)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Field projection. We copy only the fields the C# definition loader reads, in a
 // stable order, so the output is byte-stable across runs and minimally diffs.
@@ -244,6 +255,7 @@ async function main () {
   let failed = 0
   const errors = []
   const preservedLayouts = []
+  const candidates = []
 
   for (const { namespace, name, defPath } of enumerateEffects(filter)) {
     let instance
@@ -259,6 +271,15 @@ async function main () {
       errors.push(`${namespace}/${name}: no default export`)
       continue
     }
+    if (validateEffectDefinition) {
+      if (!instance.namespace) instance.namespace = namespace
+      const valErrors = validateEffectDefinition(instance)
+      if (valErrors.length > 0) {
+        failed++
+        errors.push(`${namespace}/${name}: validation failure — ${valErrors.join('; ')}`)
+        continue
+      }
+    }
     const func = instance.func || name
     const outNsDir = join(OUT_DIR, namespace)
     const outPath = join(outNsDir, `${func}.json`)
@@ -270,20 +291,28 @@ async function main () {
     const def = convertEffect(instance, namespace, name, existing)
     const preserved = portAuthoredLayouts(instance, existing)
     if (preserved) preservedLayouts.push(`${namespace}/${func}`)
+    candidates.push({ outNsDir, outPath, def, namespace, name, func, preserved })
+  }
+
+  if (failed > 0) {
+    process.stderr.write(`\n[convert] FAILED: ${failed} error(s) encountered during validation/collection; aborting without writing to disk.\n`)
+    for (const e of errors) process.stderr.write(`  ! ${e}\n`)
+    process.exit(1)
+  }
+
+  for (const { outNsDir, outPath, def, namespace, name, func, preserved } of candidates) {
     if (!dryRun) {
       mkdirSync(outNsDir, { recursive: true })
       writeFileSync(outPath, JSON.stringify(def, null, 2) + '\n')
     }
     written++
-    process.stderr.write(`[convert] ${namespace}/${name} -> Effects/${namespace}/${func}.json${preserved ? ' (+port uniformLayouts)' : ''}${dryRun ? ' (dry-run)' : ''}\n`)
+    process.stderr.write(`[convert] ${namespace}/${name} -> effects/${namespace}/${func}.json${preserved ? ' (+port uniformLayouts)' : ''}${dryRun ? ' (dry-run)' : ''}\n`)
   }
 
   process.stderr.write(`\n[convert] ${dryRun ? 'would write' : 'wrote'} ${written} effect(s), ${failed} failed.\n`)
   if (preservedLayouts.length) {
     process.stderr.write(`[convert] carried forward port-authored uniformLayouts for ${preservedLayouts.length}: ${preservedLayouts.join(', ')}\n`)
   }
-  for (const e of errors) process.stderr.write(`  ! ${e}\n`)
-  if (failed > 0 && written === 0) process.exit(1)
 }
 
 if (basename(process.argv[1] || '') === 'convert-definitions.mjs') {
