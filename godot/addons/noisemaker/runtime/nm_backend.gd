@@ -527,35 +527,46 @@ func allocate_textures(graph: Dictionary) -> void:
 	_pingpong.clear()
 	_tex_dims.clear()
 	_tex_fmt.clear()
-	_tex_mip.clear()
-	_mip_targets.clear()
 	var merged := _merge_uniforms(graph)
 	var pp := _pingpong_surfaces(graph)
+	# Prior allocation state, snapshotted BEFORE the maps are cleared: the
+	# "matching allocation, preserve it" decision (reference createSurfaces /
+	# recreateTextures) and persistent-content resampling compare against what
+	# this texture previously had, even across render() re-invocations.
+	var prev_dims: Dictionary = _tex_dims.duplicate()
+	var prev_mip: Dictionary = _tex_mip.duplicate()
+	_tex_dims.clear()
+	_tex_fmt.clear()
+	_tex_mip.clear()
+	_mip_targets.clear()
 	var texs: Dictionary = graph.get("textures", {})
 	for tex_id in texs:
 		var spec: Dictionary = texs[tex_id]
 		var w := _resolve_dim(spec.get("width", "screen"), screen.x, merged)
 		var h := _resolve_dim(spec.get("height", "screen"), screen.y, merged)
 		var fmt := _data_format(str(spec.get("format", "rgba16f")))
-		var prior_dims: Vector2i = _tex_dims.get(tex_id, Vector2i())
+		var prior_dims: Vector2i = prev_dims.get(tex_id, Vector2i())
 		_tex_dims[tex_id] = Vector2i(w, h)
 		_tex_fmt[tex_id] = fmt
 		if pp.has(tex_id):
 			_alloc_pingpong(tex_id, w, h, fmt, _mip_levels_for(spec, w, h))
 		else:
 			var levels := _mip_levels_for(spec, w, h)
+			var persistent: bool = spec.get("persistent", false) == true and not spec.get("is3D", false)
 			var existing: RID = _textures.get(tex_id, RID())
-			if levels > 1 and existing.is_valid() \
-					and _tex_mip.get(tex_id, 1) == levels and Vector2i(w, h) == prior_dims:
+			if levels > 1 and prev_mip.get(tex_id, 1) == levels \\\
+					and prior_dims == Vector2i(w, h) and existing.is_valid():
 				# Matching allocation: keep the texture (reference createSurfaces
-				# "matching allocation, preserve it" / recreateTextures "no change needed").
+				# "matching allocation, preserve it" / recreateTextures "no change
+				# needed"). Only opt-in policies keep state; plain textures are
+				# recreated fresh as before (deterministic zero-init).
 				pass
 			else:
 				var new_rid := _make_tex(w, h, fmt, levels)
-				if spec.get("persistent", false) == true and existing.is_valid():
+				if persistent and existing.is_valid() and prior_dims.x > 0:
 					# Persistent textures preserve their contents across recreation
 					# (reference Pipeline.recreateTexturePreserving): resample the
-					# old contents into the replacement through a NEAREST blit.
+					# previous contents into the replacement through a NEAREST blit.
 					_resample_tex(existing, new_rid, prior_dims, Vector2i(w, h), fmt)
 				_textures[tex_id] = new_rid
 			_tex_mip[tex_id] = levels
