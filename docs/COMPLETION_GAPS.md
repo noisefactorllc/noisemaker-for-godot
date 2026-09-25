@@ -48,6 +48,40 @@ Later source changes affect parser diagnostics, output deferral, and two classic
 The export scene, playback instructions, and graph orchestrator remain unchanged.
 This review does not qualify all upstream changes after the audit authority.
 
+Sync date: 2026-09-25 UTC. Source commit: this register row lands with the sync commit itself.
+The delivered upstream range `fca611fd8f91..2f47612c2904` is force-push/non-contiguous as declared.
+A content audit against the port's actual state (STATUS.md ledger ending at `9d3474dfdc6c`) resolves it:
+`fca611fd` ("fix: derive numeric-coercion diagnostic coordinates from array positions") is the
+pre-rebase SHA whose content is already covered by the synced `240740dd` ("test: register committed
+subchain differential gate vs recorded baseline"); the effective new range is
+`9d3474dfdc6c..2f47612c2904` (equals the observed range `13a8a0491dcf..2f47612c2904` plus three
+docs-only commits `fa4b2f02`, `69d83b80`, `13a8a04` between `9d3474df` and `13a8a04`).
+
+Delivered-range diff (diffed directly in a local upstream checkout, not assumed):
+
+| Upstream commit | Change | Port disposition |
+| --- | --- | --- |
+| `a021a283` | GAP-004 authorable texture policies (`filter` 3D, `mipmaps`/`persistent` 2D) across `compiler.js`, `effect-validator.js`, `pipeline.js`, both backends (+466-line `test_mip_controls.js`) | Ported: `orchestrator.gd` `_extract_texture_specs()` propagation, `nm_backend.gd` mip-chain allocation/regeneration/`refreshMipTargets`, mipmap sampler, persistent-texture resample preserve |
+| `62eb56fa` | WebGL2 mip-chain allocation fix; WebGPU cached mip bind groups | Allocation-half ported above; bind-group caching is a WebGPU-perf detail with no RenderingDevice analogue |
+| `2f47612c` | Stop double-creating global surfaces on allocation change | Port's `allocate_textures()` now keeps a matching mipmapped allocation ("matching allocation, preserve it"); the port had no double-create path |
+
+Effect-catalog parity: no effect definition, effect shader, DSL lang, or registry file changed in the
+range (upstream `shaders/effects` and `shaders/src/lang` diffs are empty for the delivered range);
+definitions 210/210 and registries identical. No definition uses the new policy keys yet, so compiled
+graphs are unchanged; the compiler/runtime propagation is exercised by smoke tests and activates only
+on opt-in.
+
+Test evidence for this commit (Linux container, Godot `4.7.stable.official.5b4e0cb0f` `--headless`,
+`NM_REFERENCE_ROOT` at upstream `2f47612c`): smoke 72/72 (9 new), lex/parse/validate/graph 352/352
+each, registry pass (ops 210/210, enums 8/8, paramAliases 44/44, effectKeys 628/628), definitions
+210/210, expand 344/352 (exactly the 8 pre-existing, documented pass-defines differences; normalized
+graphs match), unittest 75/80. The 5 failures are the windowed-Godot tests (device limits, frame
+export, mesh pipeline, formerly-missing effects, shader-compile sweep): this container has no
+X11/Wayland display or Vulkan device; they fail identically on the unmodified baseline
+(`test_frame_export` verified against the pre-sync tree). Limits: no pixel-parity re-sweep, no
+windowed GPU run, no editor interaction, and no CI run exists for this commit yet — this sync does
+not qualify rendering parity and does not close any gap below.
+
 ## 2. Completion claims
 
 | Claim ID | Claim source | Claimed scope | Finding | Evidence |
@@ -58,7 +92,7 @@ This review does not qualify all upstream changes after the audit authority.
 | C-004 | Published README, Run it and Editing it | Sampled animation playback and editable frame controls | contradicted | Published `main.gd` renders one frame. No `FRAMES`, `SAMPLE_EVERY`, or `PLAYBACK_FPS` controls exist. |
 | C-005 | Addon README, troubleshooting | Developers receive useful errors and can recover | partial | Missing-device error explains recovery. Invalid effect reports a missing surface. Corrected DSL renders successfully. |
 | C-006 | Addon README, integration | Useful Godot scripting integration | partial | Public compiler, renderer, and `ImageTexture` path work. Cleanup reports resource warnings. Editor interaction remains unverified. |
-| C-007 | Export kit workflow and artifact | Release readiness | partial | Exact-source release succeeds. All 882 file hashes match. Rebuild inventory matches. CI does not run Godot behavior or pixel comparisons. |
+| C-007 | Export kit workflow and artifact | Release readiness | partial | Exact-source release succeeds. All 882 file hashes match the 2026-09-23 audit authority (`893a9a558ad9...`) only; the delivered upstream range (`9d3474df..2f47612c`) is later than that authority, so hash identity does not evidence the ported changes (see the 2026-09-25 sync row in section 1). Rebuild inventory matches. CI does not run Godot behavior or pixel comparisons. |
 | C-008 | README and STATUS platform limits | Apple Silicon qualification | partial | Audit checks cover M2 and Godot 4.7.2. Review checks cover bounded M4 workflows on Godot 4.7. Other platforms remain unverified. |
 | C-009 | Root README, Install | Standalone addon distribution | contradicted | The instructed addon copy omits license notices. The export kit includes both notices. See GAP-008. |
 
@@ -332,6 +366,7 @@ These actions specify acceptance work. They do not authorize new effect ports or
 | --- | --- | --- | --- |
 | 2026-09-23 | `bbb2d0179c6e991bdeb2efba7ea733baae027f36` | Created this register and README link. Ran 66 tests, compiler gates, three differential probes, batch prefix, and installed-artifact checks. | Seven gaps remain. No completion approval. Full historical parity, editor interaction, additional platforms, upgrades, and removal remain unqualified. |
 | 2026-09-24 | `6335960ea16d7a1231355eafe5086ad3c73afd58` | Reviewed all available worker results. Passed 68 current tests. Reproduced playback, pixel, lifecycle, and diagnostic findings. Added GAP-008 and executable acceptance checks. | Eight gaps remain. No verified closures. Full compiler comparisons, latest-authority pixels, editor workflows, other platforms, upgrades, and removal remain unqualified. |
+| 2026-09-25 | This sync commit (upstream `9d3474dfdc6c..2f47612c2904`; see the 2026-09-25 sync row in section 1) | Ported GAP-004 texture-allocation policies with the mip/persistent runtime, fixed STATUS coverage counts, audited the force-push range by content. Gates on Linux headless: smoke 72/72, lex/parse/validate/graph 352/352, registry pass, definitions 210/210, expand 344/352 (documented diffs), unittest 75/80 (5 display-dependent failures, identical on baseline). | No gap closes. No pixel-parity re-sweep, windowed GPU run, editor interaction, or CI evidence for this commit yet; the post-audit upstream changes remain unqualified pending those checks. |
 
 The audit preserved implementation, tests, generators, fixtures, tolerances, workflows, and historical documents.
 It verified source identity before document publication. The shared result records remote publication verification.
