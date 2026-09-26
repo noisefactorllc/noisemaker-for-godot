@@ -671,6 +671,20 @@ mean/std/nonzero-alpha (`DIAG image golden/candidate`) and `render_graph.gd` pri
 in `0ad915b`). The next native run should therefore attribute which artifact is degenerate and
 whether a pass silently failed to compile/link on the runner GPU.
 
+Fourth native run (candidate `ea745f0`, first with the degenerate guard): `compare-adjust` failed
+with the tail `error: degenerate candidate artifact is all-zero (no pixels written by the Godot
+renderer)` — the GOLDEN mint is fine; the Godot candidate render produced an all-zero PNG on the
+native runner while exiting 0 with a valid RenderingDevice (otherwise `RD_NULL`/renderer-exit
+would have failed run.sh earlier). No `NM_SHADER_DIAG` reached the tail, so either no compile/link
+diagnostic was set or the tail truncated it. The fifth run (`3d4444e`) adds `NM_PASS_STATS
+executed/skipped/surface_valid` on stdout AND stderr plus a missing-output structured diagnostic
+and a stderr-only DIAG block, so its tail must show how many passes executed and whether the
+render surface RID is valid before the compare fails. Working hypothesis: an environment-specific
+rendering failure on the `native-spare` runner (historical ledger PASSes are macOS; the anomalous
+signature matches the pre-existing `heightGrid_billboard_alpha` batch anomaly), not the sync's
+pooling-off allocation path, which is byte-identical to the pre-sync baseline (`git diff
+fc4e6d0..59c1a6f` on `nm_backend.gd` removes only the relocated `var texs` declaration).
+
 The audit preserved implementation, tests, generators, fixtures, tolerances, workflows, and historical documents.
 It verified source identity before document publication. The shared result records remote publication verification.
 
