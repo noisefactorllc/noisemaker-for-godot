@@ -2211,7 +2211,21 @@ func execute_pass(p: Dictionary) -> void:
 	var pipeline := _get_pipeline(cache_key, shader, fb_format, n_attach, primitive, blend_spec, vfmt, is_mesh)
 	if not pipeline.is_valid():
 		# _get_pipeline already recorded the ERR_PIPELINE_CREATE diagnostic;
-		# do not bind a dead pipeline into a doomed draw list.
+		# enrich it with the actual per-attachment texture formats so a
+		# driver-specific framebuffer-format rejection names itself, then bail
+		# instead of binding a dead pipeline into a doomed draw list.
+		var fmts := PackedStringArray()
+		for rid in out_rids:
+			fmts.append(str(rd.texture_get_format(rid)))
+		last_shader_diagnostic = _shader_diag.make({
+			"code": ShaderDiagnostics.DIAGNOSTIC_CODES["PIPELINE"],
+			"backend": "renderingdevice",
+			"stage": "pipeline",
+			"program": cache_key,
+			"detail": "render pipeline creation failed: " + cache_key
+				+ " fb_format=" + str(fb_format)
+				+ " attachment_formats=" + " ".join(fmts),
+		})
 		return
 
 	var set0_uniforms := []
