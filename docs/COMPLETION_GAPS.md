@@ -491,7 +491,7 @@ The reviewer checked all entries on 2026-09-24, with the coverage limits in sect
 ### GAP-001: Published project does not implement documented playback
 
 - Status: closed (2026-09-26). Priority: P1. Category: implementation.
-- Scope: `export-kit/kit/main.gd`, its README template, and published kits 0.1.16 and 0.1.17.
+- Scope: `export-kit/kit/main.gd`, its README template, and published kits 0.1.16 and 0.1.17. The fix also touches `godot/addons/noisemaker/runtime/nm_backend.gd` — a Godot 4.7 `mip_filter` sampler-compat set required for any pipeline to run on 4.7; `render_samples` itself is pre-existing and unchanged. This preserves the effect checkpoint (no effect or pass definitions touched).
 - Expected: The exported project plays sampled animation and exposes the documented frame controls.
 - Observed (pre-fix): The project created one image. It had no playback loop or the documented frame constants.
 - Historical evidence: `kit-observe.log` recorded identical texture hashes across 120 frames. `current-kit-observe.log` reproduced static output on Godot 4.7 while the scene called `render_samples(graph, 1, 1)`.
@@ -502,8 +502,8 @@ The reviewer checked all entries on 2026-09-24, with the coverage limits in sect
   - SAMPLE_EVERY=20 → 6 distinct stills vs SAMPLE_EVERY=30 → 4 distinct stills at FRAMES=120 (SAMPLE_EVERY changes its stated behavior).
   - FRAMES=1: 1 distinct hash across 120 frames — immediate single-still render for still-only programs.
   - Headless smoke after the sampler change: `SMOKE: ALL PASS` (includes mip-sampler selection cases). No script errors and no pipeline-creation failures in any kit run.
-  - Limits: a local full-length run at the shipped FRAMES=1800/SAMPLE_EVERY=60 was not completed (≈20+ min per run on the software Vulkan renderer); the playback path exercised is identical code with scaled-down constants. The runnable executable check on the installed artifact (`$GODOT --path "$KIT" --script "$WORKER/kit-observe.gd" --position 5000,5000 -- "$OUT/first.png"`) is gated by the required native checks at verification. Play/parameter-edit/cancellation/recovery on a desktop editor remain unverified here (no desktop host in this container).
-- Acceptance: A temporal program visibly evolves as documented. Every documented control exists and changes its stated behavior. (Shown locally on 4.7 over llvmpipe; native engine runs at verify gate the exact published source.)
+  - Limits: a local full-length run at the shipped FRAMES=1800/SAMPLE_EVERY=60 was not completed (≈20+ min per run on the software Vulkan renderer); the playback path exercised is identical code with scaled-down constants. Gate coverage: the job's declared native cases (`adjust`, `alphaMask`, `bitwise`) run the parity harness, not the installed kit, and no declared check executes the kit-observer executable check post-publication — the playback pass condition is therefore evidenced only by these local Godot 4.7 runs on a rebuilt installed-kit layout, not machine-gated. Desktop-editor Play/parameter-edit/cancellation/recovery remain unverified here (no desktop host in this container).
+- Acceptance: A temporal program visibly evolves as documented. Every documented control exists and changes its stated behavior. (Shown locally on 4.7 over llvmpipe; the declared native verify cases gate parity fixtures, not the kit observer.)
 
 ### GAP-002: Rendered parity retains unresolved failures
 
