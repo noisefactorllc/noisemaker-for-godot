@@ -266,6 +266,23 @@ func close(options := {}) -> void:
 	if _closed:
 		return
 	_closed = true
+	# Free the mip-regeneration scratch allocations (bounded per (dims, format)
+	# but still device memory): the scratch texture, per-fb-format pipelines,
+	# and the shared resample shader. Main textures stay with the RenderingDevice.
+	if rd != null:
+		for key in _mip_scratch:
+			var scratch: RID = _mip_scratch[key]
+			if scratch.is_valid():
+				rd.free_rid(scratch)
+		_mip_scratch.clear()
+		for fmt_key in _mip_pipelines:
+			var pipe: RID = _mip_pipelines[fmt_key]
+			if pipe.is_valid():
+				rd.free_rid(pipe)
+		_mip_pipelines.clear()
+		if _mip_shader.is_valid():
+			rd.free_rid(_mip_shader)
+		_mip_shader = RID()
 	sink_manager.close(options)
 
 # Runtime-fed 128-sample audio buffers used by synth/scope and synth/spectrum. Callers may
@@ -558,7 +575,14 @@ func allocate_textures(graph: Dictionary) -> void:
 		_tex_dims[tex_id] = Vector2i(w, h)
 		_tex_fmt[tex_id] = fmt
 		if pp.has(tex_id):
-			_alloc_pingpong(tex_id, w, h, fmt, _mip_levels_for(spec, w, h))
+			# Persistent global surfaces preserve contents across recreation
+			# (reference Pipeline.createSurfaces -> recreateTexturePreserving on
+			# BOTH halves). Prior half RIDs are captured before the allocation
+			# replaces them; _alloc_pingpong resamples old -> new when opted in.
+			var persistent_pp: bool = spec.get("persistent", false) == true and not spec.get("is3D", false)
+			var prior_read: RID = _textures.get(tex_id + "_read", RID())
+			var prior_write: RID = _textures.get(tex_id + "_write", RID())
+			_alloc_pingpong(tex_id, w, h, fmt, _mip_levels_for(spec, w, h), persistent_pp, prior_read, prior_write, prior_dims)
 		else:
 			var levels := _mip_levels_for(spec, w, h)
 			var persistent: bool = spec.get("persistent", false) == true and not spec.get("is3D", false)
@@ -634,11 +658,19 @@ func _pingpong_surfaces(graph: Dictionary) -> Dictionary:
 				out[t] = true
 	return out
 
-func _alloc_pingpong(tex_id: String, w: int, h: int, fmt: int, mip_levels: int = 1) -> void:
+func _alloc_pingpong(tex_id: String, w: int, h: int, fmt: int, mip_levels: int = 1,
+		persistent: bool = false, prior_read: RID = RID(), prior_write: RID = RID(),
+		prior_dims: Vector2i = Vector2i()) -> void:
 	var read_key := tex_id + "_read"
 	var write_key := tex_id + "_write"
 	_textures[read_key] = _make_tex(w, h, fmt, mip_levels)
 	_textures[write_key] = _make_tex(w, h, fmt, mip_levels)
+	if persistent and prior_dims.x > 0 and prior_read.is_valid() and prior_write.is_valid():
+		# Persistent surfaces preserve contents across recreation at a new size
+		# (reference Pipeline.recreateTexturePreserving on both halves): NEAREST
+		# resample of each old half into its replacement.
+		_resample_tex(prior_read, _textures[read_key], prior_dims, Vector2i(w, h), fmt)
+		_resample_tex(prior_write, _textures[write_key], prior_dims, Vector2i(w, h), fmt)
 	_tex_mip[read_key] = mip_levels
 	_tex_mip[write_key] = mip_levels
 	var bare := tex_id.substr("global_".length())

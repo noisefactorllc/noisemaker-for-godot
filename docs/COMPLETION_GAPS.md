@@ -49,13 +49,21 @@ The export scene, playback instructions, and graph orchestrator remain unchanged
 This review does not qualify all upstream changes after the audit authority.
 
 Sync date: 2026-09-25 UTC. Source commit: this register row lands with the sync commit itself.
-The delivered upstream range `fca611fd8f91..2f47612c2904` is force-push/non-contiguous as declared.
-A content audit against the port's actual state (STATUS.md ledger ending at `9d3474dfdc6c`) resolves it:
-`fca611fd` ("fix: derive numeric-coercion diagnostic coordinates from array positions") is the
-pre-rebase SHA whose content is already covered by the synced `240740dd` ("test: register committed
-subchain differential gate vs recorded baseline"); the effective new range is
-`9d3474dfdc6c..2f47612c2904` (equals the observed range `13a8a0491dcf..2f47612c2904` plus three
-docs-only commits `fa4b2f02`, `69d83b80`, `13a8a04` between `9d3474df` and `13a8a04`).
+The declared upstream range `fca611fd8f91..2f47612c2904` overlaps content the port had already
+synced through `240740dd` (STATUS.md ledger ends at `9d3474dfdc6c`). Verified ancestor facts
+(reproducible in the reference clone, `git merge-base --is-ancestor` / `git log`):
+- `fca611fd` ("fix: derive numeric-coercion diagnostic coordinates from array positions") is a
+  direct ANCESTOR of `240740dd` — `git log --oneline fca611fd..240740dd` lists exactly
+  `8a21c9ca`, `bbdeb56c`, `60b90af3`, `3886ecfa`, `66b2c721` (GAP-027 P008/P009/P010 + docs),
+  `240740dd`. All of that content was already ported in the 2026-09-25 `240740dd` sync
+  (numeric coercion + GAP-027 subchain-argument contract + docs).
+- `240740dd` is an ancestor of `2f47612c2904`, and `9d3474dfdc6c` is the merge base of `9d3474df`
+  and `2f47612c` (the range is linear: `git log --oneline 9d3474dfdc6c..2f47612c2904` lists exactly
+  7 commits). Therefore the effective not-yet-ported range is exactly
+  `9d3474dfdc6c..2f47612c2904` — 7 commits: `7a643033`, `fa4b2f02`, `69d83b80`, `13a8a049`
+  (docs-only) and `a021a283`, `62eb56fa`, `2f47612c` (the GAP-004 texture-policy work delivered
+  by this sync). The earlier "pre-rebase SHA" wording was imprecise; the ancestor facts above are
+  the verified statement.
 
 Delivered-range diff (diffed directly in a local upstream checkout, not assumed):
 
@@ -399,7 +407,7 @@ These actions specify acceptance work. They do not authorize new effect ports or
 | 2026-09-25 | This sync commit (upstream `9d3474dfdc6c..2f47612c2904`; see the 2026-09-25 sync row in section 1) | Ported GAP-004 texture-allocation policies with the mip/persistent runtime, fixed STATUS coverage counts, audited the force-push range by content. Candidate range for review: base `55c3c92` (published `origin/main` head) → current head of this branch
 (run `git log --oneline --reverse 55c3c92..main` for the exact chain; at this row's last edit the chain was:) `4090c0f` sync upstream `9d3474dfdc6c..2f47612c`; `e2b5a2a` record range audit in COMPLETION_GAPS; `edd799a` snapshot prior allocation state in `allocate_textures`; `05296f9` GLSL identifier regex backslash fix; `59cfa59` resample uniform set → single UBO binding; `776ea3b` working-tree sync; `39e1517` hard-wrap STATUS ledger lines; `a2b0a26` mipmap-sampler selection keyed by READ texId + ledger corrections; `4811110` reproducible audit commands + baseline identity; the commit that last updated this row is the
 head under review (its SHA: `git log -1 --format=%H` at review time; SHAs in this chain are
-content-stable except for this row's own updates, which amend only this row). Gates on Linux headless: smoke 85/85, lex/parse/validate/graph 352/352, registry pass, definitions 210/210, expand 344/352 (documented diffs), unittest 79/84 (5 display-dependent failures, identical on baseline). Review fixes folded in: mipmap-sampler selection now keys `_tex_mip` by the resolved READ texId (`_read_tex_id`) instead of `_resolve_read`'s RID (previous lookup never matched — dead path), the mip sampler sets `mipmap_filter` explicitly, `convert-definitions.mjs` drops the pre-branch unconditional policy projections, and the 3D `filter` staging comment no longer claims runtime consumption. | No gap closes. No pixel-parity re-sweep, windowed GPU run, editor interaction, or CI evidence for this commit yet; upstream runtime fidelity (`fsMip`/`fsScale`, `extractTextureSpecs`, `recreateTexturePreserving`, the `13a8a049..2f47612c` empty-diff claim) is audited by content against the reference clone with the reproducible commands recorded in section 1 (reviewer-runnable; no independent party has re-run them yet); the 5 display-dependent test failures are baseline-identical at `55c3c92` (verified, recorded in section 1); the post-audit upstream changes remain unqualified pending windowed checks. |
+content-stable except for this row's own updates, which amend only this row). Gates on Linux headless: smoke 85/85, lex/parse/validate/graph 352/352, registry pass, definitions 210/210, expand 344/352 (documented diffs), unittest 79/84 (5 display-dependent failures, identical on baseline). Review fixes folded in: mipmap-sampler selection now keys `_tex_mip` by the resolved READ texId (`_read_tex_id`) instead of `_resolve_read`'s RID (previous lookup never matched — dead path), the mip sampler sets `mipmap_filter` explicitly, `convert-definitions.mjs` drops the pre-branch unconditional policy projections, the 3D `filter` staging comment no longer claims runtime consumption, `_alloc_pingpong` now honors the `persistent` policy for double-buffered global surfaces (both halves resampled via `_resample_tex`, matching reference `createSurfaces`→`recreateTexturePreserving`), and `close()` frees the mip scratch texture, resample pipelines, and resample shader. | No gap closes. No pixel-parity re-sweep, windowed GPU run, editor interaction, or CI evidence for this commit yet; upstream runtime fidelity (`fsMip`/`fsScale`, `extractTextureSpecs`, `recreateTexturePreserving`, the `13a8a049..2f47612c` empty-diff claim) is audited by content against the reference clone with the reproducible commands recorded in section 1 (reviewer-runnable; no independent party has re-run them yet); the 5 display-dependent test failures are baseline-identical at `55c3c92` (verified, recorded in section 1); the post-audit upstream changes remain unqualified pending windowed checks. |
 
 The audit preserved implementation, tests, generators, fixtures, tolerances, workflows, and historical documents.
 It verified source identity before document publication. The shared result records remote publication verification.
