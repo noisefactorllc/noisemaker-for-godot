@@ -2197,7 +2197,7 @@ func execute_pass(p: Dictionary) -> void:
 		last_shader_diagnostic = _shader_diag.make({
 			"code": ShaderDiagnostics.DIAGNOSTIC_CODES["PIPELINE"],
 			"backend": "renderingdevice",
-			"stage": "pipeline",
+			"stage": "framebuffer",
 			"program": cache_key,
 			"detail": fbmsg,
 		})
