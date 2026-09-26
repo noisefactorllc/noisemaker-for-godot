@@ -2210,10 +2210,11 @@ func execute_pass(p: Dictionary) -> void:
 	var vfmt := _vfmt_empty if is_custom_draw else _vfmt
 	var pipeline := _get_pipeline(cache_key, shader, fb_format, n_attach, primitive, blend_spec, vfmt, is_mesh)
 	if not pipeline.is_valid():
-		# _get_pipeline already recorded the ERR_PIPELINE_CREATE diagnostic;
-		# enrich it with the actual per-attachment texture formats so a
-		# driver-specific framebuffer-format rejection names itself, then bail
-		# instead of binding a dead pipeline into a doomed draw list.
+		# _get_pipeline recorded a minimal ERR_PIPELINE_CREATE diagnostic; this
+		# OVERWRITES last_shader_diagnostic with the fuller record (same code,
+		# detail now carries the actual per-attachment texture formats) so the
+		# harness side-car quotes the enriched failure. Then bail instead of
+		# binding a dead pipeline into a doomed draw list.
 		var fmts := PackedStringArray()
 		for rid in out_rids:
 			fmts.append(str(rd.texture_get_format(rid)))
