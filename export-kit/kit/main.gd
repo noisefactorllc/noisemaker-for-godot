@@ -28,6 +28,7 @@ func _ready() -> void:
 	var dsl := FileAccess.get_file_as_string("res://program.dsl")
 	if dsl.is_empty():
 		push_error("cannot read res://program.dsl")
+		$Status.text = "Failed: cannot read res://program.dsl (see the engine console)."
 		return
 
 	$Status.text = "Rendering %d frames — the window is frozen until this finishes." % FRAMES
@@ -37,6 +38,7 @@ func _ready() -> void:
 	var rd := RenderingServer.create_local_rendering_device()
 	if rd == null:
 		push_error("RenderingDevice unavailable")
+		$Status.text = "Failed: RenderingDevice unavailable (needs a window and Forward+)."
 		return
 	var reg := EffectRegistry.new()
 	reg.load_all()
@@ -44,14 +46,17 @@ func _ready() -> void:
 
 	var backend := Backend.new()
 	backend.setup(rd, "res://addons/noisemaker", Vector2i(SIZE, SIZE))
-	# One still every SAMPLE_EVERY frames of simulated 60 fps time. Programs
-	# made only of still effects can set FRAMES to 1; when no interval boundary
-	# falls inside the run (e.g. FRAMES=1), fall back to the single still frame.
+	# One still every SAMPLE_EVERY frames of simulated 60 fps time. Keep FRAMES
+	# a multiple of SAMPLE_EVERY so the final evolved frame is sampled; if no
+	# interval boundary falls inside the run (e.g. FRAMES=30, SAMPLE_EVERY=60,
+	# or FRAMES=1 for still-only programs), sample once at the final frame so
+	# the loop still shows the evolved state rather than the seed.
 	_stills = backend.render_samples(graph, FRAMES, SAMPLE_EVERY)
 	if _stills.is_empty():
-		_stills = backend.render_samples(graph, 1, 1)
+		_stills = backend.render_samples(graph, FRAMES, max(FRAMES, 1))
 	if _stills.is_empty():
 		push_error("render produced no frames")
+		$Status.text = "Failed: rendering produced no frames (see the engine console)."
 		return
 
 	$Status.text = ""
