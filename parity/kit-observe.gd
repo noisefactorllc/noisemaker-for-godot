@@ -44,9 +44,7 @@ func _on_frame() -> void:
 		var img: Image = tr.texture.get_image()
 		if img != null:
 			var data := img.get_data()
-			h = data.size()
-			for i in range(0, data.size(), 997):
-				h = (h * 31 + data[i]) & 0x7FFFFFFF
+			h = hash(data)  # full-content Variant hash: no sampled-bytes collision risk
 			if not _saved:
 				_saved = true
 				if img.save_png(_out) != OK:

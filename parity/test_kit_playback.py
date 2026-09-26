@@ -10,8 +10,9 @@ a regression to the pre-4.7 `mipmap_filter` name aborts Backend.setup() and
 surfaces as SCRIPT ERROR + "render pipeline creation failed" lines, which this
 suite treats as failure.
 
-Skipped automatically when no Godot binary is available (GODOT env var), like
-the other live tests in this directory.
+A missing Godot binary is a hard setup failure, not a skip: a runner without
+the engine must fail loudly rather than report a silent 0-test pass — this
+suite is the machine gate for the GAP-001 playback acceptance.
 """
 
 import os
@@ -24,6 +25,11 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 GODOT = Path(os.environ.get("GODOT", "/Applications/Godot.app/Contents/MacOS/Godot"))
+if not GODOT.exists():
+    raise RuntimeError(
+        f"kit playback gate requires a Godot binary; none found at {GODOT} "
+        "(set GODOT=<path to Godot>)"
+    )
 KIT_DIR = REPO / "export-kit" / "kit"
 ADDON_DIR = REPO / "godot" / "addons" / "noisemaker"
 OBSERVER = REPO / "parity" / "kit-observe.gd"
@@ -77,7 +83,6 @@ def assert_engine_clean(case, run: dict) -> None:
     case.assertEqual(run["rc"], 0, run["output"][-4000:])
 
 
-@unittest.skipUnless(GODOT.exists(), f"Godot binary not found: {GODOT}")
 class KitPlaybackTests(unittest.TestCase):
 
     def test_temporal_program_evolves_with_differing_displayed_frames(self):
