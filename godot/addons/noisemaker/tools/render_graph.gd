@@ -24,6 +24,7 @@ func _init() -> void:
 	var size := 256
 	var run_seconds := 0       # >0 => timed-sampling mode for stateful sims
 	var sample_every_sec := 5
+	var texture_pooling := false
 	var i := 0
 	while i < a.size():
 		match a[i]:
@@ -41,6 +42,8 @@ func _init() -> void:
 				run_seconds = int(a[i + 1]); i += 2
 			"--sample-every":
 				sample_every_sec = int(a[i + 1]); i += 2
+			"--texture-pooling":
+				texture_pooling = true; i += 1
 			_:
 				i += 1
 	if batch_manifest_path != "":
@@ -49,7 +52,7 @@ func _init() -> void:
 	if (graph_path == "" and dsl_path == "") or out_path == "":
 		printerr("usage: -- (--dsl <dsl> | --graph <json>) --out <png> [--size 256] [--run-seconds N --sample-every S] | --batch-manifest <json>")
 		quit(1); return
-	var ok := _render_request(graph_path, dsl_path, out_path, size, run_seconds, sample_every_sec)
+	var ok := _render_request(graph_path, dsl_path, out_path, size, run_seconds, sample_every_sec, texture_pooling)
 	quit(0 if ok else 1)
 
 
@@ -68,13 +71,15 @@ func _run_batch(manifest_path: String) -> void:
 		var ok := _render_request(
 			str(request.get("graph", "")), str(request.get("dsl", "")),
 			str(request.get("out", "")), int(request.get("size", 256)),
-			int(request.get("run_seconds", 0)), int(request.get("sample_every", 5)))
+			int(request.get("run_seconds", 0)), int(request.get("sample_every", 5)),
+			bool(request.get("texture_pooling", false)))
 		print("NM_BATCH name=", request.get("name", "unknown"), " ok=", ok)
 		all_ok = all_ok and ok
 	quit(0 if all_ok else 1)
 
 
-func _render_request(graph_path: String, dsl_path: String, out_path: String, size: int, run_seconds: int, sample_every_sec: int) -> bool:
+func _render_request(graph_path: String, dsl_path: String, out_path: String, size: int,
+		run_seconds: int, sample_every_sec: int, texture_pooling: bool = false) -> bool:
 	if (graph_path == "" and dsl_path == "") or out_path == "":
 		printerr("bad render request: graph/dsl and out are required")
 		return false

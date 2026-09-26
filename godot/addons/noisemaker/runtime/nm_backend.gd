@@ -25,6 +25,7 @@ extends RefCounted
 const SinkManager := preload("res://addons/noisemaker/runtime/sink.gd")
 const FrameExportQueue := preload("res://addons/noisemaker/runtime/frame_export.gd")
 const RenderingDeviceFrameExport := preload("res://addons/noisemaker/runtime/rendering_device_frame_export.gd")
+const ShaderDiagnostics := preload("res://addons/noisemaker/runtime/shader_diagnostics.gd")
 
 const FULLSCREEN_VS := """#version 450
 layout(location = 0) in vec2 vpos;
@@ -176,6 +177,18 @@ var _mip_shader: RID
 var _mip_pipelines := {}  # fb format -> render pipeline
 var _mip_scratch := {}    # Vector2i -> RID temp textures for mip-level renders
 
+# Texture pooling (reference GAP-006, pipeline.js consumeResourceAllocationPlan).
+# Opt-in via set_texture_pooling(true): virtual (non-global) textures the
+# analyzer grouped onto one physical id (graph.allocations) share a single
+# backend texture. Default off preserves the historical one-texture-per-virtual
+# behavior for every existing program.
+var texture_pooling := false
+var _texture_aliases := {}  # virtualId -> storageId for pooled textures (rebuilt per allocate_textures)
+# Structured shader/compiler diagnostics (reference f83a427e, backends/diagnostics.js).
+# Last failure normalized to the one diagnostic union; empty until a failure.
+var last_shader_diagnostic: Dictionary = {}
+var _shader_diag = ShaderDiagnostics.new()
+
 func setup(p_rd: RenderingDevice, p_addon_dir: String, p_screen: Vector2i) -> void:
 	if _closed:
 		push_error("Noisemaker backend is closed")
@@ -241,6 +254,10 @@ func setup(p_rd: RenderingDevice, p_addon_dir: String, p_screen: Vector2i) -> vo
 		"alphaMode": "straight",
 		"fps": 60.0,
 	})
+
+
+func set_texture_pooling(enabled: bool) -> void:
+	texture_pooling = enabled
 
 
 func add_sink(sink) -> Callable:
@@ -554,6 +571,16 @@ func allocate_textures(graph: Dictionary) -> void:
 	_tex_fmt.clear()
 	var merged := _merge_uniforms(graph)
 	var pp := _pingpong_surfaces(graph)
+	# Rebuild the pooling plan from the analyzer's allocation map. Must run
+	# after _apply_mrt_format_budget() so demoted formats are seen here
+	# (reference pipeline.js recreateTextures -> buildTexturePoolingPlan).
+	var texs: Dictionary = graph.get("textures", {})
+	var previous_aliases: Dictionary = _texture_aliases
+	_texture_aliases = {}
+	if texture_pooling:
+		_texture_aliases = build_texture_pooling_plan(
+			graph.get("allocations", {}), texs, graph.get("passes", []))
+	_release_regrouped_textures(previous_aliases, _texture_aliases)
 	# Prior allocation state, snapshotted BEFORE the maps are cleared: the
 	# "matching allocation, preserve it" decision (reference createSurfaces /
 	# recreateTextures) and persistent-content resampling compare against what
@@ -565,7 +592,6 @@ func allocate_textures(graph: Dictionary) -> void:
 	_tex_fmt.clear()
 	_tex_mip.clear()
 	_mip_targets.clear()
-	var texs: Dictionary = graph.get("textures", {})
 	for tex_id in texs:
 		var spec: Dictionary = texs[tex_id]
 		var w := _resolve_dim(spec.get("width", "screen"), screen.x, merged)
@@ -586,6 +612,14 @@ func allocate_textures(graph: Dictionary) -> void:
 		else:
 			var levels := _mip_levels_for(spec, w, h)
 			var persistent: bool = spec.get("persistent", false) == true and not spec.get("is3D", false)
+			# Pooled secondary member skips its own allocation: the storage
+			# texture is created once under the group's primary id and aliased
+			# below (_apply_texture_aliases). Reference recreateTextures
+			# `const storageId = this._textureAliases.get(texId); if (storageId && storageId !== texId) continue`.
+			var storage_id: String = str(_texture_aliases.get(tex_id, ""))
+			if storage_id != "" and storage_id != tex_id:
+				_tex_mip[tex_id] = 1
+				continue
 			var existing: RID = _textures.get(tex_id, RID())
 			if levels > 1 and prev_mip.get(tex_id, 1) == levels \
 						and prior_dims == Vector2i(w, h) \
@@ -607,6 +641,12 @@ func allocate_textures(graph: Dictionary) -> void:
 	var rs = graph.get("renderSurface", null)
 	if rs != null:
 		render_surface_tex = "global_" + str(rs)
+	# Point every pooled secondary member's map entry at its group's shared
+	# storage texture, so pass execution binds the same texture through either
+	# id (reference Pipeline.applyTextureAliases). Runs BEFORE the undeclared-id
+	# fallback below, so an aliased member (allocation skipped) is already
+	# present and _ensure_tex never creates a spurious standalone texture for it.
+	_apply_texture_aliases()
 	# Any output/input texId not declared in graph.textures (e.g. global_o0/o1, the user
 	# surfaces) gets a screen-sized rgba16f flat texture — the reference's o0..o7 are HDR
 	# (an rgba8 default clamps intermediates to [0,1] and regressed distortion/focusBlur/
@@ -620,6 +660,227 @@ func allocate_textures(graph: Dictionary) -> void:
 			if t != "none":
 				_ensure_tex(t)
 	_refresh_mip_targets(graph)
+
+# ---- Texture pooling (reference GAP-006, pipeline.js) ----
+
+# Build the pooling plan consumed from the analyzer's physical allocation map
+# (graph.allocations). Returns a Dictionary of virtualId -> storageId for every
+# poolable texture; members of a physical group share one backend texture
+# created under the group's primary (first) member id.
+#
+# A group is poolable only when every member carries an identical plain 2D
+# spec: persistent textures must keep their cross-frame contents, and
+# mipmapped/3D textures carry policy state a shared record must not absorb.
+# Groups with mismatched dimensions or formats fall back to standalone
+# textures.
+#
+# First-read safety: a member whose first touch in the pass list is an input
+# read (or that is sampled by its own producing pass) expects the
+# zero-initialized/previous-frame contents a standalone texture would hold, so
+# it is never pooled into a slot a group-mate writes earlier in the same
+# frame. The same protection excludes textures written by partial/non-clearing
+# passes — any explicit `drawMode` (points, billboards, triangles) scatters
+# geometry without covering the surface, and `blend` makes the result depend
+# on the destination's previous contents. A `viewport` pass that does not
+# declare `clear: true` renders into a sub-region: unwritten regions expose
+# whatever was there before (a group-mate's content under pooled storage).
+# Full clears (`clear: true`, no viewport) overwrite the whole texture and
+# stay poolable. (Reference 95743621.)
+static func build_texture_pooling_plan(allocations: Dictionary, textures: Dictionary,
+		passes: Array) -> Dictionary:
+	var aliases := {}
+	if allocations.is_empty() or textures.is_empty():
+		return aliases
+
+	# First-touch classification from the pass list
+	var first_touch_is_write := {}
+	var self_sampled := {}
+	var partially_written := {}
+	for pass_data in passes:
+		var inputs := {}
+		for k in pass_data.get("inputs", {}):
+			inputs[str(pass_data["inputs"][k])] = true
+		var outputs: Array = []
+		for k in pass_data.get("outputs", {}):
+			outputs.append(str(pass_data["outputs"][k]))
+		var dm = pass_data.get("drawMode")
+		var bl = pass_data.get("blend")
+		if _js_truthy(dm) or _js_truthy(bl):
+			for tex_id in outputs:
+				partially_written[tex_id] = true
+		elif pass_data.has("viewport") and not pass_data.get("clear", false):
+			for tex_id in outputs:
+				partially_written[tex_id] = true
+		for tex_id in outputs:
+			if not first_touch_is_write.has(tex_id):
+				first_touch_is_write[tex_id] = true
+			if inputs.has(tex_id):
+				self_sampled[tex_id] = true
+		for tex_id in inputs:
+			if not first_touch_is_write.has(tex_id):
+				first_touch_is_write[tex_id] = false
+
+	var groups := {}  # physicalId -> [virtualIds]
+	for tex_id in allocations:
+		var physical_id = allocations[tex_id]
+		if str(physical_id).is_empty() or not textures.has(tex_id):
+			continue
+		# Global surfaces are double-buffered and never pooled
+		if str(tex_id).begins_with("global"):
+			continue
+		if first_touch_is_write.get(tex_id) == false:
+			continue
+		if self_sampled.has(tex_id) or partially_written.has(tex_id):
+			continue
+		if not groups.has(physical_id):
+			groups[physical_id] = []
+		groups[physical_id].append(tex_id)
+
+	for physical_id in groups:
+		var members: Array = groups[physical_id]
+		if members.size() < 2:
+			continue
+		var specs: Array = []
+		var poolable := true
+		for id in members:
+			var spec: Dictionary = textures[id]
+			if spec.is_empty() or spec.get("persistent", false) == true \
+					or spec.get("mipmaps", false) == true \
+					or spec.get("is3D", false) == true:
+				poolable = false
+				break
+			specs.append(spec)
+		if not poolable:
+			continue
+		var signature := _pooling_signature(specs[0])
+		var same := true
+		for spec in specs:
+			if _pooling_signature(spec) != signature:
+				same = false
+				break
+		if not same:
+			continue
+		var storage_id: String = members[0]
+		for member in members:
+			aliases[member] = storage_id
+	return aliases
+
+
+# Plain 2D spec signature: raw (width, height, format) values, exactly the
+# reference's JSON.stringify([width, height, format]) — raw spec values, not
+# resolved dimensions.
+static func _pooling_signature(spec: Dictionary) -> String:
+	return JSON.stringify([spec.get("width"), spec.get("height"), spec.get("format")])
+
+
+# JavaScript truthiness for pass fields (`pass.drawMode || pass.blend` in the
+# reference): null/false/""/0 are falsy, everything else truthy.
+static func _js_truthy(value) -> bool:
+	match typeof(value):
+		TYPE_NIL, TYPE_BOOL:
+			return value != null and value != false
+		TYPE_STRING:
+			return value != ""
+		TYPE_INT, TYPE_FLOAT:
+			return value != 0
+		_:
+			return true
+
+
+# Destroy backend textures of pooling groups whose membership changed since
+# the previous plan, so the recreation loop rebuilds them with the correct
+# (standalone or re-grouped) sharing (reference releaseRegroupedTextures).
+func _release_regrouped_textures(previous_aliases: Dictionary, next_aliases: Dictionary) -> void:
+	if previous_aliases.is_empty() or rd == null:
+		return
+	var groups := {}  # storage -> [members]
+	for member in previous_aliases:
+		var storage = previous_aliases[member]
+		if not groups.has(storage):
+			groups[storage] = []
+		groups[storage].append(member)
+	# RIDs still owned by an unchanged group must not be freed (RIDs are
+	# shared only within one group, so this protects exactly those).
+	var protected := {}
+	for storage in groups:
+		if _group_unchanged(groups[storage], storage, next_aliases):
+			for m in groups[storage]:
+				var keep: RID = _textures.get(m, RID())
+				if keep.is_valid():
+					protected[keep] = true
+	for storage in groups:
+		if _group_unchanged(groups[storage], storage, next_aliases):
+			continue
+		for m in groups[storage]:
+			var rid: RID = _textures.get(m, RID())
+			if rid.is_valid() and not protected.has(rid):
+				rd.free_rid(rid)
+				_textures.erase(m)
+
+
+static func _group_unchanged(members: Array, storage, next_aliases: Dictionary) -> bool:
+	for m in members:
+		if str(next_aliases.get(m, "")) != str(storage):
+			return false
+	return true
+
+
+# Point every pooled secondary member's map entry at its group's shared
+# storage record, so pass execution binds the same texture through either id
+# (reference applyTextureAliases).
+func _apply_texture_aliases() -> void:
+	if _texture_aliases.is_empty():
+		return
+	for member in _texture_aliases:
+		var storage = _texture_aliases[member]
+		if member == storage:
+			continue
+		var record: RID = _textures.get(storage, RID())
+		if not record.is_valid():
+			continue
+		var existing: RID = _textures.get(member, RID())
+		if existing.is_valid() and existing != record:
+			rd.free_rid(existing)
+		_textures[member] = record
+
+
+# Query the actual runtime texture allocation/reuse plan (reference
+# getResourcePlan): the analyzer's physical allocation map and the sharing the
+# renderer actually materialized — non-global graph textures grouped by
+# identical backend texture record.
+func get_resource_plan(graph: Dictionary) -> Dictionary:
+	var textures: Dictionary = graph.get("textures", {})
+	var records := {}  # RID -> {"id": String, "members": Array}
+	var order: Array = []
+	for tex_id in textures:
+		if str(tex_id).begins_with("global"):
+			continue
+		var record: RID = _textures.get(tex_id, RID())
+		if not record.is_valid():
+			continue
+		if not records.has(record):
+			records[record] = {"id": str(tex_id), "members": []}
+			order.append(record)
+		records[record]["members"].append(str(tex_id))
+	var texture_records: Array = []
+	var shared: Array = []
+	for record in order:
+		var entry: Dictionary = records[record]
+		var dims: Vector2i = _tex_dims.get(entry["id"], Vector2i())
+		texture_records.append({
+			"id": entry["id"],
+			"width": dims.x,
+			"height": dims.y,
+			"virtualTextures": entry["members"],
+		})
+		if entry["members"].size() > 1:
+			shared.append(entry["members"])
+	return {
+		"pooling": texture_pooling,
+		"allocations": graph.get("allocations", {}).duplicate(true),
+		"sharedTextures": shared,
+		"textures": texture_records,
+	}
 
 # A global_<name> surface needs double-buffering ONLY when a pass reads it AT OR BEFORE
 # its first write (same-pass read+write, or a prior-frame/feedback read) — i.e. there is a
@@ -947,6 +1208,13 @@ func _load_fragment(ns: String, fn: String, prog: String) -> String:
 	var f := FileAccess.open(path, FileAccess.READ)
 	if f == null:
 		push_error("missing shader: " + path)
+		last_shader_diagnostic = _shader_diag.make({
+			"code": "ERR_SHADER_MISSING",
+			"backend": "renderingdevice",
+			"stage": "missing-source",
+			"program": prog,
+			"detail": "missing shader: " + path,
+		})
 		return ""
 	var s := f.get_as_text()
 	f.close()
@@ -963,8 +1231,29 @@ func _get_shader(cache_key: String, vert_src: String, frag_src: String) -> RID:
 		var e := spirv.get_stage_compile_error(stage)
 		if e != "":
 			push_error("[shader %s] %s" % [cache_key, e])
+			last_shader_diagnostic = _shader_diag.make({
+				"code": "ERR_SHADER_COMPILE",
+				"backend": "renderingdevice",
+				"stage": "compile",
+				"program": cache_key,
+				"detail": e,
+				"messages": _shader_diag.parse_glsl_info_log(e),
+				"source": vert_src if stage == RenderingDevice.SHADER_STAGE_VERTEX else frag_src,
+			})
 			return RID()
 	var sh := rd.shader_create_from_spirv(spirv)
+	if not sh.is_valid():
+		# SPIR-V accepted the source but the driver-side link/linkage failed.
+		var link_detail := "shader link failed: %s" % cache_key
+		push_error("[shader %s] %s" % [cache_key, link_detail])
+		last_shader_diagnostic = _shader_diag.make({
+			"code": "ERR_SHADER_LINK",
+			"backend": "renderingdevice",
+			"stage": "link",
+			"program": cache_key,
+			"detail": link_detail,
+		})
+		return RID()
 	_shaders[cache_key] = sh
 	return sh
 
@@ -1056,6 +1345,13 @@ func _load_vertex(ns: String, fn: String, prog: String) -> String:
 	var f := FileAccess.open(path, FileAccess.READ)
 	if f == null:
 		push_error("missing vertex shader: " + path)
+		last_shader_diagnostic = _shader_diag.make({
+			"code": "ERR_SHADER_MISSING",
+			"backend": "renderingdevice",
+			"stage": "missing-source",
+			"program": prog,
+			"detail": "missing vertex shader: " + path,
+		})
 		return ""
 	var s := f.get_as_text()
 	f.close()

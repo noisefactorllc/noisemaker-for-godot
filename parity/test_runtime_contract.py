@@ -651,6 +651,193 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("EXPANDER_GAP005_TEST: PASS", result.stdout, result.stdout + result.stderr)
 
+    def test_texture_pooling_plan_groups_and_guards(self):
+        script = """
+            extends SceneTree
+
+            func _init() -> void:
+                var Backend := load("res://addons/noisemaker/runtime/nm_backend.gd")
+                var backend = Backend.new()
+                var plain := {"width": 64, "height": 64, "format": "rgba16f"}
+                var textures := {
+                    "a": plain.duplicate(), "b": plain.duplicate(),
+                    "c": plain.duplicate(), "d": plain.duplicate(),
+                    "e": plain.duplicate(), "f": plain.duplicate(),
+                    "g": plain.duplicate(), "h": plain.duplicate(),
+                    "i": plain.duplicate(), "i2": plain.duplicate(),
+                    "j": plain.duplicate(), "j2": plain.duplicate(),
+                    "k": plain.duplicate(), "k2": plain.duplicate(),
+                    "l3": plain.duplicate(), "l3b": plain.duplicate(),
+                    "m": plain.duplicate(), "m2": plain.duplicate(),
+                    "n": plain.duplicate(),
+                }
+                textures["j"]["persistent"] = true
+                textures["j2"]["persistent"] = true
+                textures["k"]["mipmaps"] = true
+                textures["k2"]["mipmaps"] = true
+                textures["l3"]["is3D"] = true
+                textures["l3b"]["is3D"] = true
+                textures["m2"]["width"] = 128
+                var allocations := {
+                    "a": "phys_0", "b": "phys_0",
+                    "c": "phys_1", "d": "phys_1",
+                    "e": "phys_2", "f": "phys_2",
+                    "g": "phys_3", "h": "phys_3",
+                    "i": "phys_4", "i2": "phys_4",
+                    "j": "phys_5", "j2": "phys_5",
+                    "k": "phys_6", "k2": "phys_6",
+                    "l3": "phys_7", "l3b": "phys_7",
+                    "m": "phys_8", "m2": "phys_8",
+                    "n": "phys_9",
+                    "global_o1": "phys_10", "global_tmp": "phys_10",
+                }
+                var passes := [
+                    # a: plain write-only, but its group-mate b is guarded below
+                    # -> the whole physical group falls back standalone
+                    {"outputs": {"color": "a"}, "program": "p1"},
+                    # c/d: written by later passes (c's first touch is a write,
+                    # pass 3 reads c after pass 2 wrote it) -> poolable; the
+                    # analyzer only groups non-overlapping live ranges
+                    {"inputs": {"src": "b"}, "outputs": {"color": "c"}, "program": "p1"},
+                    {"inputs": {"src": "c"}, "outputs": {"color": "d"}, "program": "p1"},
+                    {"outputs": {"color": "d"}, "program": "p2"},
+                    # e: written by a drawMode (scatter) pass -> partially written
+                    {"outputs": {"color": "e"}, "drawMode": "points", "program": "p1"},
+                    # f: written by a viewport pass without clear -> partially written
+                    {"outputs": {"color": "f"}, "viewport": {"width": 32}, "program": "p1"},
+                    # g: written by a full-clear viewport pass -> stays poolable
+                    {"outputs": {"color": "g"}, "viewport": {"width": 64}, "clear": true, "program": "p1"},
+                    # h: plain write-only -> pools with a
+                    {"outputs": {"color": "h"}, "program": "p1"},
+                    # i pair: pooled
+                    {"outputs": {"color": "i"}, "program": "p3"},
+                    {"outputs": {"color": "i2"}, "program": "p3"},
+                    # j pair: persistent policy -> excluded
+                    {"outputs": {"color": "j"}, "program": "p4"},
+                    {"outputs": {"color": "j2"}, "program": "p4"},
+                    # k pair: mipmaps policy -> excluded
+                    {"outputs": {"color": "k"}, "program": "p5"},
+                    {"outputs": {"color": "k2"}, "program": "p5"},
+                    # l3 pair: 3D -> excluded
+                    {"outputs": {"color": "l3"}, "program": "p6"},
+                    {"outputs": {"color": "l3b"}, "program": "p6"},
+                    # m pair: signature mismatch -> excluded
+                    {"outputs": {"color": "m"}, "program": "p7"},
+                    {"outputs": {"color": "m2"}, "program": "p7"},
+                ]
+                var plan: Dictionary = backend.call("build_texture_pooling_plan", allocations, textures, passes)
+                # Guarded members fall back to STANDALONE textures: they get no
+                # alias at all (reference skips them from the physical group, and
+                # a group that shrinks below 2 members is not pooled either).
+                var ok: bool = \\
+                    not plan.has("a") and not plan.has("b") \\
+                    and plan.get("c", "") == "c" and plan.get("d", "") == "c" \\
+                    and not plan.has("e") \\
+                    and not plan.has("f") \\
+                    and plan.get("g", "") == "g" and plan.get("h", "") == "g" \\
+                    and plan.get("i", "") == "i" and plan.get("i2", "") == "i" \\
+                    and not plan.has("j") and not plan.has("j2") \\
+                    and not plan.has("k") and not plan.has("k2") \\
+                    and not plan.has("l3") and not plan.has("l3b") \\
+                    and not plan.has("m") and not plan.has("m2") \\
+                    and not plan.has("n") \\
+                    and not plan.has("global_o1") and not plan.has("global_tmp")
+                if ok:
+                    print("POOLING_PLAN_TEST: PASS")
+                    quit(0)
+                else:
+                    print("POOLING_PLAN_TEST: plan=", plan)
+                    quit(1)
+        """
+        result = self._run_godot_script(script)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("POOLING_PLAN_TEST: PASS", result.stdout, result.stdout + result.stderr)
+
+    def test_texture_pooling_disabled_by_default(self):
+        script = """
+            extends SceneTree
+
+            func _init() -> void:
+                var Backend := load("res://addons/noisemaker/runtime/nm_backend.gd")
+                var backend = Backend.new()
+                if backend.texture_pooling != false:
+                    print("POOLING_DEFAULT_TEST: pooling=", backend.texture_pooling)
+                    quit(1)
+                    return
+                backend.set_texture_pooling(true)
+                if backend.texture_pooling != true:
+                    print("POOLING_DEFAULT_TEST: setter failed")
+                    quit(1)
+                    return
+                backend.set_texture_pooling(false)
+                var plain := {"width": 64, "height": 64, "format": "rgba16f"}
+                var allocations := {"a": "phys_0", "b": "phys_0"}
+                var passes := [
+                    {"outputs": {"color": "a"}, "program": "p1"},
+                    {"outputs": {"color": "b"}, "program": "p1"},
+                ]
+                var plan: Dictionary = backend.call("build_texture_pooling_plan",
+                    allocations, {"a": plain.duplicate(), "b": plain.duplicate()}, passes)
+                var ok: bool = plan.get("a", "") == "a" and plan.get("b", "") == "a" \\
+                    and backend.texture_pooling == false
+                if ok:
+                    print("POOLING_DEFAULT_TEST: PASS")
+                    quit(0)
+                else:
+                    print("POOLING_DEFAULT_TEST: plan=", plan)
+                    quit(1)
+        """
+        result = self._run_godot_script(script)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("POOLING_DEFAULT_TEST: PASS", result.stdout, result.stdout + result.stderr)
+
+    def test_shader_diagnostics_parse_and_normalize(self):
+        script = """
+            extends SceneTree
+
+            func _init() -> void:
+                var Diag := load("res://addons/noisemaker/runtime/shader_diagnostics.gd")
+                var diag = Diag.new()
+                var log := "ERROR: 0:12: 'foo' : undeclared identifier\\nWARNING: 0:30: implicit cast\\nplain driver prose"
+                var messages: Array = diag.call("parse_glsl_info_log", log)
+                var ok: bool = messages.size() == 3 \\
+                    and messages[0]["severity"] == "error" and messages[0]["line"] == 12 \\
+                    and messages[0]["message"] == "'foo' : undeclared identifier" \\
+                    and messages[1]["severity"] == "warning" and messages[1]["line"] == 30 \\
+                    and messages[2]["severity"] == "info" and messages[2]["message"] == "plain driver prose" \\
+                    and diag.call("parse_glsl_info_log", "").is_empty()
+                var parsed: Dictionary = diag.call("parse_diagnostic_text",
+                    "Shader bind error: binding index 7 not present in the bind group layout")
+                ok = ok and parsed["stage"] == "bind" and parsed["bindingIndex"] == 7 \\
+                    and diag.call("parse_diagnostic_text", "").get("bindingIndex", -1) == -1
+                var made: Dictionary = diag.call("make", {
+                    "code": "ERR_SHADER_COMPILE",
+                    "backend": "renderingdevice",
+                    "stage": "compile",
+                    "program": "noise_prog",
+                    "detail": log,
+                    "messages": messages,
+                    "source": "#version 450\\nbad",
+                })
+                ok = ok and made["code"] == "ERR_SHADER_COMPILE" \\
+                    and made["backend"] == "renderingdevice" \\
+                    and made["stage"] == "compile" \\
+                    and made["detail"] == log \\
+                    and made["messages"].size() == 3 \\
+                    and made["program"] == "noise_prog" \\
+                    and made["source"].begins_with("#version 450") \\
+                    and diag.last_diagnostic["code"] == "ERR_SHADER_COMPILE"
+                if ok:
+                    print("SHADER_DIAGNOSTICS_TEST: PASS")
+                    quit(0)
+                else:
+                    print("SHADER_DIAGNOSTICS_TEST: messages=", messages, " made=", made)
+                    quit(1)
+        """
+        result = self._run_godot_script(script)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("SHADER_DIAGNOSTICS_TEST: PASS", result.stdout, result.stdout + result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
