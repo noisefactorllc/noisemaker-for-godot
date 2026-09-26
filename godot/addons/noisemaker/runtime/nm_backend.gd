@@ -420,10 +420,17 @@ func _make_tex(w: int, h: int, fmt: int, mip_levels: int = 1) -> RID:
 	rd.texture_clear(rid, Color(0, 0, 0, 0), 0, mip_levels, 0, 1)
 	return rid
 
-# Full mip chain length for a 2D texture dimension pair (reference mipLevelCount).
+# Full mip chain length for a 2D texture dimension pair (reference mipLevelCount,
+# webgpu.js: Math.max(1, Math.floor(Math.log2(maxDim)) + 1)). Counted by integer
+# halving instead of a float log ratio, which can land just under the integer for
+# power-of-two sizes and produce a one-level-short chain.
 static func _mip_level_count(w: int, h: int) -> int:
-	var max_dim := max(1, max(w, h))
-	return max(1, int(floor(log(float(max_dim)) / log(2.0))) + 1)
+	var d := max(1, max(w, h))
+	var count := 1
+	while d > 1:
+		d = d >> 1
+		count += 1
+	return count
 
 # Size (>= 1) of one mip level for a dimension (reference mipLevelSize).
 static func _mip_level_size(dim: int, level: int) -> int:
@@ -534,6 +541,7 @@ func allocate_textures(graph: Dictionary) -> void:
 	# recreateTextures) and persistent-content resampling compare against what
 	# this texture previously had, even across render() re-invocations.
 	var prev_dims: Dictionary = _tex_dims.duplicate()
+	var prev_fmt: Dictionary = _tex_fmt.duplicate()
 	var prev_mip: Dictionary = _tex_mip.duplicate()
 	_tex_dims.clear()
 	_tex_fmt.clear()
@@ -555,7 +563,8 @@ func allocate_textures(graph: Dictionary) -> void:
 			var persistent: bool = spec.get("persistent", false) == true and not spec.get("is3D", false)
 			var existing: RID = _textures.get(tex_id, RID())
 			if levels > 1 and prev_mip.get(tex_id, 1) == levels \
-						and prior_dims == Vector2i(w, h) and existing.is_valid():
+						and prior_dims == Vector2i(w, h) \
+						and int(prev_fmt.get(tex_id, fmt)) == fmt and existing.is_valid():
 				# Matching allocation: keep the texture (reference createSurfaces
 				# "matching allocation, preserve it" / recreateTextures "no change
 				# needed"). Only opt-in policies keep state; plain textures are
@@ -634,6 +643,25 @@ func _alloc_pingpong(tex_id: String, w: int, h: int, fmt: int, mip_levels: int =
 	var bare := tex_id.substr("global_".length())
 	_surfaces[bare] = {"read": read_key, "write": write_key}
 	_pingpong[tex_id] = bare
+
+# The parent graph texId behind a double-buffered half key ("global_x_read" /
+# "global_x_write" -> "global_x"). Mip regeneration and dims/format lookups use
+# the parent, whose allocation is recorded in _tex_dims/_tex_fmt.
+static func _mip_owner_tex(tex_id: String) -> String:
+	for suffix in ["_read", "_write"]:
+		if tex_id.ends_with(suffix):
+			return tex_id.substr(0, tex_id.length() - suffix.length())
+	return tex_id
+
+# Base mip level (level 0) dims + data format for a mip target, resolving
+# double-buffered half keys through their parent surface. [Vector2i, int]
+func _mip_dims_fmt(tex_id: String) -> Array:
+	var owner := _mip_owner_tex(tex_id)
+	return [
+		_tex_dims.get(owner, _tex_dims.get(tex_id, screen)),
+		_tex_fmt.get(owner, _tex_fmt.get(tex_id,
+			RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT)),
+	]
 
 # Mip chain level count a texture spec requests at these resolved dimensions.
 # Only 2D textures may opt in (reference validateTextureMap: `mipmaps` is 2D-only).
@@ -742,8 +770,12 @@ func _generate_mipmaps() -> void:
 		var rid: RID = _textures.get(tex_id, RID())
 		if levels <= 1 or not rid.is_valid():
 			continue
-		var dims: Vector2i = _tex_dims.get(tex_id, screen)
-		var fmt: int = _tex_fmt.get(tex_id, RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT)
+		# Double-buffered half keys ("global_x_read"/"_write") have no direct
+		# _tex_dims/_tex_fmt entry — resolve through the parent surface so the
+		# chain is computed from the graph spec's real dims/format.
+		var dims_fmt := _mip_dims_fmt(tex_id)
+		var dims: Vector2i = dims_fmt[0]
+		var fmt: int = dims_fmt[1]
 		for level in range(1, levels):
 			var dw := _mip_level_size(dims.x, level)
 			var dh := _mip_level_size(dims.y, level)

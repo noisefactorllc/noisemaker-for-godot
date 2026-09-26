@@ -350,6 +350,26 @@ func _init() -> void:
 	_expect(Backend._mip_level_count(5, 3) == 3, "nm.mip-count-nonpow2")
 	_expect(Backend._mip_level_size(128, 1) == 64 and Backend._mip_level_size(128, 7) == 1, "nm.mip-size")
 	_expect(Backend._mip_level_size(3, 4) == 1, "nm.mip-size-clamp")
+	# Power-of-two robustness: the chain count comes from integer halving, so it
+	# cannot fall one short when a float log/log(2) ratio rounds below the integer.
+	_expect(Backend._mip_level_count(1024, 1024) == 11, "nm.mip-count-pow2-1024")
+	_expect(Backend._mip_level_count(4096, 1) == 13, "nm.mip-count-pow2-4096")
+	_expect(Backend._mip_level_count(16384, 2) == 15, "nm.mip-count-pow2-16384")
+
+	# Ping-pong half-key resolution: mip regeneration looks dims/format up through
+	# the parent surface ("global_x_read"/"_write" -> "global_x"), whose allocation
+	# carries the graph spec's real dims/format — not the screen/f16 fallbacks.
+	var b = Backend.new()
+	b._tex_dims["global_flow"] = Vector2i(64, 32)
+	b._tex_fmt["global_flow"] = RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM
+	var dims_fmt: Array = b._mip_dims_fmt("global_flow_read")
+	_expect(dims_fmt[0] == Vector2i(64, 32), "nm.mip-dims-pingpong-half")
+	_expect(dims_fmt[1] == RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM, "nm.mip-fmt-pingpong-half")
+	var write_dims_fmt: Array = b._mip_dims_fmt("global_flow_write")
+	_expect(write_dims_fmt[0] == Vector2i(64, 32), "nm.mip-dims-pingpong-write")
+	_expect(Backend._mip_owner_tex("global_flow") == "global_flow", "nm.mip-owner-flat")
+	var unknown: Array = b._mip_dims_fmt("global_other_read")
+	_expect(unknown[0] == b.screen, "nm.mip-dims-fallback")
 
 	print("SMOKE: ", "ALL PASS" if _ok else "FAILURES ABOVE")
 	quit(0 if _ok else 1)

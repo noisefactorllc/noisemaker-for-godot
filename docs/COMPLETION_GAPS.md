@@ -72,7 +72,7 @@ graphs are unchanged; the compiler/runtime propagation is exercised by smoke tes
 on opt-in.
 
 Test evidence for this commit (Linux container, Godot `4.7.stable.official.5b4e0cb0f` `--headless`,
-`NM_REFERENCE_ROOT` at upstream `2f47612c`): smoke 72/72 (9 new), lex/parse/validate/graph 352/352
+`NM_REFERENCE_ROOT` at upstream `2f47612c`): smoke 72/72 (10 new _expect assertions), lex/parse/validate/graph 352/352
 each, registry pass (ops 210/210, enums 8/8, paramAliases 44/44, effectKeys 628/628), definitions
 210/210, expand 344/352 (exactly the 8 pre-existing, documented pass-defines differences; normalized
 graphs match), unittest 75/80. The 5 failures are the windowed-Godot tests (device limits, frame

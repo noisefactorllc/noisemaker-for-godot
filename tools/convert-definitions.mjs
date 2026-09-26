@@ -9,7 +9,7 @@
 //   { name, namespace, func, tags, description, paramAliases,
 //     globals{ <key>: { type, default, uniform, define, min, max, choices } },
 //     passes[ { name, program, inputs, outputs, uniforms } ],
-//     textures{ <id>: { width, height, [depth], [is3D], format } } }
+//   textures{ <id>: { width, height, [depth], [is3D], [filter], [mipmaps], [persistent], format } } }
 //
 // This tool SUPERSEDES the hand-written Tier-1 JSON for all ~175 effects: running
 // it regenerates them deterministically from the single source of truth (the JS
@@ -156,6 +156,17 @@ function projectTextures (textures, is3D) {
     if (spec.persistent !== undefined) t.persistent = spec.persistent
     if (spec.filter !== undefined) t.filter = spec.filter
     t.format = spec.format || 'rgba16f'
+    // GAP-004 authorable texture policies (reference a021a283): 3D filtering
+    // ('nearest'|'linear') and 2D mip/persistence allocation policies. Mirrors
+    // compiler.js extractTextureSpecs' branch split — filter is 3D-only,
+    // mipmaps/persistent are 2D-only — so the runtime's orchestrator
+    // _extract_texture_specs / nm_backend allocation actually see them.
+    if (is3D) {
+      if (spec.filter) t.filter = spec.filter
+    } else {
+      if (spec.mipmaps !== undefined) t.mipmaps = spec.mipmaps
+      if (spec.persistent !== undefined) t.persistent = spec.persistent
+    }
     out[id] = t
   }
   return out
