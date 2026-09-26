@@ -2218,13 +2218,14 @@ func execute_pass(p: Dictionary) -> void:
 		var fmts := PackedStringArray()
 		for rid in out_rids:
 			fmts.append(str(rd.texture_get_format(rid)))
+		var rich := "render pipeline creation failed: " + cache_key
+		push_error(rich)
 		last_shader_diagnostic = _shader_diag.make({
 			"code": ShaderDiagnostics.DIAGNOSTIC_CODES["PIPELINE"],
 			"backend": "renderingdevice",
 			"stage": "pipeline",
 			"program": cache_key,
-			"detail": "render pipeline creation failed: " + cache_key
-				+ " fb_format=" + str(fb_format)
+			"detail": rich + " fb_format=" + str(fb_format)
 				+ " attachment_formats=" + " ".join(fmts),
 		})
 		return
