@@ -21,7 +21,7 @@
   },
   {
     "program": "agentsPoints",
-    "effect": "filter/pointsRender",
+    "effect": "render/pointsRender",
     "mode": "density: 100, intensity: 74.59, inputIntensity: 21.46",
     "golden": "parity/out/agentsPoints.golden.png",
     "candidate": "parity/out/agentsPoints.candidate.png",
@@ -41,7 +41,7 @@
   },
   {
     "program": "alphaMask",
-    "effect": "filter/alphaMask",
+    "effect": "mixer/alphaMask",
     "mode": "tex: o0",
     "golden": "parity/out/alphaMask.golden.png",
     "candidate": "parity/out/alphaMask.candidate.png",
@@ -61,7 +61,7 @@
   },
   {
     "program": "applyMode",
-    "effect": "filter/applyMode",
+    "effect": "mixer/applyMode",
     "mode": "tex: o0",
     "golden": "parity/out/applyMode.golden.png",
     "candidate": "parity/out/applyMode.candidate.png",
@@ -101,7 +101,7 @@
   },
   {
     "program": "blendMode",
-    "effect": "filter/blendMode",
+    "effect": "mixer/blendMode",
     "mode": "tex: o0, mode: 13",
     "golden": "parity/out/blendMode.golden.png",
     "candidate": "parity/out/blendMode.candidate.png",
@@ -241,7 +241,7 @@
   },
   {
     "program": "cellRefract",
-    "effect": "filter/cellRefract",
+    "effect": "classicNoisedeck/cellRefract",
     "mode": "default",
     "golden": "parity/out/cellRefract.golden.png",
     "candidate": "parity/out/cellRefract.candidate.png",
@@ -261,7 +261,7 @@
   },
   {
     "program": "cellSplit",
-    "effect": "filter/cellSplit",
+    "effect": "mixer/cellSplit",
     "mode": "tex: o0",
     "golden": "parity/out/cellSplit.golden.png",
     "candidate": "parity/out/cellSplit.candidate.png",
@@ -301,7 +301,7 @@
   },
   {
     "program": "centerMask",
-    "effect": "filter/centerMask",
+    "effect": "mixer/centerMask",
     "mode": "tex: o0",
     "golden": "parity/out/centerMask.golden.png",
     "candidate": "parity/out/centerMask.candidate.png",
@@ -601,7 +601,7 @@
   },
   {
     "program": "coalesce",
-    "effect": "filter/coalesce",
+    "effect": "classicNoisedeck/coalesce",
     "mode": "tex: o0",
     "golden": "parity/out/coalesce.golden.png",
     "candidate": "parity/out/coalesce.candidate.png",
@@ -621,7 +621,7 @@
   },
   {
     "program": "colorLab",
-    "effect": "filter/colorLab",
+    "effect": "classicNoisedeck/colorLab",
     "mode": "default",
     "golden": "parity/out/colorLab.golden.png",
     "candidate": "parity/out/colorLab.candidate.png",
@@ -661,7 +661,7 @@
   },
   {
     "program": "composite",
-    "effect": "filter/composite",
+    "effect": "classicNoisedeck/composite",
     "mode": "tex:o0",
     "golden": "parity/out/composite.golden.png",
     "candidate": "parity/out/composite.candidate.png",
@@ -921,7 +921,7 @@
   },
   {
     "program": "distortion",
-    "effect": "filter/distortion",
+    "effect": "mixer/distortion",
     "mode": "tex: o0",
     "golden": "parity/out/distortion.golden.png",
     "candidate": "parity/out/distortion.candidate.png",
@@ -1061,7 +1061,7 @@
   },
   {
     "program": "effects",
-    "effect": "filter/effects",
+    "effect": "classicNoisedeck/effects",
     "mode": "default",
     "golden": "parity/out/effects.golden.png",
     "candidate": "parity/out/effects.candidate.png",
@@ -1081,7 +1081,7 @@
   },
   {
     "program": "effects_cga",
-    "effect": "filter/effects",
+    "effect": "classicNoisedeck/effects",
     "mode": "effect: 200, effectAmt: 8",
     "golden": "parity/out/effects_cga.golden.png",
     "candidate": "parity/out/effects_cga.candidate.png",
@@ -1101,7 +1101,7 @@
   },
   {
     "program": "effects_sobel",
-    "effect": "filter/effects",
+    "effect": "classicNoisedeck/effects",
     "mode": "effect: 8, effectAmt: 5",
     "golden": "parity/out/effects_sobel.golden.png",
     "candidate": "parity/out/effects_sobel.candidate.png",
@@ -1401,7 +1401,7 @@
   },
   {
     "program": "focusBlur",
-    "effect": "filter/focusBlur",
+    "effect": "mixer/focusBlur",
     "mode": "tex: o0",
     "golden": "parity/out/focusBlur.golden.png",
     "candidate": "parity/out/focusBlur.candidate.png",
@@ -1461,7 +1461,7 @@
   },
   {
     "program": "glitch",
-    "effect": "filter/glitch",
+    "effect": "classicNoisedeck/glitch",
     "mode": "default",
     "golden": "parity/out/glitch.golden.png",
     "candidate": "parity/out/glitch.candidate.png",
@@ -1981,7 +1981,7 @@
   },
   {
     "program": "heightGrid_billboard",
-    "effect": "filter/pointsBillboardRender",
+    "effect": "render/pointsBillboardRender",
     "mode": "viewMode: perspective, rotateX: 0.55, posY: -12, posZ: 22, pointSize: 2, density: 100, intensity: 0, inputIntensity: 0, depositOpacity: 65, sizeDistance: 150, brightnessDistance: 180, aperture: 1.5, focalDistance: 65",
     "golden": "parity/out/heightGrid_billboard.golden.png",
     "candidate": "parity/out/heightGrid_billboard.candidate.png",
@@ -2001,7 +2001,7 @@
   },
   {
     "program": "heightGrid_billboard_alpha",
-    "effect": "filter/pointsBillboardRender",
+    "effect": "render/pointsBillboardRender",
     "mode": "viewMode: perspective, blendMode: alpha, rotateX: 0.55, posY: -12, posZ: 22, pointSize: 3, density: 100, intensity: 0, inputIntensity: 0, depositOpacity: 65",
     "golden": "parity/out/heightGrid_billboard_alpha.golden.png",
     "candidate": "parity/out/heightGrid_billboard_alpha.candidate.png",
@@ -2021,7 +2021,7 @@
   },
   {
     "program": "heightGrid_pointsRender_perspective",
-    "effect": "filter/pointsRender",
+    "effect": "render/pointsRender",
     "mode": "viewMode: perspective, rotateX: 0.55, posY: -12, posZ: 22, fieldOfView: 70",
     "golden": "parity/out/heightGrid_pointsRender_perspective.golden.png",
     "candidate": "parity/out/heightGrid_pointsRender_perspective.candidate.png",
@@ -2041,7 +2041,7 @@
   },
   {
     "program": "heightmap3d_landscape",
-    "effect": "filter/renderLandscape3d",
+    "effect": "render/renderLandscape3d",
     "mode": "panY: -0.18",
     "golden": "parity/out/heightmap3d_landscape.golden.png",
     "candidate": "parity/out/heightmap3d_landscape.candidate.png",
@@ -2201,7 +2201,7 @@
   },
   {
     "program": "lensDistortion",
-    "effect": "filter/lensDistortion",
+    "effect": "classicNoisedeck/lensDistortion",
     "mode": "default",
     "golden": "parity/out/lensDistortion.golden.png",
     "candidate": "parity/out/lensDistortion.candidate.png",
@@ -3717,7 +3717,7 @@
   },
   {
     "program": "patternMix",
-    "effect": "filter/patternMix",
+    "effect": "mixer/patternMix",
     "mode": "tex: o0",
     "golden": "parity/out/patternMix.golden.png",
     "candidate": "parity/out/patternMix.candidate.png",
@@ -4197,7 +4197,7 @@
   },
   {
     "program": "refract",
-    "effect": "filter/refract",
+    "effect": "classicNoisedeck/refract",
     "mode": "default",
     "golden": "parity/out/refract.golden.png",
     "candidate": "parity/out/refract.candidate.png",
@@ -4797,7 +4797,7 @@
   },
   {
     "program": "shadow",
-    "effect": "filter/shadow",
+    "effect": "mixer/shadow",
     "mode": "tex: o0",
     "golden": "parity/out/shadow.golden.png",
     "candidate": "parity/out/shadow.candidate.png",
@@ -4837,7 +4837,7 @@
   },
   {
     "program": "shapeMask",
-    "effect": "filter/shapeMask",
+    "effect": "mixer/shapeMask",
     "mode": "tex: o0",
     "golden": "parity/out/shapeMask.golden.png",
     "candidate": "parity/out/shapeMask.candidate.png",
@@ -4857,7 +4857,7 @@
   },
   {
     "program": "shapeMixer",
-    "effect": "filter/shapeMixer",
+    "effect": "classicNoisedeck/shapeMixer",
     "mode": "tex: o0",
     "golden": "parity/out/shapeMixer.golden.png",
     "candidate": "parity/out/shapeMixer.candidate.png",
@@ -4877,7 +4877,7 @@
   },
   {
     "program": "shapeMixer_simplex",
-    "effect": "filter/shapeMixer",
+    "effect": "classicNoisedeck/shapeMixer",
     "mode": "tex: o0, loopOffset: 370, seed: 2, paletteMode: 4",
     "golden": "parity/out/shapeMixer_simplex.golden.png",
     "candidate": "parity/out/shapeMixer_simplex.candidate.png",
@@ -4897,7 +4897,7 @@
   },
   {
     "program": "shapeMixer_sine",
-    "effect": "filter/shapeMixer",
+    "effect": "classicNoisedeck/shapeMixer",
     "mode": "tex: o0, loopOffset: 380, seed: 5",
     "golden": "parity/out/shapeMixer_sine.golden.png",
     "candidate": "parity/out/shapeMixer_sine.candidate.png",
@@ -4917,7 +4917,7 @@
   },
   {
     "program": "shapeMixer_vnoise",
-    "effect": "filter/shapeMixer",
+    "effect": "classicNoisedeck/shapeMixer",
     "mode": "tex: o0, loopOffset: 300, seed: 3",
     "golden": "parity/out/shapeMixer_vnoise.golden.png",
     "candidate": "parity/out/shapeMixer_vnoise.candidate.png",
@@ -5217,7 +5217,7 @@
   },
   {
     "program": "splat",
-    "effect": "filter/splat",
+    "effect": "classicNoisedeck/splat",
     "mode": "default",
     "golden": "parity/out/splat.golden.png",
     "candidate": "parity/out/splat.candidate.png",
@@ -5237,7 +5237,7 @@
   },
   {
     "program": "split",
-    "effect": "filter/split",
+    "effect": "mixer/split",
     "mode": "tex: o0",
     "golden": "parity/out/split.golden.png",
     "candidate": "parity/out/split.candidate.png",
@@ -6497,7 +6497,7 @@
   },
   {
     "program": "thresholdMix",
-    "effect": "filter/thresholdMix",
+    "effect": "mixer/thresholdMix",
     "mode": "tex: o0",
     "golden": "parity/out/thresholdMix.golden.png",
     "candidate": "parity/out/thresholdMix.candidate.png",
@@ -6617,7 +6617,7 @@
   },
   {
     "program": "uvRemap",
-    "effect": "filter/uvRemap",
+    "effect": "mixer/uvRemap",
     "mode": "tex: o0",
     "golden": "parity/out/uvRemap.golden.png",
     "candidate": "parity/out/uvRemap.candidate.png",

@@ -302,6 +302,53 @@ Vulkan device; each fails with `Unable to create DisplayServer, all display driv
 identically on the unmodified baseline (verified for the 2026-09-25 candidate at `55c3c92`,
 recorded above).
 
+Full declared-range audit, 2026-09-26 (reference clone re-cloned from
+`https://github.com/noisefactorllc/noisemaker`, HEAD `a651c075`):
+
+    $ git merge-base --is-ancestor fca611fd8f91424661d4e531d39313d24ea21134 \
+        6a0af04d3c4f345ffab5e9f8e54e532216b4cdaa; echo $?
+    0
+    $ git diff fca611fd8f91..6a0af04d3c4f -- shaders/effects
+    (empty — 0 bytes: no effect definitions changed anywhere in the declared range)
+    $ git diff --stat 428ea29bf8fb..6a0af04d3c4f -- shaders/   (tail)
+        shaders/tests/test_backend_diagnostics.js   | 338 +++++++++++++++++++
+        shaders/tests/test_resource_pooling.js      | 483 ++++++++++++++++++++++++++++
+        6 files changed, 1305 insertions(+), 44 deletions(-)
+    $ git diff 428ea29bf8fb..6a0af04d3c4f -- shaders/effects shaders/src/lang
+    (empty — 0 bytes)
+    $ git log --oneline fca611fd8f91..6a0af04d3c4f -- shaders/
+    f83a427e fix(shaders): normalize backend shader/compiler failures to one structured diagnostic union
+    95743621 fix(shaders): treat viewport passes without clear as partially written for texture pooling
+    6113da00 feat(shaders): consume the resource allocation plan behind texturePooling opt-in with a queryable runtime plan (GAP-006)
+    fa83eeab feat(shaders): copy name/viewport/clear/samplerTypes/type onto expanded passes (GAP-005)
+    2f47612c fix(shaders): stop double-creating global surfaces on allocation change
+    62eb56fa fix(shaders): allocate the WebGL2 mip chain and cache WebGPU mip bind groups
+    a021a283 feat(shaders): authorable mipmaps/persistent/3D filter texture policies (GAP-004)
+    9d3474df fix(shaders): complete GAP-003 validator contract, corpus gate, and test wiring
+    ba87ffae feat(shaders): validate effect definitions against spec at runtime (GAP-003)
+    240740dd test: register committed subchain differential gate vs recorded baseline
+    66b2c721 feat: subchain-argument validation contract (P008/P009/P010, strict opt-in)
+
+Reading: the declared range `fca611fd..6a0af04d` spans the earlier 2026-09-25 syncs (`66b2c721`
+through `2f47612c` — GAP-003/GAP-004/GAP-005, all present in the port and gated) plus the code
+commits ported in this sync (`6113da00`, `95743621`, `f83a427e`) and docs-only commits. The full
+range's only `shaders/src/lang` delta (shown when diffing from `fca611fd` rather than
+`13a8a049`) is the already-ported GAP-027 subchain-argument contract (`66b2c721`/`240740dd`:
+P008/P009/P010, strict opt-in — present in `godot/addons/noisemaker/compiler/lang/parser.gd`,
+`validator.gd`, and `_smoke.gd` assertions P008/P010/P009/strict-P008).
+
+Ledger namespace correction (same date): the review found `parity/ledger.json` attributing
+`alphaMask`/`blendMode` and 31 other rows to `filter/<fn>` where the definitions live under
+`mixer/` or `render/`. All 33 rows were corrected by checking each row's `<namespace>/<fn>`
+against `godot/addons/noisemaker/effects/<namespace>/<fn>.json`; no golden, candidate, verdict,
+or tolerance fields were touched. This is metadata only and does not affect comparisons.
+
+Native-cases gating note: the required `godot-parity` native cases (`adjust`, `alphaMask`,
+`bitwise`) run through `parity/run.sh` — one program per Godot invocation, a standalone render
+followed by `compare.py`. They do not execute the full ~345-program sweep batch, so the recorded
+`heightGrid_billboard_alpha` full-batch anomaly (STATUS.md, open, root cause unfound) cannot gate
+or mask the required cases. The anomaly itself remains open in STATUS.md.
+
 ## 2. Completion claims
 
 | Claim ID | Claim source | Claimed scope | Finding | Evidence |

@@ -213,8 +213,14 @@ texture-allocation policies (GAP-004) and the two follow-up fixes:
   source or definitions changed). Upstream runtime fidelity above is audited by content against the local reference
   clone at `origin/main` `6a0af04d` with the reproducible commands recorded in `docs/COMPLETION_GAPS.md` §1
   (`git diff 13a8a049..2f47612c -- shaders/effects shaders/src/lang` → empty; `extractTextureSpecs`/`fsMip`/`fsScale`
-  hunks quoted there) — reviewer-runnable, not yet independently re-run. The 5 display-dependent test failures and
-  the 8 expand diffs are verified baseline-identical at `55c3c92` (same commands, recorded in §1).*
+  hunks quoted there) — now committed verbatim: see the "Full declared-range audit, 2026-09-26"
+  block in `docs/COMPLETION_GAPS.md` §1 with observed outputs for the full range
+  `fca611fd..6a0af04d`: the `shaders/effects` diff is empty across the entire range, and the only
+  `shaders/src/lang` delta is the already-ported GAP-027 subchain-argument contract (commits
+  `66b2c721`/`240740dd` → `9d3474df`, P008/P009/P010 — present in the port's
+  `compiler/lang/parser.gd`, `validator.gd`, and `_smoke.gd` tests). The 5 display-dependent test
+  failures and the 8 expand diffs are verified baseline-identical at `55c3c92` (same commands,
+  recorded in §1).*
 
 *Incrementally synced 2026-09-26 to reference `6a0af04d` (`2f47612c2904..6a0af04d3c4f`; the declared
 source range `fca611fd8f91..6a0af04d3c4f` spans this and the previous syncs, audited by ancestry —
