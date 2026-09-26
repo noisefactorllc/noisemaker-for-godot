@@ -100,6 +100,90 @@ Reproducible audit commands (reference clone at `/state/cache/scratch/noisemaker
 Limit: this clone is worker-maintained; a reviewer can reproduce these commands but no independent
 party has yet re-run them — still flagged UNVERIFIED-BY-THIRD-PARTY below.
 
+Observed outputs, committed verbatim so the claims are checkable from this repository alone
+(observed 2026-09-26 in the reference clone at `origin/main` `6a0af04d`):
+
+`git diff --stat 9d3474dfdc6c..2f47612c2904` (full range):
+
+    LEDGER.md                               |  47 +++-
+    docs/plans/active-framework-gap.md      |  46 +++-
+    docs/shaders/effects.rst                |  15 +-
+    docs/shaders/pipeline.rst               |  10 +-
+    llms-full.txt                           |  95 ++++--
+    package.json                            |   2 +-
+    scripts/run-js-tests.js                 |   1 +
+    shaders/src/runtime/backends/webgl2.js  | 121 +++++++-
+    shaders/src/runtime/backends/webgpu.js  | 283 +++++++++++++++++-
+    shaders/src/runtime/compiler.js         |  17 ++
+    shaders/src/runtime/effect-validator.js |  27 +-
+    shaders/src/runtime/pipeline.js         | 119 ++++++--
+    shaders/tests/test_mip_controls.js      | 466 ++++++++++++++++
+    13 files changed, 1163 insertions(+), 86 deletions(-)
+
+`git diff 9d3474dfdc6c..2f47612c2904 -- shaders/effects shaders/src/lang` → 0 bytes of output
+(also 0 for `13a8a0491dcf..2f47612c2904 -- shaders/effects shaders/src/lang`): no effect
+definition, effect shader, or DSL-lang change in the delivered range.
+`git merge-base --is-ancestor fca611fd8f91 240740dd2d30` → exit 0 (ancestor).
+`git merge-base --is-ancestor 240740dd2d30 2f47612c2904` → exit 0 (ancestor).
+`git merge-base 9d3474dfdc6c 2f47612c2904` → `9d3474dfdc6c` (linear 7-commit range).
+
+Reference `extractTextureSpecs()` GAP-004 hunk (`compiler.js`, verbatim, within the 17-line
+`compiler.js` diff):
+
+    if (effectSpec.is3D) {
+        spec.depth = effectSpec.depth || effectSpec.width || 64
+        spec.is3D = true
+        spec.usage = ['storage', 'sample', 'copySrc', 'copyDst']
+        // Definition-level filtering policy for 3D textures ('nearest' or
+        // 'linear'). The backends read this when creating the 3D texture
+        // and when selecting the sampling mode.
+        if (effectSpec.filter) {
+            spec.filter = effectSpec.filter
+        }
+    } else {
+        // 2D-only allocation policies. `mipmaps` allocates a full mip chain
+        // that the pipeline regenerates after each frame that renders to the
+        // texture. `persistent` preserves contents when the texture is
+        // recreated at a new size (resize / parameter-driven recreation).
+        if (effectSpec.mipmaps !== undefined) {
+            spec.mipmaps = effectSpec.mipmaps
+        }
+        if (effectSpec.persistent !== undefined) {
+            spec.persistent = effectSpec.persistent
+        }
+    }
+
+Reference resample shader (`webgpu.js RESAMPLE_WGSL`, verbatim texel bodies):
+
+    fn fsMip(f: FsParams) -> @location(0) vec4f {
+        let d = vec2u(f.frag.xy);
+        let base = d * 2u;
+        let a = textureLoad(src, base, 0u);
+        let b = textureLoad(src, base + vec2u(1u, 0u), 0u);
+        let c = textureLoad(src, base + vec2u(0u, 1u), 0u);
+        let e = textureLoad(src, base + vec2u(1u, 1u), 0u);
+        return (a + b + c + e) * 0.25;
+    }
+
+    fn fsScale(f: FsParams) -> @location(0) vec4f {
+        let d = vec2u(f.frag.xy);
+        let ratio = vec2f(dims.x, dims.y) / vec2f(dims.z, dims.w);
+        let scaled = vec2f(d) * ratio;
+        let maxCoord = vec2u(max(dims.x - 1.0, 0.0), max(dims.y - 1.0, 0.0));
+        let coord = min(vec2u(scaled), maxCoord);
+        return textureLoad(src, coord, 0u);
+    }
+
+    function mipLevelSize(dim, level) {
+        return Math.max(1, Math.floor(dim / Math.pow(2, level)))
+    }
+
+Port counterparts: `MIP_FS` (`nm_backend.gd:47-69`, mode 0 = fsMip texel math identical incl.
+summand order and `* 0.25`; mode 1 = fsScale NEAREST — the port's `ratio = vec2(p.xy)/vec2(d.xy)`
+is the same src/dst ratio as WGSL's `dims.xy/dims.zw`, with the identical `maxCoord` clamp and
+`min` before `texelFetch`), `_mip_level_size` (identical formula), `_mip_level_count` (integer
+halving).
+
 Test evidence for this commit (Linux container, Godot `4.7.stable.official.5b4e0cb0f` `--headless`,
 `NM_REFERENCE_ROOT` at the upstream clone `/state/cache/scratch/noisemaker-upstream`, refreshed to
 `origin/main` `6a0af04d` — `2f47612c` and `8eeb7b5a` are both ancestors; the expand gate needs the
@@ -405,9 +489,17 @@ These actions specify acceptance work. They do not authorize new effect ports or
 | 2026-09-23 | `bbb2d0179c6e991bdeb2efba7ea733baae027f36` | Created this register and README link. Ran 66 tests, compiler gates, three differential probes, batch prefix, and installed-artifact checks. | Seven gaps remain. No completion approval. Full historical parity, editor interaction, additional platforms, upgrades, and removal remain unqualified. |
 | 2026-09-24 | `6335960ea16d7a1231355eafe5086ad3c73afd58` | Reviewed all available worker results. Passed 68 current tests. Reproduced playback, pixel, lifecycle, and diagnostic findings. Added GAP-008 and executable acceptance checks. | Eight gaps remain. No verified closures. Full compiler comparisons, latest-authority pixels, editor workflows, other platforms, upgrades, and removal remain unqualified. |
 | 2026-09-25 | This sync commit (upstream `9d3474dfdc6c..2f47612c2904`; see the 2026-09-25 sync row in section 1) | Ported GAP-004 texture-allocation policies with the mip/persistent runtime, fixed STATUS coverage counts, audited the force-push range by content. Candidate range for review: base `55c3c92` (published `origin/main` head) → current head of this branch
-(run `git log --oneline --reverse 55c3c92..main` for the exact chain; at this row's last edit the chain was:) `4090c0f` sync upstream `9d3474dfdc6c..2f47612c`; `e2b5a2a` record range audit in COMPLETION_GAPS; `edd799a` snapshot prior allocation state in `allocate_textures`; `05296f9` GLSL identifier regex backslash fix; `59cfa59` resample uniform set → single UBO binding; `776ea3b` working-tree sync; `39e1517` hard-wrap STATUS ledger lines; `a2b0a26` mipmap-sampler selection keyed by READ texId + ledger corrections; `4811110` reproducible audit commands + baseline identity; the commit that last updated this row is the
-head under review (its SHA: `git log -1 --format=%H` at review time; SHAs in this chain are
-content-stable except for this row's own updates, which amend only this row). Gates on Linux headless: smoke 85/85, lex/parse/validate/graph 352/352, registry pass, definitions 210/210, expand 344/352 (documented diffs), unittest 79/84 (5 display-dependent failures, identical on baseline). Review fixes folded in: mipmap-sampler selection now keys `_tex_mip` by the resolved READ texId (`_read_tex_id`) instead of `_resolve_read`'s RID (previous lookup never matched — dead path), the mip sampler sets `mipmap_filter` explicitly, `convert-definitions.mjs` drops the pre-branch unconditional policy projections, the 3D `filter` staging comment no longer claims runtime consumption, `_alloc_pingpong` now honors the `persistent` policy for double-buffered global surfaces (both halves resampled via `_resample_tex`, matching reference `createSurfaces`→`recreateTexturePreserving`), and `close()` frees the mip scratch texture, resample pipelines, and resample shader. | No gap closes. No pixel-parity re-sweep, windowed GPU run, editor interaction, or CI evidence for this commit yet; upstream runtime fidelity (`fsMip`/`fsScale`, `extractTextureSpecs`, `recreateTexturePreserving`, the `13a8a049..2f47612c` empty-diff claim) is audited by content against the reference clone with the reproducible commands recorded in section 1 (reviewer-runnable; no independent party has re-run them yet); the 5 display-dependent test failures are baseline-identical at `55c3c92` (verified, recorded in section 1); the post-audit upstream changes remain unqualified pending windowed checks. |
+(run `git log --oneline --reverse 55c3c92..main` for the exact chain). The CODE-bearing commits end at
+`dc3c2dc`; the chain is: `4090c0f` sync upstream `9d3474dfdc6c..2f47612c`; `e2b5a2a` record range audit
+in COMPLETION_GAPS; `edd799a` snapshot prior allocation state in `allocate_textures`; `05296f9` GLSL
+identifier regex backslash fix; `59cfa59` resample uniform set → single UBO binding; `776ea3b`
+working-tree sync; `39e1517` hard-wrap STATUS ledger lines; `a2b0a26` mipmap-sampler selection keyed
+by READ texId + ledger corrections; `4811110` reproducible audit commands + baseline identity;
+`d4ddf3c` record this candidate range; `dc3c2dc` persistent pingpong halves + mip-scratch close()
+frees + corrected ancestor facts. Any commit after `dc3c2dc` is a REGISTER-ONLY edit of this row
+plus, in this row's own update commit, the per-spec `is3D` policy split in
+`tools/convert-definitions.mjs` (regenerated definitions byte-identical; definitions/graph/expand/
+smoke re-run after it, counts unchanged). Gates on Linux headless: smoke 85/85, lex/parse/validate/graph 352/352, registry pass, definitions 210/210, expand 344/352 (documented diffs), unittest 79/84 (5 display-dependent failures, identical on baseline). Review fixes folded in: mipmap-sampler selection now keys `_tex_mip` by the resolved READ texId (`_read_tex_id`) instead of `_resolve_read`'s RID (previous lookup never matched — dead path), the mip sampler sets `mipmap_filter` explicitly, `convert-definitions.mjs` drops the pre-branch unconditional policy projections, the 3D `filter` staging comment no longer claims runtime consumption, `_alloc_pingpong` now honors the `persistent` policy for double-buffered global surfaces (both halves resampled via `_resample_tex`, matching reference `createSurfaces`→`recreateTexturePreserving`), and `close()` frees the mip scratch texture, resample pipelines, and resample shader. | No gap closes. No pixel-parity re-sweep, windowed GPU run, editor interaction, or CI evidence for this commit yet; upstream runtime fidelity (`fsMip`/`fsScale`, `extractTextureSpecs`, `recreateTexturePreserving`, the `13a8a049..2f47612c` empty-diff claim) is audited by content against the reference clone with the reproducible commands recorded in section 1 (reviewer-runnable; no independent party has re-run them yet); the 5 display-dependent test failures are baseline-identical at `55c3c92` (verified, recorded in section 1); the post-audit upstream changes remain unqualified pending windowed checks. |
 
 The audit preserved implementation, tests, generators, fixtures, tolerances, workflows, and historical documents.
 It verified source identity before document publication. The shared result records remote publication verification.
