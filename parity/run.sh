@@ -32,7 +32,10 @@ if [ "${SKIP_RENDER:-0}" != "1" ]; then
 		--position 5000,5000 -- --graph "$GRAPH" --out "$CAND" --size "$SIZE" 2>&1)
 	render_rc=$?
 	set -e
-	printf '%s\n' "$render_log" | grep -E "NM_RENDERED|RD_NULL|SCRIPT ERROR|shader |missing|error" || true
+	# "ERROR" (Godot ERR_FAIL_* engine messages) must be surfaced: a failed
+	# render_pipeline_create prints its exact validation reason as an ERROR
+	# line, which the previous lowercase-only filter dropped from tails.
+	printf '%s\n' "$render_log" | grep -E "NM_RENDERED|NM_SHADER_DIAG|NM_PASS_STATS|RD_NULL|SCRIPT ERROR|ERROR:|shader |missing|error" || true
 	[ "$render_rc" -eq 0 ] || { echo "FAIL: Godot renderer exited $render_rc for $NAME"; exit 1; }
 fi
 [ -f "$CAND" ] || { echo "FAIL: Godot renderer produced no candidate for $NAME"; exit 1; }

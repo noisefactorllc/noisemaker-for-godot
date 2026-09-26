@@ -2208,7 +2208,10 @@ func execute_pass(p: Dictionary) -> bool:
 		# binding a dead pipeline into a doomed draw list.
 		var fmts := PackedStringArray()
 		for rid in out_rids:
-			fmts.append(str(rd.texture_get_format(rid)))
+			# texture_get_format returns an RDTextureFormat struct, not a
+			# DataFormat int; print its .format so the attachment DataFormats
+			# are readable instead of object reprs.
+			fmts.append(str(rd.texture_get_format(rid).format))
 		var rich := ("render pipeline creation failed: " + cache_key
 			+ " fb_format=" + str(fb_format)
 			+ " attachment_formats=" + " ".join(fmts))
