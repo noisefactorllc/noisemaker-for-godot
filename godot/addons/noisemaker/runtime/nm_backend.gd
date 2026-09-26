@@ -1362,9 +1362,10 @@ func _get_pipeline(cache_key: String, shader: RID, fb_format: int, n_attach: int
 	var p := rd.render_pipeline_create(shader, fb_format, vfmt, primitive, raster,
 		RDPipelineMultisampleState.new(), depth, blend)
 	if not p.is_valid():
-		# execute_pass records the enriched ERR_PIPELINE_CREATE diagnostic and
-		# bails before drawing; do not cache the invalid RID either (caching it
-		# would make every retry with the same key bind a dead pipeline).
+		# execute_pass (the only caller) records the enriched
+		# ERR_PIPELINE_CREATE diagnostic and bails before drawing; do not
+		# cache the invalid RID either (caching it would make every retry
+		# with the same key bind a dead pipeline).
 		return p
 	_pipelines[key] = p
 	return p
