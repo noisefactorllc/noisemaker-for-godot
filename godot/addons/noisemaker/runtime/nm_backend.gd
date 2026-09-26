@@ -2118,7 +2118,7 @@ func _layout_for(def: Dictionary, p: Dictionary) -> Dictionary:
 #   triangles   — drawMode "triangles": N procedural mesh vertices from texture inputs
 # Custom draws do not clear. Point/billboard passes accumulate onto the trail the copy
 # pass just produced; triangle passes preserve the preceding background clear pass.
-func execute_pass(p: Dictionary) -> void:
+func execute_pass(p: Dictionary) -> bool:
 	var ptype := str(p.get("passType", "effect"))
 	var draw_mode := str(p.get("drawMode", ""))
 	var is_custom_draw := draw_mode == "points" or draw_mode == "billboards" or draw_mode == "triangles"
@@ -2153,7 +2153,7 @@ func execute_pass(p: Dictionary) -> void:
 			vert_src = _inject_after_version(_load_vertex(ns, fn, prog), inject)
 	var shader := _get_shader(cache_key, vert_src, frag_src)
 	if not shader.is_valid():
-		return
+		return false
 
 	# Resolve every output to its write RID, in declaration order (= shader layout(location=i)).
 	# Double-buffered surfaces render into the current WRITE buffer; everything else flat.
@@ -2172,11 +2172,11 @@ func execute_pass(p: Dictionary) -> void:
 				"program": str(p.get("progName", p.get("func", ""))),
 				"detail": miss,
 			})
-			return
+			return false
 		out_rids.append(rid)
 		output_size = _tex_dims.get(output_id, screen)
 	if out_rids.is_empty():
-		return
+		return false
 	var framebuffer_rids := out_rids.duplicate()
 	var is_mesh := draw_mode == "triangles"
 	if is_mesh:
@@ -2192,7 +2192,7 @@ func execute_pass(p: Dictionary) -> void:
 			"program": cache_key,
 			"detail": fbmsg,
 		})
-		return
+		return false
 	var fb_format := rd.framebuffer_get_format(fb)
 	var n_attach := out_rids.size()
 	var primitive := RenderingDevice.RENDER_PRIMITIVE_POINTS if draw_mode == "points" \
@@ -2220,7 +2220,7 @@ func execute_pass(p: Dictionary) -> void:
 			"program": cache_key,
 			"detail": rich,
 		})
-		return
+		return false
 
 	var set0_uniforms := []
 	if ptype == "blit":
@@ -2288,7 +2288,7 @@ func execute_pass(p: Dictionary) -> void:
 			"program": cache_key,
 			"detail": dlmsg,
 		})
-		return
+		return false
 	rd.draw_list_bind_render_pipeline(dl, pipeline)
 	rd.draw_list_bind_uniform_set(dl, set0, 0)
 	if is_custom_draw:
@@ -2302,6 +2302,7 @@ func execute_pass(p: Dictionary) -> void:
 		rd.draw_list_bind_vertex_array(dl, _varr)
 		rd.draw_list_draw(dl, false, 1)
 	rd.draw_list_end()
+	return true
 
 # --- ping-pong resolution -------------------------------------------------
 
@@ -2392,7 +2393,12 @@ func render(graph: Dictionary, normalized_time: float = 0.25, presentation_times
 			# iteration's output (§10.6) — distinct from the within-frame and end-of-frame swaps.
 			var rc := _repeat_count(p)
 			for _iter in rc:
-				execute_pass(p)
+				if not execute_pass(p):
+					# execute_pass failed (missing shader/output, dead
+					# framebuffer/pipeline/draw list) and recorded a diagnostic;
+					# it drew nothing, so don't count it as executed.
+					_passes_executed -= 1
+					continue
 				_update_frame_bindings(p)
 				if rc > 1:
 					_adopt_iteration_bindings(p)

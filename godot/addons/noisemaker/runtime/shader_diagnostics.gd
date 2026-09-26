@@ -96,6 +96,7 @@ func make(spec: Dictionary) -> Dictionary:
 	var diag := {
 		"backend": str(spec.get("backend", "renderingdevice")),
 		"stage": str(spec.get("stage", "")),
+		"severity": str(spec.get("severity", "error")),
 		"detail": detail,
 		"messages": spec.get("messages", parsed["messages"]),
 	}
