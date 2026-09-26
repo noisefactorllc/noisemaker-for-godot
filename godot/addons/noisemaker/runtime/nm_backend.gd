@@ -1361,6 +1361,16 @@ func _get_pipeline(cache_key: String, shader: RID, fb_format: int, n_attach: int
 		depth.depth_compare_operator = RenderingDevice.COMPARE_OP_LESS
 	var p := rd.render_pipeline_create(shader, fb_format, vfmt, primitive, raster,
 		RDPipelineMultisampleState.new(), depth, blend)
+	if not p.is_valid():
+		var msg := "render pipeline creation failed: " + key
+		push_error(msg)
+		last_shader_diagnostic = _shader_diag.make({
+			"code": ShaderDiagnostics.DIAGNOSTIC_CODES["PIPELINE"],
+			"backend": "renderingdevice",
+			"stage": "pipeline",
+			"program": cache_key,
+			"detail": msg,
+		})
 	_pipelines[key] = p
 	return p
 
@@ -2176,6 +2186,17 @@ func execute_pass(p: Dictionary) -> void:
 	if is_mesh:
 		framebuffer_rids.append(_depth_texture(output_size))
 	var fb := rd.framebuffer_create(framebuffer_rids)
+	if not fb.is_valid():
+		var fbmsg := "framebuffer creation failed: " + cache_key + " attachments=" + str(out_rids.size())
+		push_error(fbmsg)
+		last_shader_diagnostic = _shader_diag.make({
+			"code": ShaderDiagnostics.DIAGNOSTIC_CODES["PIPELINE"],
+			"backend": "renderingdevice",
+			"stage": "pipeline",
+			"program": cache_key,
+			"detail": fbmsg,
+		})
+		return
 	var fb_format := rd.framebuffer_get_format(fb)
 	var n_attach := out_rids.size()
 	var primitive := RenderingDevice.RENDER_PRIMITIVE_POINTS if draw_mode == "points" \
@@ -2237,6 +2258,20 @@ func execute_pass(p: Dictionary) -> void:
 		for _i in n_attach:
 			clears.append(Color(0, 0, 0, 0))
 		dl = rd.draw_list_begin(fb, RenderingDevice.DRAW_CLEAR_COLOR_ALL, clears)
+	if dl == -1:
+		# draw_list_begin returns -1 on failure (validation/format rejection on
+		# some drivers); every draw_list_* call would then be a silent no-op and
+		# the surface would read back all-zero. Name it instead.
+		var dlmsg := "draw_list_begin failed (-1): " + cache_key
+		push_error(dlmsg)
+		last_shader_diagnostic = _shader_diag.make({
+			"code": ShaderDiagnostics.DIAGNOSTIC_CODES["DRAW_LIST"],
+			"backend": "renderingdevice",
+			"stage": "draw",
+			"program": cache_key,
+			"detail": dlmsg,
+		})
+		return
 	rd.draw_list_bind_render_pipeline(dl, pipeline)
 	rd.draw_list_bind_uniform_set(dl, set0, 0)
 	if is_custom_draw:

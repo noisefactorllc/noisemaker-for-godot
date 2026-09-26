@@ -137,7 +137,7 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 	# f83a427e): a black candidate on a runner usually means a pass silently failed
 	# to compile/link; the diagnostic union names the stage and program.
 	var diag = backend.last_shader_diagnostic
-	if diag != null:
+	if diag != null and not diag.is_empty():
 		var dline := ("NM_SHADER_DIAG code=" + str(diag.get("code", ""))
 			+ " severity=" + str(diag.get("severity", ""))
 			+ " stage=" + str(diag.get("stage", ""))

@@ -27,6 +27,11 @@ const DIAGNOSTIC_CODES := {
 	"LINK": "ERR_SHADER_LINK",
 	"MISSING_SOURCE": "ERR_SHADER_MISSING",
 	"NO_SOURCE": "ERR_NO_WGSL_SOURCE",
+	# Port-side codes: RenderingDevice pipeline creation and draw-list
+	# acquisition have no reference analogue (the WebGL2 backend throws from
+	# the WebGL calls instead); they surface silent all-black renders.
+	"PIPELINE": "ERR_PIPELINE_CREATE",
+	"DRAW_LIST": "ERR_DRAW_LIST",
 }
 
 var last_diagnostic: Dictionary = {}
