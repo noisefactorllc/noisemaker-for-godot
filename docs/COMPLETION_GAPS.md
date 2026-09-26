@@ -663,10 +663,12 @@ The third native run (candidate `35c56c6`, first with the tail fix) FAILED `comp
 `max-abs-diff=255.000 mean-abs-diff=147.1240 ssim=0.00001` — an uncorrelated image, consistent
 with one artifact rendering degenerate (black/garbage) rather than a tolerance miss, and matching
 the signature of the pre-existing `heightGrid_billboard_alpha` full-batch anomaly (also
-ssim≈0.00001). `compare.py` now prints the verdict line LAST on stdout and stderr, `run.sh`'s
-failure path prints per-image mean/std/nonzero-alpha (`DIAG image golden/candidate`), and
-`render_graph.gd` prints `NM_SHADER_DIAG code/stage/program/detail` when the structured
-diagnostic union is set, so the next native run attributes which artifact is degenerate and
+ssim≈0.00001). Attribution for the next native run comes from tooling already published in
+`2563652` and `0ad915b` (not from this doc commit): `compare.py` prints the verdict line LAST on
+stdout and stderr (introduced in `2563652`), `run.sh`'s failure path prints per-image
+mean/std/nonzero-alpha (`DIAG image golden/candidate`) and `render_graph.gd` prints
+`NM_SHADER_DIAG code/stage/program/detail` from the structured diagnostic union (both introduced
+in `0ad915b`). The next native run should therefore attribute which artifact is degenerate and
 whether a pass silently failed to compile/link on the runner GPU.
 
 The audit preserved implementation, tests, generators, fixtures, tolerances, workflows, and historical documents.
