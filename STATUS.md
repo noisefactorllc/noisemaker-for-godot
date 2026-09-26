@@ -216,6 +216,56 @@ texture-allocation policies (GAP-004) and the two follow-up fixes:
   hunks quoted there) — reviewer-runnable, not yet independently re-run. The 5 display-dependent test failures and
   the 8 expand diffs are verified baseline-identical at `55c3c92` (same commands, recorded in §1).*
 
+*Incrementally synced 2026-09-26 to reference `6a0af04d` (`2f47612c2904..6a0af04d3c4f`; the declared
+source range `fca611fd8f91..6a0af04d3c4f` spans this and the previous syncs, audited by ancestry —
+`fca611fd` is an ancestor of `6a0af04d`) — closed out the last three code commits of the range:
+- `6113da00` + `95743621` (GAP-006 texture pooling, opt-in): `nm_backend.gd` gains
+  `set_texture_pooling()` / `texture_pooling` (default **off** — one texture per virtual id, byte-for-byte
+  the historical behavior for every existing program), a static `build_texture_pooling_plan()`
+  consuming the port's `graph.allocations` (texId -> `phys_N`, reference `graph.allocations` Map),
+  `_release_regrouped_textures()` (destroy pooling groups whose membership changed, protecting
+  RIDs of unchanged groups — RenderingDevice RIDs are shared only within one group), secondary-member
+  allocation skip + `_apply_texture_aliases()` (point every pooled member's `_textures` entry at the
+  group's shared storage RID, run BEFORE the undeclared-id `_ensure_tex` fallback so an aliased
+  member never gets a spurious standalone texture), and `get_resource_plan()` (queryable
+  allocation/sharing report). All reference safety guards ported: `global*` surfaces never pooled
+  (the port additionally ping-pong double-buffers them), first-touch-read textures never pooled,
+  self-sampled textures excluded, `drawMode`/`blend` partial writes excluded, `viewport` without
+  `clear` excluded (`95743621`), full-clear viewport passes stay poolable, `persistent`/`mipmaps`/`is3D`
+  specs excluded, raw (width, height, format) signature must match (JS truthiness for
+  `drawMode`/`blend` mirrored by `_js_truthy`).
+- `f83a427e` (one structured diagnostic union for backend shader/compiler failures): new
+  `runtime/shader_diagnostics.gd` — `DIAGNOSTIC_CODES` (`ERR_SHADER_COMPILE`, `ERR_SHADER_LINK`,
+  `ERR_SHADER_MISSING`, `ERR_NO_WGSL_SOURCE`), `parse_glsl_info_log` (ERROR/WARNING `0:LINE:`
+  forms, unprefixed prose kept as info entries), `parse_diagnostic_text` ("binding index N not
+  present" -> stage 'bind' + bindingIndex), `make()` (normalized diagnostic Dictionary with
+  code/backend/stage/detail/messages/program/source/bindingIndex). `nm_backend.gd` records
+  `last_shader_diagnostic` on fragment/vertex SPIR-V compile failure (stage 'compile', with parsed
+  messages and the offending source), SPIR-V link failure (stage 'link' — the RenderingDevice
+  analogue of WebGL2 program link), and missing vertex/fragment shader files (stage
+  'missing-source'); the legacy `push_error` strings are unchanged so existing consumers keep their
+  output. No throw convention exists in GDScript — the diagnostic is recorded, the legacy RID()/""
+  sentinel returned. WebGPU-only pieces (`parseWebGPUCompilationMessages`, the bind-group retry
+  loop, `ERR_NO_WGSL_SOURCE`) have no RenderingDevice analogue and are audited-inapplicable; the
+  'bind' stage parser is ported for contract parity.
+- Docs-only commits `ad17fd02`, `0b2866dd`, `93608f10`, `6a0af04d`, `01e9d620`, `3968f6c4`,
+  `a651c075` (upstream GAP-006/GAP-007 closure records, Sphinx catch-up, CI evidence) — no shader
+  source, definitions, DSL lang, or runtime behavior changed; nothing to port. (`fa83eeab`/`8eeb7b5a`
+  sit inside the declared range but precede `2f47612c` in ancestry and were already ported by the
+  earlier `9d3474df..8eeb7b5a` GAP-005 sync.)
+- Effect catalog unchanged: `git diff 2f47612c..6a0af04d -- shaders/effects shaders/src/lang` is
+  empty; definitions 210/210 and registries identical. Texture pooling is opt-in and unused by every
+  committed effect definition, so compiled graphs are unchanged.
+- Tests: `parity/test_runtime_contract.py` +3 (`test_texture_pooling_plan_groups_and_guards` —
+  pooling/exclusion matrix mirroring reference `test_resource_pooling.js`'s guards incl. the
+  viewport-no-clear rule; `test_texture_pooling_disabled_by_default`; `test_shader_diagnostics_parse_and_normalize`).
+  All parity gates on Linux headless (Godot `4.7.stable.official.5b4e0cb0f`, `NM_REFERENCE_ROOT` at
+  upstream `6a0af04d`): definitions 210/210, lex/parse/validate/graph 352/352, registry pass,
+  expand 344/352 (the same 8 documented pass-defines diffs), smoke ALL PASS, unittest 82/87
+  (the 5 failures are the same display-dependent windowed tests that fail identically on the
+  unmodified baseline — no display/Vulkan in this container). No pixel-parity re-sweep (pooling is
+  default-off; shader math untouched).
+
 
 
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
