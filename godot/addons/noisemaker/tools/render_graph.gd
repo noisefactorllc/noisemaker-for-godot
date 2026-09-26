@@ -133,6 +133,14 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 		print("NM_RENDERED_SAMPLES n=", imgs.size(), " surface=", backend.render_surface_tex)
 		return all_ok
 	backend.render(graph)
+	# Surface the last structured shader/compile diagnostic (GAP-006 sync, reference
+	# f83a427e): a black candidate on a runner usually means a pass silently failed
+	# to compile/link; the diagnostic union names the stage and program.
+	var diag = backend.last_shader_diagnostic
+	if diag != null:
+		print("NM_SHADER_DIAG code=", diag.get("code", ""), " severity=", diag.get("severity", ""),
+			" stage=", diag.get("stage", ""), " program=", diag.get("program", ""),
+			" detail=", str(diag.get("detail", "")).substr(0, 200))
 	if texture_pooling:
 		# Observable evidence for the opt-in run: the materialized sharing plan.
 		var plan: Dictionary = backend.get_resource_plan(graph)

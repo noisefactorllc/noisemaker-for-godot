@@ -49,5 +49,20 @@ fi
 	ls -l "$GOLD" "$CAND" 2>/dev/null || true
 	(sha256sum "$GOLD" "$CAND" 2>/dev/null || shasum -a 256 "$GOLD" "$CAND" 2>/dev/null || true)
 	grep -o '"\(error\|max_abs_diff\|mean_abs_diff\|ssim\|tolerance\|ssim_min\|golden_shape\|candidate_shape\)":[^,}]*' "$ROOT/parity/out/$NAME.report.json" 2>/dev/null | tr '\n' ' ' | sed 's/^/DIAG metrics: /'; echo
+	# Identify WHICH artifact is degenerate (black/garbage) without the PNGs:
+	# per-image mean, stddev and nonzero-alpha fraction.
+	"$PY" - "$GOLD" "$CAND" <<-'PYEOF' || true
+	import sys
+import numpy as np
+from PIL import Image
+for tag, p in (("golden", sys.argv[1]), ("candidate", sys.argv[2])):
+    try:
+        a = np.asarray(Image.open(p).convert("RGBA"), dtype=np.float64)
+        print(f"DIAG image {tag}: shape={a.shape} mean={a.mean():.2f} std={a.std():.2f} "
+              f"nonzero_alpha_frac={(a[..., 3] > 0).mean():.4f} "
+              f"rgb_mean={a[..., :3].mean():.2f}")
+    except Exception as e:
+        print(f"DIAG image {tag}: unreadable: {e}")
+PYEOF
 	exit 1
 }
