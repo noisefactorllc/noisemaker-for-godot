@@ -683,17 +683,14 @@ func _draw_resample(src: RID, dst: RID, src_dims: Vector2i, dst_dims: Vector2i,
 			RDPipelineMultisampleState.new(), RDPipelineDepthStencilState.new(), blend)
 		_mip_pipelines[fmt] = pipeline
 	var pbytes := PackedByteArray()
-	pbytes.resize(16)
+	pbytes.resize(32)
 	pbytes.encode_s32(0, src_dims.x)
 	pbytes.encode_s32(4, src_dims.y)
 	pbytes.encode_s32(8, src_mip)
 	pbytes.encode_s32(12, mode)
-	var dbytes := PackedByteArray()
-	dbytes.resize(16)
-	dbytes.encode_s32(0, dst_dims.x)
-	dbytes.encode_s32(4, dst_dims.y)
+	pbytes.encode_s32(16, dst_dims.x)
+	pbytes.encode_s32(20, dst_dims.y)
 	var ubo := rd.uniform_buffer_create(pbytes.size(), pbytes)
-	var ubo2 := rd.uniform_buffer_create(dbytes.size(), dbytes)
 	var u0 := RDUniform.new()
 	u0.uniform_type = RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE
 	u0.binding = 0
@@ -703,11 +700,7 @@ func _draw_resample(src: RID, dst: RID, src_dims: Vector2i, dst_dims: Vector2i,
 	u1.uniform_type = RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER
 	u1.binding = 1
 	u1.add_id(ubo)
-	var u2 := RDUniform.new()
-	u2.uniform_type = RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER
-	u2.binding = 2
-	u2.add_id(ubo2)
-	var set0 := rd.uniform_set_create([u0, u1, u2], shader, 0)
+	var set0 := rd.uniform_set_create([u0, u1], shader, 0)
 	var dl := rd.draw_list_begin(fb, RenderingDevice.DRAW_CLEAR_COLOR_ALL, PackedColorArray([Color(0, 0, 0, 0)]))
 	rd.draw_list_bind_render_pipeline(dl, pipeline)
 	rd.draw_list_bind_uniform_set(dl, set0, 0)
