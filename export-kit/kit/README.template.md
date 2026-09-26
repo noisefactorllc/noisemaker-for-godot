@@ -78,7 +78,7 @@ const PLAYBACK_FPS := 5
 
 `SIZE` is the square render resolution. `FRAMES` is the number of simulation frames to run before the playback loop starts.
 Fluid, agent and reaction-diffusion effects begin from an empty state, so a single frame of one is black. At 60 frames per second of simulated time, 1800
-frames is about 30 seconds of evolution, and it takes roughly a minute of wall clock to compute. The
+frames is about 30 seconds of evolution, and it takes roughly a minute of wall clock on a desktop GPU (far longer on a software renderer). The
 window does not repaint while that runs, which is why the scene puts a warning on screen first.
 
 `SAMPLE_EVERY` keeps one playback still every that many simulated frames, and `PLAYBACK_FPS` sets

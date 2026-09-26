@@ -141,7 +141,7 @@ class KitPlaybackTests(unittest.TestCase):
                 subprocess.run(
                     [str(GODOT), "--path", str(kit), "--script", str(OBSERVER),
                      "--position", "5000,5000", "--", str(Path(tmp) / "cancelled.png")],
-                    capture_output=True, text=True, timeout=20,
+                    capture_output=True, text=True, timeout=5,
                 )
             except subprocess.TimeoutExpired:
                 cancelled = True
