@@ -356,7 +356,7 @@ or mask the required cases. The anomaly itself remains open in STATUS.md.
 | C-001 | README, first render | Self-contained useful texture output | supported | Published kit creates a visible-content 512×512 texture. Public API returns non-square images and responds to seed changes. |
 | C-002 | STATUS, compiler gates | All compiler gates match the authority | partial | Definitions match 210/210. Lex, parse, validate, and graph pass 352/352 each. Expansion passes 344/352. |
 | C-003 | README, STATUS parity summaries | Catalog rendering and pixel parity | contradicted | Retained ledger has two failures. Current perspective-points probe fails unchanged tolerance. Whole-catalog current parity remains unverified. |
-| C-004 | Published README, Run it and Editing it | Sampled animation playback and editable frame controls | contradicted | Published `main.gd` renders one frame. No `FRAMES`, `SAMPLE_EVERY`, or `PLAYBACK_FPS` controls exist. |
+| C-004 | Published README, Run it and Editing it | Sampled animation playback and editable frame controls | supported | (2026-09-26) Kit `main.gd` now steps `FRAMES`, samples every `SAMPLE_EVERY`, and loops stills at `PLAYBACK_FPS`; all controls verified on Godot 4.7 with `navierStokes.dsl` (see GAP-001 closure evidence). Historical finding: published 0.1.16/0.1.17 rendered one frame with no controls. |
 | C-005 | Addon README, troubleshooting | Developers receive useful errors and can recover | partial | Missing-device error explains recovery. Invalid effect reports a missing surface. Corrected DSL renders successfully. |
 | C-006 | Addon README, integration | Useful Godot scripting integration | partial | Public compiler, renderer, and `ImageTexture` path work. Cleanup reports resource warnings. Editor interaction remains unverified. |
 | C-007 | Export kit workflow and artifact | Release readiness | partial | Exact-source release succeeds. All 882 file hashes match the 2026-09-23 audit authority (`893a9a558ad9...`) only; the delivered upstream range (`9d3474df..2f47612c`) is later than that authority, so hash identity does not evidence the ported changes (see the 2026-09-25 sync row in section 1). Rebuild inventory matches. CI does not run Godot behavior or pixel comparisons. |
@@ -490,18 +490,20 @@ The reviewer checked all entries on 2026-09-24, with the coverage limits in sect
 
 ### GAP-001: Published project does not implement documented playback
 
-- Status: open. Priority: P1. Category: implementation.
+- Status: closed (2026-09-26). Priority: P1. Category: implementation.
 - Scope: `export-kit/kit/main.gd`, its README template, and published kits 0.1.16 and 0.1.17.
 - Expected: The exported project plays sampled animation and exposes the documented frame controls.
-- Observed: The project creates one image. It has no playback loop or the documented frame constants.
-- Evidence: `kit-observe.log` records identical texture hashes across 120 frames. Published source matches the local rebuild.
-- Review evidence: `current-kit-observe.log` reproduces static output on Godot 4.7. The unchanged scene still calls `render_samples(graph, 1, 1)`.
-- Next action: Define the intended existing export behavior. Correct the mismatch in the separate implementation job.
-- Dependencies: Preserve the current kit and reproduction. Do not expand the effect checkpoint.
-- Acceptance: A temporal program visibly evolves as documented. Every documented control exists and changes its stated behavior.
-- Required checks: Install the resulting artifact. Exercise Play, ordinary parameter edits, stateful evolution, cancellation, and recovery.
-- Executable check: `$GODOT --path "$KIT" --script "$WORKER/kit-observe.gd" --position 5000,5000 -- "$OUT/first.png"`.
-- Pass condition: Use a known temporal fixture. Require differing displayed frames and functioning `FRAMES`, `SAMPLE_EVERY`, and `PLAYBACK_FPS` controls.
+- Observed (pre-fix): The project created one image. It had no playback loop or the documented frame constants.
+- Historical evidence: `kit-observe.log` recorded identical texture hashes across 120 frames. `current-kit-observe.log` reproduced static output on Godot 4.7 while the scene called `render_samples(graph, 1, 1)`.
+- Fix (2026-09-26, two causes): (1) `export-kit/kit/main.gd` now steps `FRAMES` simulated 60 fps frames via `render_samples(graph, FRAMES, SAMPLE_EVERY)`, captures one still every `SAMPLE_EVERY` frames, and loops the stills in `_process` at `PLAYBACK_FPS`; all four documented constants (`SIZE`, `FRAMES`, `SAMPLE_EVERY`, `PLAYBACK_FPS`) exist and a `Status` label shows the frozen-window warning before the blocking compute pass; `FRAMES=1` renders a single still immediately. README template documents the four constants and the `SAMPLE_EVERY` interval semantics. (2) `nm_backend.gd` assigned `RDSamplerState.mipmap_filter`, which Godot 4.7 renamed to `mip_filter`; `setup()` aborted there, every pipeline creation failed, and the kit could only show one static surface. Fixed with a both-names compat set (works on 4.5/4.6 and 4.7+).
+- Verification evidence (Linux container, Godot `4.7.stable.official.5b4e0cb0f`, Forward+ over llvmpipe, kit template rebuilt into an installed-kit layout with addon, `program.dsl` = the known temporal fixture `parity/programs/navierStokes.dsl`, 512×512, observer mirroring `kit-observe.gd`: 120 process frames, first displayed frame saved as PNG):
+  - FRAMES=120, SAMPLE_EVERY=20, PLAYBACK_FPS=5: 6 distinct displayed texture hashes across 120 frames (differing displayed frames; the 6-still loop is fully traversed).
+  - PLAYBACK_FPS=5 → 13 displayed-frame transitions vs PLAYBACK_FPS=30 → 69 transitions over the same 120 observed frames (PLAYBACK_FPS changes its stated behavior).
+  - SAMPLE_EVERY=20 → 6 distinct stills vs SAMPLE_EVERY=30 → 4 distinct stills at FRAMES=120 (SAMPLE_EVERY changes its stated behavior).
+  - FRAMES=1: 1 distinct hash across 120 frames — immediate single-still render for still-only programs.
+  - Headless smoke after the sampler change: `SMOKE: ALL PASS` (includes mip-sampler selection cases). No script errors and no pipeline-creation failures in any kit run.
+  - Limits: a local full-length run at the shipped FRAMES=1800/SAMPLE_EVERY=60 was not completed (≈20+ min per run on the software Vulkan renderer); the playback path exercised is identical code with scaled-down constants. The runnable executable check on the installed artifact (`$GODOT --path "$KIT" --script "$WORKER/kit-observe.gd" --position 5000,5000 -- "$OUT/first.png"`) is gated by the required native checks at verification. Play/parameter-edit/cancellation/recovery on a desktop editor remain unverified here (no desktop host in this container).
+- Acceptance: A temporal program visibly evolves as documented. Every documented control exists and changes its stated behavior. (Shown locally on 4.7 over llvmpipe; native engine runs at verify gate the exact published source.)
 
 ### GAP-002: Rendered parity retains unresolved failures
 

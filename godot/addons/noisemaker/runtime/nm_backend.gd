@@ -225,7 +225,10 @@ func setup(p_rd: RenderingDevice, p_addon_dir: String, p_screen: Vector2i) -> vo
 	ms.mag_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
 	ms.repeat_u = RenderingDevice.SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE
 	ms.repeat_v = RenderingDevice.SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE
-	ms.mipmap_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
+	# Godot 4.7 renamed RDSamplerState.mipmap_filter to mip_filter; keep both
+	# engines working (4.5/4.6 ship mipmap_filter, 4.7+ ships mip_filter).
+	ms.set("mip_filter" if "mip_filter" in ms else "mipmap_filter",
+			RenderingDevice.SAMPLER_FILTER_LINEAR)
 	_mip_sampler = rd.sampler_create(ms)
 	# 1x1 zero texture bound for "none" sampler inputs so binding indices stay aligned
 	# with the shader's declared samplers (matches the reference backend's BlackTex).

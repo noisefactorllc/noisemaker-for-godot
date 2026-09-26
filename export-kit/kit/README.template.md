@@ -67,11 +67,13 @@ differences from what the app showed you, and treat anything you render here as 
 
 ## Editing it
 
-`main.gd` holds the two numbers worth touching:
+`main.gd` holds the four numbers worth touching:
 
 ```gdscript
 const SIZE := 512
 const FRAMES := 1800
+const SAMPLE_EVERY := 60
+const PLAYBACK_FPS := 5
 ```
 
 `SIZE` is the square render resolution. `FRAMES` is the number of simulation frames to run before the playback loop starts.
@@ -79,8 +81,10 @@ Fluid, agent and reaction-diffusion effects begin from an empty state, so a sing
 frames is about 30 seconds of evolution, and it takes roughly a minute of wall clock to compute. The
 window does not repaint while that runs, which is why the scene puts a warning on screen first.
 
-`SAMPLE_EVERY` decides how many of those frames are kept as playback stills, and `PLAYBACK_FPS` how
-fast they loop once the render finishes.
+`SAMPLE_EVERY` keeps one playback still every that many simulated frames, and `PLAYBACK_FPS` sets
+how fast those stills loop once the render finishes. Keep `FRAMES` a multiple of `SAMPLE_EVERY` so
+the final evolved frame is among the stills; 1800/60 gives 30 stills played back at 5 fps, a
+6-second loop covering 30 seconds of simulated evolution.
 
 Programs made only of still effects do not need this sequence. Set `FRAMES` to `1` for an immediate render.
 
