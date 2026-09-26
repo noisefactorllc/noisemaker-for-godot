@@ -368,8 +368,11 @@ func _init() -> void:
 	var write_dims_fmt: Array = b._mip_dims_fmt("global_flow_write")
 	_expect(write_dims_fmt[0] == Vector2i(64, 32), "nm.mip-dims-pingpong-write")
 	_expect(Backend._mip_owner_tex("global_flow") == "global_flow", "nm.mip-owner-flat")
+	# Non-vacuous: screen is set to a nonzero sentinel first, so a fallback
+	# returning (0,0) or any other default cannot pass by accident.
+	b.screen = Vector2i(640, 360)
 	var unknown: Array = b._mip_dims_fmt("global_other_read")
-	_expect(unknown[0] == b.screen, "nm.mip-dims-fallback")
+	_expect(unknown[0] == b.screen and unknown[0] != Vector2i(), "nm.mip-dims-fallback")
 
 	# Mipmapped-input sampler selection keys _tex_mip by texId string — not by
 	# _resolve_read's RID. _read_tex_id must mirror _resolve_read's resolution:

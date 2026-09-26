@@ -71,6 +71,27 @@ definitions 210/210 and registries identical. No definition uses the new policy 
 graphs are unchanged; the compiler/runtime propagation is exercised by smoke tests and activates only
 on opt-in.
 
+Reproducible audit commands (reference clone at `/state/cache/scratch/noisemaker-upstream`,
+`origin/main` `6a0af04d`; re-runnable verbatim):
+- `git diff --stat 13a8a049..2f47612c -- shaders/effects shaders/src/lang` → empty output
+  (observed 2026-09-26): zero effect-definition, effect-shader, or DSL-lang changes in the range.
+- `git diff --name-only 13a8a049..2f47612c` → the range touches only
+  `llms-full.txt`, `package.json`, `scripts/run-js-tests.js`,
+  `shaders/src/runtime/backends/{webgl2,webgpu}.js`, `shaders/src/runtime/compiler.js`,
+  `shaders/src/runtime/effect-validator.js`, `shaders/src/runtime/pipeline.js`,
+  `shaders/tests/test_mip_controls.js`.
+- `git show a021a283 -- shaders/src/runtime/compiler.js` → the single `extractTextureSpecs()` hunk
+  (3D truthy `filter`, 2D `mipmaps`/`persistent` `!== undefined`, `depth || width || 64`), mirrored
+  line-for-line by `orchestrator.gd` `_extract_texture_specs()` (same defaults, same branch split).
+- `RESAMPLE_WGSL` (`webgpu.js:58-95`) vs `MIP_FS` (`nm_backend.gd:47-69`): `fsMip` = texelFetch
+  2x2 box average `* 0.25` with `(a+b+c+e)` order identical; `fsScale` = NEAREST nearest-neighbor
+  `coord = min(vec2u(d * src/dst), maxCoord)` with identical clamp. The port adds a `mode` uniform
+  to switch the two entry points (WGSL uses separate entry points); texel math is equivalent.
+- `mipLevelSize` (`webgpu.js:41-44` `max(1, floor(dim / 2**level))`) vs `_mip_level_size` —
+  identical; `mipLevelCount` integer-halving equals `Math.log2` for powers of two.
+Limit: this clone is worker-maintained; a reviewer can reproduce these commands but no independent
+party has yet re-run them — still flagged UNVERIFIED-BY-THIRD-PARTY below.
+
 Test evidence for this commit (Linux container, Godot `4.7.stable.official.5b4e0cb0f` `--headless`,
 `NM_REFERENCE_ROOT` at the upstream clone `/state/cache/scratch/noisemaker-upstream`, refreshed to
 `origin/main` `6a0af04d` — `2f47612c` and `8eeb7b5a` are both ancestors; the expand gate needs the
@@ -80,8 +101,14 @@ each, registry pass (ops 210/210, enums 8/8, paramAliases 44/44, effectKeys 628/
 210/210, expand 344/352 (exactly the 8 pre-existing, documented pass-defines differences; normalized
 graphs match), unittest 79/84 (79 passed). The 5 failures are the windowed-Godot tests (device limits, frame
 export, mesh pipeline, formerly-missing effects, shader-compile sweep): this container has no
-X11/Wayland display or Vulkan device; they fail identically on the unmodified baseline
-(`test_frame_export` verified against the pre-sync tree). Limits: no pixel-parity re-sweep, no
+X11/Wayland display or Vulkan device; they fail identically on the unmodified baseline — baseline
+identity re-verified 2026-09-26 by checking out `55c3c92` and running the same five tests
+(`.venv/bin/python -m pytest -q test_device_limits.py test_mesh_pipeline.py
+test_missing_effects_live.py test_shader_compile.py test_frame_export.py`): the identical five test
+IDs fail at the base with the identical error (`ERROR: Unable to create DisplayServer, all display
+drivers failed`), and `check_expand.mjs` at the base reports the same 344/352 with the same 8
+documented diffs — none of the 5 failures or 8 diffs are introduced by this candidate.
+Limits: no pixel-parity re-sweep, no
 windowed GPU run, no editor interaction, and no CI run exists for this commit yet — this sync does
 not qualify rendering parity and does not close any gap below.
 
@@ -369,7 +396,7 @@ These actions specify acceptance work. They do not authorize new effect ports or
 | --- | --- | --- | --- |
 | 2026-09-23 | `bbb2d0179c6e991bdeb2efba7ea733baae027f36` | Created this register and README link. Ran 66 tests, compiler gates, three differential probes, batch prefix, and installed-artifact checks. | Seven gaps remain. No completion approval. Full historical parity, editor interaction, additional platforms, upgrades, and removal remain unqualified. |
 | 2026-09-24 | `6335960ea16d7a1231355eafe5086ad3c73afd58` | Reviewed all available worker results. Passed 68 current tests. Reproduced playback, pixel, lifecycle, and diagnostic findings. Added GAP-008 and executable acceptance checks. | Eight gaps remain. No verified closures. Full compiler comparisons, latest-authority pixels, editor workflows, other platforms, upgrades, and removal remain unqualified. |
-| 2026-09-25 | This sync commit (upstream `9d3474dfdc6c..2f47612c2904`; see the 2026-09-25 sync row in section 1) | Ported GAP-004 texture-allocation policies with the mip/persistent runtime, fixed STATUS coverage counts, audited the force-push range by content. Gates on Linux headless: smoke 85/85, lex/parse/validate/graph 352/352, registry pass, definitions 210/210, expand 344/352 (documented diffs), unittest 79/84 (5 display-dependent failures, identical on baseline). Review fixes folded in: mipmap-sampler selection now keys `_tex_mip` by the resolved READ texId (`_read_tex_id`) instead of `_resolve_read`'s RID (previous lookup never matched — dead path), the mip sampler sets `mipmap_filter` explicitly, `convert-definitions.mjs` drops the pre-branch unconditional policy projections, and the 3D `filter` staging comment no longer claims runtime consumption. | No gap closes. No pixel-parity re-sweep, windowed GPU run, editor interaction, or CI evidence for this commit yet; upstream runtime fidelity (`fsMip`/`fsScale`, `extractTextureSpecs`, `recreateTexturePreserving`, the `13a8a049..2f47612c` empty-diff claim) rests on the worker's content audit against the local reference clone at `origin/main` `6a0af04d` — flagged UNVERIFIED-BY-THIRD-PARTY pending independent re-diff; the post-audit upstream changes remain unqualified pending windowed checks. |
+| 2026-09-25 | This sync commit (upstream `9d3474dfdc6c..2f47612c2904`; see the 2026-09-25 sync row in section 1) | Ported GAP-004 texture-allocation policies with the mip/persistent runtime, fixed STATUS coverage counts, audited the force-push range by content. Gates on Linux headless: smoke 85/85, lex/parse/validate/graph 352/352, registry pass, definitions 210/210, expand 344/352 (documented diffs), unittest 79/84 (5 display-dependent failures, identical on baseline). Review fixes folded in: mipmap-sampler selection now keys `_tex_mip` by the resolved READ texId (`_read_tex_id`) instead of `_resolve_read`'s RID (previous lookup never matched — dead path), the mip sampler sets `mipmap_filter` explicitly, `convert-definitions.mjs` drops the pre-branch unconditional policy projections, and the 3D `filter` staging comment no longer claims runtime consumption. | No gap closes. No pixel-parity re-sweep, windowed GPU run, editor interaction, or CI evidence for this commit yet; upstream runtime fidelity (`fsMip`/`fsScale`, `extractTextureSpecs`, `recreateTexturePreserving`, the `13a8a049..2f47612c` empty-diff claim) is audited by content against the reference clone with the reproducible commands recorded in section 1 (reviewer-runnable; no independent party has re-run them yet); the 5 display-dependent test failures are baseline-identical at `55c3c92` (verified, recorded in section 1); the post-audit upstream changes remain unqualified pending windowed checks. |
 
 The audit preserved implementation, tests, generators, fixtures, tolerances, workflows, and historical documents.
 It verified source identity before document publication. The shared result records remote publication verification.

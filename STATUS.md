@@ -211,7 +211,10 @@ texture-allocation policies (GAP-004) and the two follow-up fixes:
   in the port).
 - Audited docs-only commits `fa4b2f02`, `69d83b80`, `13a8a04` (GAP-003 closure records, checkpoint notes — no shader
   source or definitions changed). Upstream runtime fidelity above is audited by content against the local reference
-  clone at `origin/main` `6a0af04d`; flagged UNVERIFIED-BY-THIRD-PARTY until an independent re-diff.*
+  clone at `origin/main` `6a0af04d` with the reproducible commands recorded in `docs/COMPLETION_GAPS.md` §1
+  (`git diff 13a8a049..2f47612c -- shaders/effects shaders/src/lang` → empty; `extractTextureSpecs`/`fsMip`/`fsScale`
+  hunks quoted there) — reviewer-runnable, not yet independently re-run. The 5 display-dependent test failures and
+  the 8 expand diffs are verified baseline-identical at `55c3c92` (same commands, recorded in §1).*
 
 
 
