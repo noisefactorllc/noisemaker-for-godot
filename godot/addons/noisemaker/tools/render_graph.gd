@@ -138,9 +138,21 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 	# to compile/link; the diagnostic union names the stage and program.
 	var diag = backend.last_shader_diagnostic
 	if diag != null:
-		print("NM_SHADER_DIAG code=", diag.get("code", ""), " severity=", diag.get("severity", ""),
-			" stage=", diag.get("stage", ""), " program=", diag.get("program", ""),
-			" detail=", str(diag.get("detail", "")).substr(0, 200))
+		var dline := ("NM_SHADER_DIAG code=" + str(diag.get("code", ""))
+			+ " severity=" + str(diag.get("severity", ""))
+			+ " stage=" + str(diag.get("stage", ""))
+			+ " program=" + str(diag.get("program", ""))
+			+ " detail=" + str(diag.get("detail", "")).substr(0, 200))
+		print(dline)
+		# push_error goes to stderr, so the diagnostic survives harness tails
+		# that keep only the last stderr lines of a native run.
+		printerr(dline)
+	var stats := backend.get_pass_stats()
+	var sline := ("NM_PASS_STATS executed=" + str(stats.get("executed", 0))
+		+ " skipped=" + str(stats.get("skipped", 0))
+		+ " surface_valid=" + str(backend.render_surface_texture().is_valid()))
+	print(sline)
+	printerr(sline)
 	if texture_pooling:
 		# Observable evidence for the opt-in run: the materialized sharing plan.
 		var plan: Dictionary = backend.get_resource_plan(graph)

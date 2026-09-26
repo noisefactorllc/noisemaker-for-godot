@@ -188,6 +188,14 @@ var _texture_aliases := {}  # virtualId -> storageId for pooled textures (rebuil
 # Last failure normalized to the one diagnostic union; empty until a failure.
 var last_shader_diagnostic: Dictionary = {}
 var _shader_diag = ShaderDiagnostics.new()
+var _passes_executed := 0
+var _passes_skipped := 0
+
+func get_pass_stats() -> Dictionary:
+	return {"executed": _passes_executed, "skipped": _passes_skipped}
+
+func render_surface_texture() -> RID:
+	return _textures.get(render_surface_tex, RID())
 
 func setup(p_rd: RenderingDevice, p_addon_dir: String, p_screen: Vector2i) -> void:
 	if _closed:
@@ -2150,7 +2158,14 @@ func execute_pass(p: Dictionary) -> void:
 		var output_id := str(outputs[k])
 		var rid := _resolve_write(output_id)
 		if not rid.is_valid():
-			push_error("pass output texture missing: " + output_id)
+			var miss := "pass output texture missing: " + output_id
+			push_error(miss)
+			last_shader_diagnostic = _shader_diag.make({
+				"code": ShaderDiagnostics.DIAGNOSTIC_CODES["MISSING_SOURCE"],
+				"stage": "missing-source",
+				"program": str(p.get("progName", p.get("func", ""))),
+				"detail": miss,
+			})
 			return
 		out_rids.append(rid)
 		output_size = _tex_dims.get(output_id, screen)
@@ -2311,11 +2326,15 @@ func render(graph: Dictionary, normalized_time: float = 0.25, presentation_times
 	# reference's settle count (8 frames at the pinned time, reference/04 §10). Otherwise a
 	# single deterministic pass.
 	var frames := 8 if (_has_feedback(graph) or not _pingpong.is_empty()) else 1
+	_passes_executed = 0
+	_passes_skipped = 0
 	for _frame in frames:
 		_begin_frame()
 		for p in graph.get("passes", []):
 			if _should_skip_pass(p):
+				_passes_skipped += 1
 				continue
+			_passes_executed += 1
 			# A pass may repeat within the frame (reference §10.5, e.g. reactionDiffusion's
 			# `repeat: "iterations"` solver). Each iteration ping-pongs so it reads the prior
 			# iteration's output (§10.6) — distinct from the within-frame and end-of-frame swaps.

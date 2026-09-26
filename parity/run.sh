@@ -40,6 +40,7 @@ fi
 "$PY" "$ROOT/parity/compare.py" "$GOLD" "$CAND" \
 	--name "$NAME" --tolerance "$TOL" --ssim-min "$SSIM" \
 	--report "$ROOT/parity/out/$NAME.report.json" || {
+	{
 	# Threshold failure: surface the full metrics report and artifact identity so a
 	# native-runner failure is diagnosable from its output tail alone (the report
 	# JSON lives only on the runner host otherwise).
@@ -64,5 +65,6 @@ for tag, p in (("golden", sys.argv[1]), ("candidate", sys.argv[2])):
     except Exception as e:
         print(f"DIAG image {tag}: unreadable: {e}")
 PYEOF
+	} >&2
 	exit 1
 }
