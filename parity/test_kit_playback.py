@@ -32,7 +32,7 @@ OBSERVE_FRAMES = 120
 
 
 def build_kit(dest: Path, frames: int, sample_every: int, playback_fps: int,
-              with_program: bool = True) -> None:
+              with_program: bool = True, size: int = 512) -> None:
     """Assemble an installed-kit layout with the requested frame constants."""
     dest.mkdir(parents=True)
     for name in ("main.gd", "main.tscn", "project.godot"):
@@ -42,6 +42,7 @@ def build_kit(dest: Path, frames: int, sample_every: int, playback_fps: int,
         shutil.copy(FIXTURE, dest / "program.dsl")
     main = dest / "main.gd"
     text = main.read_text()
+    text = re.sub(r"const SIZE := \d+", f"const SIZE := {size}", text)
     text = re.sub(r"const FRAMES := \d+", f"const FRAMES := {frames}", text)
     text = re.sub(r"const SAMPLE_EVERY := \d+", f"const SAMPLE_EVERY := {sample_every}", text)
     text = re.sub(r"const PLAYBACK_FPS := \d+", f"const PLAYBACK_FPS := {playback_fps}", text)
@@ -150,6 +151,20 @@ class KitPlaybackTests(unittest.TestCase):
             run = observe(replay, Path(tmp) / "replay.png")
             assert_engine_clean(self, run)
             self.assertGreaterEqual(run["summary"]["distinct"], 2, run["output"][-4000:])
+
+    def test_size_sets_the_square_render_resolution(self):
+        with tempfile.TemporaryDirectory(prefix="nm-kit-") as tmp:
+            kit = Path(tmp) / "kit"
+            build_kit(kit, frames=120, sample_every=20, playback_fps=30, size=64)
+            png = Path(tmp) / "first.png"
+            run = observe(kit, png)
+            assert_engine_clean(self, run)
+            self.assertGreaterEqual(run["summary"]["distinct"], 2, run["output"][-4000:])
+            # PNG IHDR: width/height are big-endian at bytes 16..24.
+            head = png.read_bytes()[16:24]
+            self.assertEqual((head[0], head[1], head[2], head[3]) == (0, 0, 0, 64)
+                             and (head[4], head[5], head[6], head[7]) == (0, 0, 0, 64),
+                             True, "SIZE did not set a 64x64 resolution")
 
     def test_missing_program_fails_cleanly_and_recovers(self):
         with tempfile.TemporaryDirectory(prefix="nm-kit-") as tmp:
