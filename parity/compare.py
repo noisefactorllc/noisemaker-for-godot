@@ -121,14 +121,24 @@ def main() -> int:
         "passed": passed,
     }
 
-    status = "PASS" if passed else "FAIL"
-    print(f"[{status}] {report['name']}: max-abs-diff={max_diff:.3f} "
-          f"mean-abs-diff={mean_diff:.4f} ssim={ssim:.5f} "
-          f"(tol={args.tolerance}, ssim_min={args.ssim_min})")
-
+    # Write (and announce) the report BEFORE printing the verdict so that any
+    # harness that only keeps the LAST line of combined output captures the
+    # verdict metrics rather than the bare report path. Native-runner failures
+    # are diagnosed from that tail alone.
     if args.report:
         args.report.write_text(json.dumps(report, indent=2) + "\n")
         print(f"wrote report {args.report}", file=sys.stderr)
+
+    status = "PASS" if passed else "FAIL"
+    line = (f"[{status}] {report['name']}: max-abs-diff={max_diff:.3f} "
+            f"mean-abs-diff={mean_diff:.4f} ssim={ssim:.5f} "
+            f"(tol={args.tolerance}, ssim_min={args.ssim_min})")
+    print(line)
+    # Mirror the verdict to stderr as the final line: harness tails that keep
+    # only the last stderr line still capture the verdict metrics.
+    print(line, file=sys.stderr)
+    sys.stdout.flush()
+    sys.stderr.flush()
 
     return 0 if passed else 1
 
