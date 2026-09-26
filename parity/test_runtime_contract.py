@@ -791,6 +791,71 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("POOLING_DEFAULT_TEST: PASS", result.stdout, result.stdout + result.stderr)
 
+    def test_texture_pooling_runtime_aliases_and_regroup_release(self):
+        script = """
+            extends SceneTree
+
+            # Exercises the pooling runtime bookkeeping (allocate-skip + alias
+            # application + regroup release) headless over the static seams with
+            # a counting free callable; RIDs come from ImageTexture (valid and
+            # unique headless). Double-frees of a shared storage RID are
+            # observable in the free counts.
+            func _init() -> void:
+                var Backend := load("res://addons/noisemaker/runtime/nm_backend.gd")
+                var BackendScript = Backend
+                var live := []
+                var frees := {}
+                var free_rid := func(rid: RID) -> void:
+                    var key = rid.get_id()
+                    frees[key] = int(frees.get(key, 0)) + 1
+                    live = live.filter(func(t): return t.get_rid() != rid)
+                var make_tex := func() -> RID:
+                    var tex := ImageTexture.new()
+                    live.append(tex)
+                    return tex.get_rid()
+                var textures := {}
+                var aliases := {"t1": "t1", "t2": "t1"}
+                var storage: RID = make_tex.call()
+                var stale: RID = make_tex.call()
+                textures["t1"] = storage
+                textures["t2"] = stale
+                # 1. Alias application: t2's own texture is freed exactly once
+                #    and both ids bind the shared storage.
+                BackendScript.call("apply_texture_aliases", textures, aliases, free_rid)
+                var ok: bool = textures["t1"] == storage and textures["t2"] == storage \\
+                    and int(frees.get(stale.get_id(), 0)) == 1 \\
+                    and int(frees.get(storage.get_id(), 0)) == 0
+                # 2. Regroup release: the group dissolves (t2 -> its own id) so
+                #    the shared storage RID is freed exactly once and both map
+                #    entries are dropped.
+                BackendScript.call("release_regrouped_textures", textures, aliases,
+                    {"t1": "t1"}, free_rid)
+                ok = ok and not textures.has("t1") and not textures.has("t2") \\
+                    and int(frees.get(storage.get_id(), 0)) == 1
+                # 3. Unchanged group survives: a matching next plan frees nothing
+                #    and keeps the shared entries.
+                textures["t1"] = storage
+                textures["t2"] = storage
+                BackendScript.call("release_regrouped_textures", textures, aliases,
+                    aliases, free_rid)
+                ok = ok and textures["t1"] == storage and textures["t2"] == storage \\
+                    and int(frees.get(storage.get_id(), 0)) == 1
+                # 4. No RID was ever freed more than once.
+                var max_free := 0
+                for key in frees:
+                    max_free = max(max_free, int(frees[key]))
+                ok = ok and max_free == 1
+                if ok:
+                    print("POOLING_RUNTIME_TEST: PASS")
+                    quit(0)
+                else:
+                    print("POOLING_RUNTIME_TEST: frees=", frees, " textures=", textures)
+                    quit(1)
+        """
+        result = self._run_godot_script(script)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("POOLING_RUNTIME_TEST: PASS", result.stdout, result.stdout + result.stderr)
+
     def test_shader_diagnostics_parse_and_normalize(self):
         script = """
             extends SceneTree

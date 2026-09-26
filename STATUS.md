@@ -248,20 +248,30 @@ source range `fca611fd8f91..6a0af04d3c4f` spans this and the previous syncs, aud
   sentinel returned. WebGPU-only pieces (`parseWebGPUCompilationMessages`, the bind-group retry
   loop, `ERR_NO_WGSL_SOURCE`) have no RenderingDevice analogue and are audited-inapplicable; the
   'bind' stage parser is ported for contract parity.
-- Docs-only commits `ad17fd02`, `0b2866dd`, `93608f10`, `6a0af04d`, `01e9d620`, `3968f6c4`,
-  `a651c075` (upstream GAP-006/GAP-007 closure records, Sphinx catch-up, CI evidence) — no shader
-  source, definitions, DSL lang, or runtime behavior changed; nothing to port. (`fa83eeab`/`8eeb7b5a`
-  sit inside the declared range but precede `2f47612c` in ancestry and were already ported by the
-  earlier `9d3474df..8eeb7b5a` GAP-005 sync.)
+- Docs-only/inapplicable commits in the remaining delta (`63349a7d` upstream JS-CI workflow
+  retirement — no `shaders/` content and this port has no such workflow; `919f653e`, `27590caa`,
+  `85ded3a6`, `c6bc8e17`, `94fc880b`, `5e52a2a2`, `8eeb7b5a`, `6c3f9a26`, `428ea29b`, `ad17fd02`,
+  `0b2866dd`, `93608f10`, `6a0af04d`, `01e9d620`, `3968f6c4`, `a651c075` — GAP-004/005/006/007
+  closure records, texture-policy docs, llms-full.txt, Sphinx, checkpoint notes, CI evidence) —
+  no shader source, definitions, DSL lang, or runtime behavior changed; nothing to port.
+  `fa83eeab` (GAP-005 expander pass-field propagation) is a descendant of `2f47612c` inside this
+  range but its content was ALREADY ported in the 2026-09-25 sync (`expander.gd` carries
+  `name`/`type`/`clear`/`viewport`/`samplerTypes` verbatim; exercised by
+  `test_expander_propagates_gap005_pass_fields` and `test_expander_propagates_sampler_types_and_clear`,
+  both passing). Observed verbatim outputs for every claim above are committed in
+  `docs/COMPLETION_GAPS.md` §1.
 - Effect catalog unchanged: `git diff 2f47612c..6a0af04d -- shaders/effects shaders/src/lang` is
   empty; definitions 210/210 and registries identical. Texture pooling is opt-in and unused by every
   committed effect definition, so compiled graphs are unchanged.
-- Tests: `parity/test_runtime_contract.py` +3 (`test_texture_pooling_plan_groups_and_guards` —
+- Tests: `parity/test_runtime_contract.py` +4 (`test_texture_pooling_plan_groups_and_guards` —
   pooling/exclusion matrix mirroring reference `test_resource_pooling.js`'s guards incl. the
-  viewport-no-clear rule; `test_texture_pooling_disabled_by_default`; `test_shader_diagnostics_parse_and_normalize`).
+  viewport-no-clear rule; `test_texture_pooling_disabled_by_default`;
+  `test_texture_pooling_runtime_aliases_and_regroup_release` — alias application + regroup release
+  over the static seams with a counting free callable, asserting each shared RID is freed exactly
+  once; `test_shader_diagnostics_parse_and_normalize`).
   All parity gates on Linux headless (Godot `4.7.stable.official.5b4e0cb0f`, `NM_REFERENCE_ROOT` at
   upstream `6a0af04d`): definitions 210/210, lex/parse/validate/graph 352/352, registry pass,
-  expand 344/352 (the same 8 documented pass-defines diffs), smoke ALL PASS, unittest 82/87
+  expand 344/352 (the same 8 documented pass-defines diffs), smoke ALL PASS, unittest 83/88
   (the 5 failures are the same display-dependent windowed tests that fail identically on the
   unmodified baseline — no display/Vulkan in this container). No pixel-parity re-sweep (pooling is
   default-off; shader math untouched).

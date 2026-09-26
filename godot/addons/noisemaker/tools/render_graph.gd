@@ -112,6 +112,9 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 	var Backend = preload("res://addons/noisemaker/runtime/nm_backend.gd")
 	var backend = Backend.new()
 	backend.setup(rd, "res://addons/noisemaker", Vector2i(size, size))
+	# GAP-006 opt-in texture pooling (--texture-pooling / batch request key).
+	if texture_pooling:
+		backend.set_texture_pooling(true)
 	if run_seconds > 0:
 		# Timed-sampling mode (stateful sims): run run_seconds of sim-time at 60fps, capturing
 		# every sample_every_sec into <out-basename>.t<sec>.png (e.g. navierStokes.candidate.t5.png).
@@ -130,6 +133,10 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 		print("NM_RENDERED_SAMPLES n=", imgs.size(), " surface=", backend.render_surface_tex)
 		return all_ok
 	backend.render(graph)
+	if texture_pooling:
+		# Observable evidence for the opt-in run: the materialized sharing plan.
+		var plan: Dictionary = backend.get_resource_plan(graph)
+		print("NM_RESOURCE_PLAN pooling=", plan["pooling"], " sharedTextures=", plan["sharedTextures"])
 	var ok = backend.save_surface_png(out_path)
 	print("NM_RENDERED out=", out_path, " surface=", backend.render_surface_tex, " ok=", ok)
 	return ok

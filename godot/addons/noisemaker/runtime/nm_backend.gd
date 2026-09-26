@@ -790,8 +790,11 @@ static func _js_truthy(value) -> bool:
 # Destroy backend textures of pooling groups whose membership changed since
 # the previous plan, so the recreation loop rebuilds them with the correct
 # (standalone or re-grouped) sharing (reference releaseRegroupedTextures).
-func _release_regrouped_textures(previous_aliases: Dictionary, next_aliases: Dictionary) -> void:
-	if previous_aliases.is_empty() or rd == null:
+# Static over an injected textures map + free callable so the RID-sharing
+# dedupe logic is testable headless.
+static func release_regrouped_textures(textures: Dictionary, previous_aliases: Dictionary,
+		next_aliases: Dictionary, free_rid: Callable) -> void:
+	if previous_aliases.is_empty():
 		return
 	var groups := {}  # storage -> [members]
 	for member in previous_aliases:
@@ -805,17 +808,25 @@ func _release_regrouped_textures(previous_aliases: Dictionary, next_aliases: Dic
 	for storage in groups:
 		if _group_unchanged(groups[storage], storage, next_aliases):
 			for m in groups[storage]:
-				var keep: RID = _textures.get(m, RID())
+				var keep: RID = textures.get(m, RID())
 				if keep.is_valid():
 					protected[keep] = true
 	for storage in groups:
 		if _group_unchanged(groups[storage], storage, next_aliases):
 			continue
+		# Members of one group share a single RID — free each unique RID once.
+		var freed := {}
 		for m in groups[storage]:
-			var rid: RID = _textures.get(m, RID())
-			if rid.is_valid() and not protected.has(rid):
-				rd.free_rid(rid)
-				_textures.erase(m)
+			var rid: RID = textures.get(m, RID())
+			textures.erase(m)
+			if rid.is_valid() and not protected.has(rid) and not freed.has(rid):
+				freed[rid] = true
+				free_rid.call(rid)
+
+
+func _release_regrouped_textures(previous_aliases: Dictionary, next_aliases: Dictionary) -> void:
+	release_regrouped_textures(_textures, previous_aliases, next_aliases,
+		func(rid: RID) -> void: rd.free_rid(rid))
 
 
 static func _group_unchanged(members: Array, storage, next_aliases: Dictionary) -> bool:
@@ -827,21 +838,30 @@ static func _group_unchanged(members: Array, storage, next_aliases: Dictionary) 
 
 # Point every pooled secondary member's map entry at its group's shared
 # storage record, so pass execution binds the same texture through either id
-# (reference applyTextureAliases).
-func _apply_texture_aliases() -> void:
-	if _texture_aliases.is_empty():
+# (reference applyTextureAliases). Static over an injected textures map +
+# free callable so the RID-sharing dedupe logic is testable headless.
+static func apply_texture_aliases(textures: Dictionary, texture_aliases: Dictionary,
+		free_rid: Callable) -> void:
+	if texture_aliases.is_empty():
 		return
-	for member in _texture_aliases:
-		var storage = _texture_aliases[member]
+	var freed := {}  # members of one group share records — free each old RID once
+	for member in texture_aliases:
+		var storage = texture_aliases[member]
 		if member == storage:
 			continue
-		var record: RID = _textures.get(storage, RID())
+		var record: RID = textures.get(storage, RID())
 		if not record.is_valid():
 			continue
-		var existing: RID = _textures.get(member, RID())
-		if existing.is_valid() and existing != record:
-			rd.free_rid(existing)
-		_textures[member] = record
+		var existing: RID = textures.get(member, RID())
+		textures[member] = record
+		if existing.is_valid() and existing != record and not freed.has(existing):
+			freed[existing] = true
+			free_rid.call(existing)
+
+
+func _apply_texture_aliases() -> void:
+	apply_texture_aliases(_textures, _texture_aliases,
+		func(rid: RID) -> void: rd.free_rid(rid))
 
 
 # Query the actual runtime texture allocation/reuse plan (reference

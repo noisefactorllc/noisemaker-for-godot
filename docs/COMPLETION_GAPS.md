@@ -72,9 +72,11 @@ Delivered-range diff (diffed directly in a local upstream checkout, not assumed)
 | `a021a283` | GAP-004 authorable texture policies (`filter` 3D, `mipmaps`/`persistent` 2D) across `compiler.js`, `effect-validator.js`, `pipeline.js`, both backends (+466-line `test_mip_controls.js`) | Ported: `orchestrator.gd` `_extract_texture_specs()` propagation, `nm_backend.gd` mip-chain allocation/regeneration/`refreshMipTargets`, mipmap sampler, persistent-texture resample preserve |
 | `62eb56fa` | WebGL2 mip-chain allocation fix; WebGPU cached mip bind groups | Allocation-half ported above; bind-group caching is a WebGPU-perf detail with no RenderingDevice analogue |
 | `2f47612c` | Stop double-creating global surfaces on allocation change | Port's `allocate_textures()` now keeps a matching mipmapped allocation ("matching allocation, preserve it"); the port had no double-create path |
-| `6113da00` + `95743621` (delivered in the 2026-09-26 sync, `2f47612c2904..6a0af04d3c4f`) | GAP-006 texture pooling: consume the analyzer's physical allocation map (`graph.allocations`) behind a `texturePooling` opt-in; view/viewport passes without `clear` treated as partially written (unsafe to pool) | Ported: `nm_backend.gd` `set_texture_pooling()`/`texture_pooling` (default off), static `build_texture_pooling_plan()` over `graph.allocations` with all reference guards (globals, first-touch read, self-sampled, `drawMode`/`blend` partial writes, viewport-without-clear, `persistent`/`mipmaps`/`is3D`, raw width/height/format signature), `_release_regrouped_textures()`, secondary-member allocation skip, `_apply_texture_aliases()`, `get_resource_plan()` |
+| `6113da00` + `95743621` (delivered in the 2026-09-26 sync, `2f47612c2904..6a0af04d3c4f`) | GAP-006 texture pooling: consume the analyzer's physical allocation map (`graph.allocations`) behind a `texturePooling` opt-in; view/viewport passes without `clear` treated as partially written (unsafe to pool) | Ported: `nm_backend.gd` `set_texture_pooling()`/`texture_pooling` (default off), static `build_texture_pooling_plan()` over `graph.allocations` with all reference guards (globals, first-touch read, self-sampled, `drawMode`/`blend` partial writes, viewport-without-clear, `persistent`/`mipmaps`/`is3D`, raw width/height/format signature), `release_regrouped_textures()`, secondary-member allocation skip, `apply_texture_aliases()`, `get_resource_plan()`; wired through `render_graph.gd --texture-pooling` / batch `texture_pooling` requests |
+| `fa83eeab` (in this range, descendant of `2f47612c`) | GAP-005 expander pass-field propagation (`name`/`type`/`clear`/`viewport`/`samplerTypes` copied onto expanded passes) | ALREADY PORTED in the 2026-09-25 sync: `expander.gd` carries all five fields; covered by `test_expander_propagates_gap005_pass_fields` and `test_expander_propagates_sampler_types_and_clear` (both pass). Upstream `expander.js` +12 lines diffed line-for-line against the port's existing propagation |
 | `f83a427e` (same sync) | One structured diagnostic union for backend shader/compiler failures (`ShaderDiagnostic`, `parseGLSLInfoLog`, `parseDiagnosticText`) | Ported: new `runtime/shader_diagnostics.gd`; `nm_backend.gd` records `last_shader_diagnostic` on SPIR-V compile failure (stage 'compile', parsed messages + source), SPIR-V link failure (stage 'link'), and missing vertex/fragment sources (stage 'missing-source'); legacy `push_error` strings unchanged. WebGPU-only pieces (compilation-info parsing, bind-group retry, `ERR_NO_WGSL_SOURCE`) audited-inapplicable; the 'bind' parser is ported for contract parity |
-| `ad17fd02`, `0b2866dd`, `93608f10`, `6a0af04d`, `01e9d620`, `3968f6c4`, `a651c075` (same sync) | Docs-only (GAP-006/GAP-007 closure records, llms-full.txt, Sphinx, checkpoint notes, CI evidence) | Nothing to port; verified `git diff 2f47612c2904..6a0af04d3c4f -- shaders/effects shaders/src/lang` is empty |
+| `63349a7d` (same sync) | Upstream CI: retire the per-push JS snapshot release workflow | Inapplicable: upstream-only CI plumbing (`.github/workflows/js.yml`); no `shaders/` content and this port has no such workflow |
+| `919f653e`, `27590caa`, `85ded3a6`, `c6bc8e17`, `94fc880b`, `5e52a2a2`, `8eeb7b5a`, `6c3f9a26`, `428ea29b`, `ad17fd02`, `0b2866dd`, `93608f10`, `6a0af04d`, `01e9d620`, `3968f6c4`, `a651c075` (same sync) | Docs-only (GAP-004/005/006/007 closure records, texture-policy docs, llms-full.txt, Sphinx, checkpoint notes, CI evidence) | Nothing to port; verified `git diff 2f47612c2904..6a0af04d3c4f -- shaders/effects shaders/src/lang` is empty |
 
 Effect-catalog parity: no effect definition, effect shader, DSL lang, or registry file changed in the
 range (upstream `shaders/effects` and `shaders/src/lang` diffs are empty for the delivered range);
@@ -206,6 +208,99 @@ documented diffs — none of the 5 failures or 8 diffs are introduced by this ca
 Limits: no pixel-parity re-sweep, no
 windowed GPU run, no editor interaction, and no CI run exists for this commit yet — this sync does
 not qualify rendering parity and does not close any gap below.
+
+2026-09-26 sync (upstream `2f47612c2904..6a0af04d3c4f`) — observed outputs, committed verbatim so
+the claims are checkable from this repository alone (reference clone refreshed to `origin/main`,
+head `a651c075`, which contains `6a0af04d`):
+
+`git log --oneline 2f47612c2904..6a0af04d3c4f` (full remaining delta, 18 commits):
+
+    6a0af04d docs: narrow GAP-007 register row to state what remains unstructured
+    93608f10 docs: close GAP-007 with structured backend diagnostic union evidence
+    f83a427e fix(shaders): normalize backend shader/compiler failures to one structured diagnostic union
+    95743621 fix(shaders): treat viewport passes without clear as partially written for texture pooling
+    0b2866dd docs: document viewport-write pooling guard in llms-full.txt
+    ad17fd02 docs: close GAP-006 with runtime allocation-plan consumption evidence
+    6113da00 feat(shaders): consume the resource allocation plan behind texturePooling opt-in with a queryable runtime plan (GAP-006)
+    428ea29b docs: advance Documentation checkpoint through 6c3f9a26
+    6c3f9a26 docs: record verified GAP-005 publication evidence for 8eeb7b5
+    8eeb7b5a docs: close GAP-005 with pass-field propagation evidence for fa83eeab
+    fa83eeab feat(shaders): copy name/viewport/clear/samplerTypes/type onto expanded passes (GAP-005)
+    27590caa docs(shaders): correct 3D filter defaults in texture-policy documentation
+    919f653e docs(shaders): document texture allocation policies (mipmaps/persistent/3D filter)
+    94fc880b docs: advance AI development contract checkpoint through 5e52a2a2 / 00340b1
+    5e52a2a2 docs: record observed docs-site CI runs and deployment for doc pass
+    c6bc8e17 docs: advance Documentation checkpoint through 69d83b80
+    85ded3a6 docs: close GAP-004 with verified publication evidence
+    63349a7d ci(js): retire the per-push snapshot release
+
+`git merge-base 2f47612c2904 6a0af04d3c4f` → `2f47612c29045c1b91af94887a8ff20106e980ef` (linear
+18-commit range). `git merge-base --is-ancestor 2f47612c2904 6a0af04d3c4f` → exit 0;
+`git merge-base --is-ancestor fca611fd8f91 6a0af04d3c4f` → exit 0 (the declared force-pushed range
+`fca611fd..6a0af04d` spans this and the earlier 2026-09-25 syncs).
+
+`git diff --stat 2f47612c2904..6a0af04d3c4f`:
+
+    .github/workflows/js.yml                    |  54 ----
+    LEDGER.md                                   | 100 +++++-
+    docs/plans/active-framework-gap.md          | 368 +++++++++++++++++++-
+    docs/releases.rst                           |  16 +-
+    docs/shaders/effects.rst                    |  32 +-
+    docs/shaders/pipeline.rst                   |  59 +++-
+    llms-full.txt                               | 144 ++++++---
+    package.json                                |   2 +-
+    scripts/run-js-tests.js                     |   3 +
+    shaders/src/runtime/backends/diagnostics.js | 185 +++++++++++
+    shaders/src/runtime/backends/webgl2.js      |  45 ++-
+    shaders/src/runtime/backends/webgpu.js      | 103 +++---
+    shaders/src/runtime/expander.js             |  12 +
+    shaders/src/runtime/pipeline.js             | 279 +++++++++++++++-
+    shaders/tests/test_backend_diagnostics.js   | 338 +++++++++++++++++++
+    shaders/tests/test_pass_fields.js           | 323 ++++++++++++++++++++
+    shaders/tests/test_resource_pooling.js      | 483 ++++++++++++++++++++++++++++
+    17 files changed, 2379 insertions(+), 167 deletions(-)
+
+`git diff 2f47612c2904..6a0af04d3c4f -- shaders/effects shaders/src/lang` → 0 bytes of output: NO
+effect-definition, effect-shader, or DSL-lang change in the range. The `expander.js` +12 is
+`fa83eeab`'s pass-field propagation, already ported (see the range table above). `webgl2.js`
+(+45)/`webgpu.js` (+103) diffs are the pooling/diagnostics backend wiring audited-inapplicable
+beyond what was ported; `pipeline.js` (+279) is the pooling plan/alias/getResourcePlan logic ported
+into `nm_backend.gd`; `diagnostics.js` (+185) is the diagnostic union ported into
+`runtime/shader_diagnostics.gd`.
+
+Gate outputs for the 2026-09-26 sync commit (Linux headless, Godot
+`4.7.stable.official.5b4e0cb0f`, `NM_REFERENCE_ROOT` at the refreshed reference clone), verbatim:
+
+    $ node parity/check_definitions.mjs
+      PASS  210 definition(s) match the reference exactly
+    $ node parity/check_lex.mjs
+    LEX PARITY: 352/352 pass
+    $ node parity/check_parse.mjs
+    PARSE PARITY: 352/352 pass
+    $ node parity/check_validate.mjs
+    VALIDATE PARITY: 352/352 pass
+    $ node parity/check_graph.mjs
+    GRAPH PARITY: 352/352 pass
+    $ node parity/check_registry.mjs
+      PASS  ops            (ref 210 / mine 210 keys)
+      PASS  enums          (ref 8 / mine 8 keys)
+      PASS  paramAliases   (ref 44 / mine 44 keys)
+      PASS  effectAliases  (ref 0 / mine 0 keys)
+      PASS  effectKeys     (ref 628 / mine 628 keys)
+    $ node parity/check_expand.mjs | grep -c DIFF
+    8
+    $ GODOT --headless --path godot --script res://addons/noisemaker/compiler/_smoke.gd
+    SMOKE: ALL PASS
+    $ python3 -m unittest discover -s parity -p 'test_*.py'
+    Ran 88 tests in 26.298s
+    FAILED (failures=5)
+
+The 5 failures are the same five display-dependent windowed tests recorded for the previous
+baseline (`test_device_limits`, `test_frame_export`, `test_mesh_pipeline`,
+`test_missing_effects_live`, `test_shader_compile`) — this container has no X11/Wayland display or
+Vulkan device; each fails with `Unable to create DisplayServer, all display drivers failed`
+identically on the unmodified baseline (verified for the 2026-09-25 candidate at `55c3c92`,
+recorded above).
 
 ## 2. Completion claims
 
@@ -505,7 +600,7 @@ plus, in this row's own update commit, the per-spec `is3D` policy split in
 smoke re-run after it, counts unchanged). Gates on Linux headless: smoke 85/85, lex/parse/validate/graph 352/352, registry pass, definitions 210/210, expand 344/352 (documented diffs), unittest 79/84 (5 display-dependent failures, identical on baseline). Review fixes folded in: mipmap-sampler selection now keys `_tex_mip` by the resolved READ texId (`_read_tex_id`) instead of `_resolve_read`'s RID (previous lookup never matched — dead path), the mip sampler sets `mipmap_filter` explicitly, `convert-definitions.mjs` drops the pre-branch unconditional policy projections, the 3D `filter` staging comment no longer claims runtime consumption, `_alloc_pingpong` now honors the `persistent` policy for double-buffered global surfaces (both halves resampled via `_resample_tex`, matching reference `createSurfaces`→`recreateTexturePreserving`), and `close()` frees the mip scratch texture, resample pipelines, and resample shader. CI: `export-kit.yml` run 36215382144 (attempt 1) PASSED on the published head
 `76b4dac0d21c8cd265a635d7942a91b98a991fd7` (refs/heads/main; machine-verified receipt
 `8addaf72-3d63-4fb4-bf4b-afeda4b91320`, 2026-09-26) — the first CI run covering this candidate. | No gap closes. No pixel-parity re-sweep, windowed GPU run, or editor interaction evidence for this commit yet; upstream runtime fidelity (`fsMip`/`fsScale`, `extractTextureSpecs`, `recreateTexturePreserving`, the `13a8a049..2f47612c` empty-diff claim) is audited by content against the reference clone with the reproducible commands AND committed observed outputs recorded in section 1 (no independent party has re-run them in its own environment); the 5 display-dependent test failures are baseline-identical at `55c3c92` (verified, recorded in section 1); the post-audit upstream changes remain unqualified pending windowed checks. |
-| 2026-09-26 | This sync commit (upstream `2f47612c2904..6a0af04d3c4f`; see the 2026-09-26 rows in section 1) | Closed the remaining delta to upstream `6a0af04d`: ported GAP-006 opt-in texture pooling (`6113da00`+`95743621` — plan build from `graph.allocations` with all reference safety guards, alias application, regroup release, `get_resource_plan`, default OFF) and the structured backend diagnostic union (`f83a427e` — new `runtime/shader_diagnostics.gd`, `last_shader_diagnostic` on compile/link/missing-source failures with unchanged legacy `push_error` text); docs-only commits audited (empty `shaders/effects`/`shaders/src/lang` diff). Gates on Linux headless (Godot `4.7.stable.official.5b4e0cb0f`, reference clone at upstream `6a0af04d`): definitions 210/210, lex/parse/validate/graph 352/352, registry pass, expand 344/352 (the same 8 documented diffs), smoke ALL PASS, unittest 82/87 (3 new tests; the 5 failures are the same display-dependent windowed tests as the baseline). | No gap closes. No pixel-parity re-sweep and no windowed GPU run for this commit (pooling is default-off and shader math untouched, but the opt-in pooling path and the diagnostics surface are only exercised headless at the plan/parser level); the 5 windowed test failures and the historical GAP-001..GAP-008 findings remain open. |
+| 2026-09-26 | This sync commit (upstream `2f47612c2904..6a0af04d3c4f`; see the 2026-09-26 rows in section 1) | Closed the remaining delta to upstream `6a0af04d`: ported GAP-006 opt-in texture pooling (`6113da00`+`95743621` — plan build from `graph.allocations` with all reference safety guards, alias application, regroup release with per-unique-RID free dedupe, `get_resource_plan`, default OFF, wired through `render_graph.gd --texture-pooling`/batch requests which now actually call `set_texture_pooling` and print `NM_RESOURCE_PLAN`) and the structured backend diagnostic union (`f83a427e` — new `runtime/shader_diagnostics.gd`, `last_shader_diagnostic` on compile/link/missing-source failures with unchanged legacy `push_error` text); `fa83eeab` confirmed already ported; docs-only/CI-only commits audited with outputs committed verbatim in section 1 (empty `shaders/effects`/`shaders/src/lang` diff). Gates on Linux headless (Godot `4.7.stable.official.5b4e0cb0f`, reference clone at upstream `6a0af04d`): definitions 210/210, lex/parse/validate/graph 352/352, registry pass, expand 344/352 (the same 8 documented diffs), smoke ALL PASS, unittest 83/88 (4 new tests incl. headless alias/release bookkeeping with a counting free callable; the 5 failures are the same display-dependent windowed tests as the baseline). | No gap closes. No pixel-parity re-sweep and no windowed GPU run for this commit (pooling is default-off and shader math untouched; the opt-in runtime path is exercised headless at the plan/alias/release bookkeeping level and via the now-live `--texture-pooling` CLI, but not yet under a real windowed RenderingDevice); the 5 windowed test failures and the historical GAP-001..GAP-008 findings remain open. |
 
 The audit preserved implementation, tests, generators, fixtures, tolerances, workflows, and historical documents.
 It verified source identity before document publication. The shared result records remote publication verification.
