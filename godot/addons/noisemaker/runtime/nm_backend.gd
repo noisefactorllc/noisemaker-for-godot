@@ -1362,19 +1362,9 @@ func _get_pipeline(cache_key: String, shader: RID, fb_format: int, n_attach: int
 	var p := rd.render_pipeline_create(shader, fb_format, vfmt, primitive, raster,
 		RDPipelineMultisampleState.new(), depth, blend)
 	if not p.is_valid():
-		var msg := "render pipeline creation failed: " + key
-		push_error(msg)
-		last_shader_diagnostic = _shader_diag.make({
-			"code": ShaderDiagnostics.DIAGNOSTIC_CODES["PIPELINE"],
-			"backend": "renderingdevice",
-			"stage": "pipeline",
-			"program": cache_key,
-			"detail": msg,
-		})
-		# Do NOT cache the invalid RID: caching it would make every retry with
-		# the same key bind a dead pipeline (a doomed silent draw). Returning
-		# the invalid RID lets execute_pass bail like the framebuffer and
-		# draw-list failure paths, and a later attempt re-creates the pipeline.
+		# execute_pass records the enriched ERR_PIPELINE_CREATE diagnostic and
+		# bails before drawing; do not cache the invalid RID either (caching it
+		# would make every retry with the same key bind a dead pipeline).
 		return p
 	_pipelines[key] = p
 	return p
@@ -2218,15 +2208,16 @@ func execute_pass(p: Dictionary) -> void:
 		var fmts := PackedStringArray()
 		for rid in out_rids:
 			fmts.append(str(rd.texture_get_format(rid)))
-		var rich := "render pipeline creation failed: " + cache_key
+		var rich := ("render pipeline creation failed: " + cache_key
+			+ " fb_format=" + str(fb_format)
+			+ " attachment_formats=" + " ".join(fmts))
 		push_error(rich)
 		last_shader_diagnostic = _shader_diag.make({
 			"code": ShaderDiagnostics.DIAGNOSTIC_CODES["PIPELINE"],
 			"backend": "renderingdevice",
 			"stage": "pipeline",
 			"program": cache_key,
-			"detail": rich + " fb_format=" + str(fb_format)
-				+ " attachment_formats=" + " ".join(fmts),
+			"detail": rich,
 		})
 		return
 
