@@ -371,6 +371,23 @@ func _init() -> void:
 	var unknown: Array = b._mip_dims_fmt("global_other_read")
 	_expect(unknown[0] == b.screen, "nm.mip-dims-fallback")
 
+	# Mipmapped-input sampler selection keys _tex_mip by texId string — not by
+	# _resolve_read's RID. _read_tex_id must mirror _resolve_read's resolution:
+	# ping-pong halves resolve to this frame's read half, flat ids pass through,
+	# and none/unknown resolve to "" (black tex, never mip-selected).
+	b._tex_mip["global_flow_read"] = 6
+	b._tex_mip["global_flow_write"] = 6
+	b._tex_mip["global_flat"] = 4
+	b._textures["global_flat"] = RID()
+	b._pingpong["global_flow"] = "flow"
+	b._surfaces["flow"] = {"read": "global_flow_read", "write": "global_flow_write"}
+	b._frame_read["flow"] = "global_flow_read"
+	_expect(b._read_tex_id("global_flow") == "global_flow_read", "nm.read-id-pingpong")
+	_expect(b._read_tex_id("global_flat") == "global_flat", "nm.read-id-flat")
+	_expect(b._read_tex_id("none") == "" and b._read_tex_id("global_ghost") == "", "nm.read-id-unknown")
+	_expect(b._tex_mip.get(b._read_tex_id("global_flow"), 1) > 1, "nm.mip-select-mipmapped")
+	_expect(b._tex_mip.get(b._read_tex_id("global_ghost"), 1) == 1, "nm.mip-select-plain")
+
 	print("SMOKE: ", "ALL PASS" if _ok else "FAILURES ABOVE")
 	quit(0 if _ok else 1)
 

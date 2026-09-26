@@ -356,7 +356,12 @@ an **external** (video/image) texture (`tex.isExternal === true`), it uses `'def
 set the same `filterMode` per source (Point for intermediate RTs, Bilinear for imported
 media) or filter-based effects will differ.
 
-No mipmaps are created anywhere; all sampling is at LOD 0.
+Default textures have no mip chain; all sampling is at LOD 0. EXCEPTION (GAP-004,
+upstream `2f47612c`): a texture authored with `mipmaps: true` gets a full chain
+allocated up front and regenerated from level 0 after each frame that renders to
+it — mipmapped inputs sample through a dedicated 'mipmap' sampler (linear
+min/mag/mipmap), mip levels are written via a 2x2 box downsample (`fsMip`) or the
+scale blit (`fsScale`) plus a `texture_copy` per level.
 
 ---
 
@@ -674,7 +679,9 @@ Mapping from `pass.storageTextures[binding.name]`:
 4. **Compute dispatch hard-codes 8×8 thread groups.** Auto-dispatch is `ceil(w/8)×ceil(h/8)×1`.
    Kernels must declare `[numthreads(8,8,1)]` or pass explicit `workgroups`/`size`.
 5. **Sampler filter parity.** Surface→surface = NEAREST (point); external media = LINEAR.
-   Wrong filter mode changes filter-based effects bit-for-bit. No mipmaps, LOD 0 only.
+   Wrong filter mode changes filter-based effects bit-for-bit. Default is LOD 0 only;
+   the single GAP-004 exception is the opt-in `mipmaps: true` texture policy (full chain,
+   regenerated per frame, sampled through the 'mipmap' sampler — see the mipmaps note above).
 6. **Linear color throughout, no sRGB.** All RTs are linear (`rgba16float`/`*unorm`); canvas
    blit to `bgra8unorm` (linear). Unity intermediates must be non-sRGB linear half-float.
 7. **Matrix layout.** Both mat3 (9) and mat4 (16) arrays are written **column-major as

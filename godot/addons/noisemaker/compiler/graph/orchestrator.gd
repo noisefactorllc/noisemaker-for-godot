@@ -64,8 +64,10 @@ func _extract_texture_specs(passes: Array, texture_specs: Dictionary) -> Diction
 			spec["is3D"] = true
 			spec["usage"] = ["storage", "sample", "copySrc", "copyDst"]
 			# Definition-level filtering policy for 3D textures ('nearest' or
-			# 'linear'). The runtime reads this when selecting the sampling mode.
-			# (reference compiler.js extractTextureSpecs, GAP-004)
+			# 'linear'), copied verbatim like the reference (compiler.js
+			# extractTextureSpecs, GAP-004). Upstream backends read this when
+			# selecting the 3D sampling mode; this port's nm_backend does not
+			# consume it yet (3D staging is inert until a definition authors it).
 			if effect_spec.get("filter"):
 				spec["filter"] = effect_spec["filter"]
 		else:

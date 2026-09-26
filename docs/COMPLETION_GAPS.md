@@ -72,10 +72,13 @@ graphs are unchanged; the compiler/runtime propagation is exercised by smoke tes
 on opt-in.
 
 Test evidence for this commit (Linux container, Godot `4.7.stable.official.5b4e0cb0f` `--headless`,
-`NM_REFERENCE_ROOT` at upstream `2f47612c`): smoke 72/72 (10 new _expect assertions), lex/parse/validate/graph 352/352
+`NM_REFERENCE_ROOT` at the upstream clone `/state/cache/scratch/noisemaker-upstream`, refreshed to
+`origin/main` `6a0af04d` — `2f47612c` and `8eeb7b5a` are both ancestors; the expand gate needs the
+GAP-005 pass-name expander, present only from `8eeb7b5a` on): smoke 85/85 (23 new _expect
+assertions in this candidate), lex/parse/validate/graph 352/352
 each, registry pass (ops 210/210, enums 8/8, paramAliases 44/44, effectKeys 628/628), definitions
 210/210, expand 344/352 (exactly the 8 pre-existing, documented pass-defines differences; normalized
-graphs match), unittest 75/80. The 5 failures are the windowed-Godot tests (device limits, frame
+graphs match), unittest 79/84 (79 passed). The 5 failures are the windowed-Godot tests (device limits, frame
 export, mesh pipeline, formerly-missing effects, shader-compile sweep): this container has no
 X11/Wayland display or Vulkan device; they fail identically on the unmodified baseline
 (`test_frame_export` verified against the pre-sync tree). Limits: no pixel-parity re-sweep, no
@@ -366,7 +369,7 @@ These actions specify acceptance work. They do not authorize new effect ports or
 | --- | --- | --- | --- |
 | 2026-09-23 | `bbb2d0179c6e991bdeb2efba7ea733baae027f36` | Created this register and README link. Ran 66 tests, compiler gates, three differential probes, batch prefix, and installed-artifact checks. | Seven gaps remain. No completion approval. Full historical parity, editor interaction, additional platforms, upgrades, and removal remain unqualified. |
 | 2026-09-24 | `6335960ea16d7a1231355eafe5086ad3c73afd58` | Reviewed all available worker results. Passed 68 current tests. Reproduced playback, pixel, lifecycle, and diagnostic findings. Added GAP-008 and executable acceptance checks. | Eight gaps remain. No verified closures. Full compiler comparisons, latest-authority pixels, editor workflows, other platforms, upgrades, and removal remain unqualified. |
-| 2026-09-25 | This sync commit (upstream `9d3474dfdc6c..2f47612c2904`; see the 2026-09-25 sync row in section 1) | Ported GAP-004 texture-allocation policies with the mip/persistent runtime, fixed STATUS coverage counts, audited the force-push range by content. Gates on Linux headless: smoke 72/72, lex/parse/validate/graph 352/352, registry pass, definitions 210/210, expand 344/352 (documented diffs), unittest 75/80 (5 display-dependent failures, identical on baseline). | No gap closes. No pixel-parity re-sweep, windowed GPU run, editor interaction, or CI evidence for this commit yet; the post-audit upstream changes remain unqualified pending those checks. |
+| 2026-09-25 | This sync commit (upstream `9d3474dfdc6c..2f47612c2904`; see the 2026-09-25 sync row in section 1) | Ported GAP-004 texture-allocation policies with the mip/persistent runtime, fixed STATUS coverage counts, audited the force-push range by content. Gates on Linux headless: smoke 85/85, lex/parse/validate/graph 352/352, registry pass, definitions 210/210, expand 344/352 (documented diffs), unittest 79/84 (5 display-dependent failures, identical on baseline). Review fixes folded in: mipmap-sampler selection now keys `_tex_mip` by the resolved READ texId (`_read_tex_id`) instead of `_resolve_read`'s RID (previous lookup never matched — dead path), the mip sampler sets `mipmap_filter` explicitly, `convert-definitions.mjs` drops the pre-branch unconditional policy projections, and the 3D `filter` staging comment no longer claims runtime consumption. | No gap closes. No pixel-parity re-sweep, windowed GPU run, editor interaction, or CI evidence for this commit yet; upstream runtime fidelity (`fsMip`/`fsScale`, `extractTextureSpecs`, `recreateTexturePreserving`, the `13a8a049..2f47612c` empty-diff claim) rests on the worker's content audit against the local reference clone at `origin/main` `6a0af04d` — flagged UNVERIFIED-BY-THIRD-PARTY pending independent re-diff; the post-audit upstream changes remain unqualified pending windowed checks. |
 
 The audit preserved implementation, tests, generators, fixtures, tolerances, workflows, and historical documents.
 It verified source identity before document publication. The shared result records remote publication verification.

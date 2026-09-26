@@ -199,15 +199,19 @@ texture-allocation policies (GAP-004) and the two follow-up fixes:
   halves) ported into `nm_backend.gd`.
 - Runtime: mip regeneration draws a 2x2 box downsample per level (reference webgpu.js `fsMip`; texelFetch so
   unfilterable float formats work) into a scratch texture and `texture_copy`s it into the mip level (RenderingDevice
-  framebuffers attach mip 0 only); mipmapped inputs sample through a new linear+mipmap sampler (reference legacyDefault
-  'mipmap'). Odd-sized levels use the scale blit (`fsScale`).
+  framebuffers attach mip 0 only); mipmapped inputs sample through a new linear+mipmap sampler with `mipmap_filter`
+  set explicitly (reference legacyDefault 'mipmap'), selected by the resolved READ texId string — `_tex_mip` is
+  keyed by texId, never by `_resolve_read`'s RID. Odd-sized levels use the scale blit (`fsScale`). 3D `filter` is
+  copied verbatim for backend consumption but this port's runtime does not yet read it (staged; inert until
+  authored — as of this range no definition uses it).
 - Audited upstream commits `62eb56fa` (WebGL2 mip-chain allocation fix + WebGPU cached mip bind groups — the
   allocation-half ported above; bind-group caching is a WebGPU-perf detail with no RenderingDevice analogue) and
   `2f47612c` (stop double-creating global surfaces on allocation change — the port's `allocate_textures` now keeps a
   mipmapped texture whose allocation matches, the same "matching allocation, preserve it" rule; no double-create existed
   in the port).
 - Audited docs-only commits `fa4b2f02`, `69d83b80`, `13a8a04` (GAP-003 closure records, checkpoint notes — no shader
-  source or definitions changed).*
+  source or definitions changed). Upstream runtime fidelity above is audited by content against the local reference
+  clone at `origin/main` `6a0af04d`; flagged UNVERIFIED-BY-THIRD-PARTY until an independent re-diff.*
 
 
 

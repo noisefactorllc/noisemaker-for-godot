@@ -204,6 +204,7 @@ func setup(p_rd: RenderingDevice, p_addon_dir: String, p_screen: Vector2i) -> vo
 	ms.mag_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
 	ms.repeat_u = RenderingDevice.SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE
 	ms.repeat_v = RenderingDevice.SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE
+	ms.mipmap_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
 	_mip_sampler = rd.sampler_create(ms)
 	# 1x1 zero texture bound for "none" sampler inputs so binding indices stay aligned
 	# with the shader's declared samplers (matches the reference backend's BlackTex).
@@ -1830,7 +1831,10 @@ func execute_pass(p: Dictionary) -> void:
 		su.binding = 0
 		# Mipmapped inputs sample through the mipmap-capable sampler
 		# (reference legacyDefault 'mipmap' for textures with a mip chain).
-		su.add_id(_mip_sampler if _tex_mip.get(_resolve_read(src_id), 1) > 1 else _sampler)
+		# _tex_mip is keyed by texId — select via the resolved READ texId
+		# (_read_tex_id), not _resolve_read's RID.
+		var blit_read_id := _read_tex_id(src_id)
+		su.add_id(_mip_sampler if _tex_mip.get(blit_read_id, 1) > 1 else _sampler)
 		su.add_id(_resolve_read(src_id))
 		set0_uniforms.append(su)
 	else:
@@ -1854,7 +1858,9 @@ func execute_pass(p: Dictionary) -> void:
 			u.binding = int(s["binding"])
 			# Mipmapped inputs sample through the mipmap-capable sampler
 			# (reference legacyDefault 'mipmap' for textures with a mip chain).
-			u.add_id(_mip_sampler if _tex_mip.get(_resolve_read(tid), 1) > 1 else _sampler)
+			# _tex_mip is keyed by texId — select via the resolved READ texId.
+			var read_id := _read_tex_id(tid)
+			u.add_id(_mip_sampler if _tex_mip.get(read_id, 1) > 1 else _sampler)
 			u.add_id(_resolve_read(tid))
 			set0_uniforms.append(u)
 	var set0 := rd.uniform_set_create(set0_uniforms, shader, 0)
@@ -1896,6 +1902,19 @@ func _resolve_read(tex_id: String) -> RID:
 	if _textures.has(tex_id):
 		return _textures[tex_id]
 	return _black_tex
+
+# texId of the buffer an input texId samples FROM ("" for none/unknown → black tex).
+# Mirrors _resolve_read but returns the texId STRING so mipmap-sampler selection can
+# key _tex_mip (texId -> level count) — _resolve_read's RID must not be used as a
+# _tex_mip key (it would never match and the mip sampler would never be selected).
+func _read_tex_id(tex_id: String) -> String:
+	if tex_id == "none" or tex_id == "":
+		return ""
+	if _pingpong.has(tex_id):
+		return str(_frame_read[_pingpong[tex_id]])
+	if _textures.has(tex_id):
+		return tex_id
+	return ""
 
 # Texture an output texId renders INTO. Double-buffered surfaces resolve to this frame's
 # write buffer. Returns an invalid RID if the target is genuinely missing.

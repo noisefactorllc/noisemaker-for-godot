@@ -152,15 +152,12 @@ function projectTextures (textures, is3D) {
     if (spec.height !== undefined) t.height = spec.height
     if (spec.depth !== undefined) t.depth = spec.depth
     if (is3D || spec.is3D) t.is3D = true
-    if (spec.mipmaps !== undefined) t.mipmaps = spec.mipmaps
-    if (spec.persistent !== undefined) t.persistent = spec.persistent
-    if (spec.filter !== undefined) t.filter = spec.filter
     t.format = spec.format || 'rgba16f'
     // GAP-004 authorable texture policies (reference a021a283): 3D filtering
     // ('nearest'|'linear') and 2D mip/persistence allocation policies. Mirrors
     // compiler.js extractTextureSpecs' branch split — filter is 3D-only,
-    // mipmaps/persistent are 2D-only — so the runtime's orchestrator
-    // _extract_texture_specs / nm_backend allocation actually see them.
+    // mipmaps/persistent are 2D-only — so a 3D spec never projects
+    // mipmaps/persistent and a 2D spec never projects filter.
     if (is3D) {
       if (spec.filter) t.filter = spec.filter
     } else {
