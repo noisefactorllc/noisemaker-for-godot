@@ -158,7 +158,7 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 	# next to the candidate PNG where compare.py's degenerate handler can
 	# quote them into its error line.
 	var diag_lines := sline
-	if diag != null:
+	if diag != null and not diag.is_empty():
 		diag_lines = ("NM_SHADER_DIAG code=" + str(diag.get("code", ""))
 			+ " severity=" + str(diag.get("severity", ""))
 			+ " stage=" + str(diag.get("stage", ""))

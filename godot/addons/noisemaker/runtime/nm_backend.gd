@@ -1371,6 +1371,11 @@ func _get_pipeline(cache_key: String, shader: RID, fb_format: int, n_attach: int
 			"program": cache_key,
 			"detail": msg,
 		})
+		# Do NOT cache the invalid RID: caching it would make every retry with
+		# the same key bind a dead pipeline (a doomed silent draw). Returning
+		# the invalid RID lets execute_pass bail like the framebuffer and
+		# draw-list failure paths, and a later attempt re-creates the pipeline.
+		return p
 	_pipelines[key] = p
 	return p
 
@@ -2204,6 +2209,10 @@ func execute_pass(p: Dictionary) -> void:
 	var blend_spec := _resolve_blend(p)
 	var vfmt := _vfmt_empty if is_custom_draw else _vfmt
 	var pipeline := _get_pipeline(cache_key, shader, fb_format, n_attach, primitive, blend_spec, vfmt, is_mesh)
+	if not pipeline.is_valid():
+		# _get_pipeline already recorded the ERR_PIPELINE_CREATE diagnostic;
+		# do not bind a dead pipeline into a doomed draw list.
+		return
 
 	var set0_uniforms := []
 	if ptype == "blit":
