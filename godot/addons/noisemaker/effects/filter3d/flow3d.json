@@ -122,6 +122,19 @@
       },
       "outputs": {
         "fragColor": "global_flow3d_trail"
+      },
+      "viewport": {
+        "width": {
+          "param": "volumeSize",
+          "default": 32,
+          "inputOverride": "inputTex3d"
+        },
+        "height": {
+          "param": "volumeSize",
+          "power": 2,
+          "default": 1024,
+          "inputOverride": "inputTex3d"
+        }
       }
     },
     {
@@ -132,6 +145,19 @@
       },
       "outputs": {
         "fragColor": "global_flow3d_trail"
+      },
+      "viewport": {
+        "width": {
+          "param": "volumeSize",
+          "default": 32,
+          "inputOverride": "inputTex3d"
+        },
+        "height": {
+          "param": "volumeSize",
+          "power": 2,
+          "default": 1024,
+          "inputOverride": "inputTex3d"
+        }
       }
     },
     {
@@ -150,7 +176,20 @@
       },
       "drawMode": "points",
       "count": 262144,
-      "blend": true
+      "blend": true,
+      "viewport": {
+        "width": {
+          "param": "volumeSize",
+          "default": 32,
+          "inputOverride": "inputTex3d"
+        },
+        "height": {
+          "param": "volumeSize",
+          "power": 2,
+          "default": 1024,
+          "inputOverride": "inputTex3d"
+        }
+      }
     },
     {
       "name": "blend",
@@ -164,6 +203,19 @@
       },
       "outputs": {
         "fragColor": "global_flow3d_blended"
+      },
+      "viewport": {
+        "width": {
+          "param": "volumeSize",
+          "default": 32,
+          "inputOverride": "inputTex3d"
+        },
+        "height": {
+          "param": "volumeSize",
+          "power": 2,
+          "default": 1024,
+          "inputOverride": "inputTex3d"
+        }
       }
     }
   ],

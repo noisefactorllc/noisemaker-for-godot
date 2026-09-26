@@ -63,6 +63,13 @@ func _extract_texture_specs(passes: Array, texture_specs: Dictionary) -> Diction
 			spec["depth"] = depth
 			spec["is3D"] = true
 			spec["usage"] = ["storage", "sample", "copySrc", "copyDst"]
+			if effect_spec.get("filter") != null:
+				spec["filter"] = effect_spec["filter"]
+		else:
+			if effect_spec.get("mipmaps") != null:
+				spec["mipmaps"] = effect_spec["mipmaps"]
+			if effect_spec.get("persistent") != null:
+				spec["persistent"] = effect_spec["persistent"]
 		textures[tex_id] = spec
 	for p in passes:
 		var outputs = p.get("outputs")

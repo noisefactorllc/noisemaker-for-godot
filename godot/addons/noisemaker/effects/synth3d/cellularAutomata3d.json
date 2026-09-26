@@ -110,6 +110,17 @@
       },
       "outputs": {
         "color": "global_ca_state"
+      },
+      "viewport": {
+        "width": {
+          "param": "volumeSize",
+          "default": 32
+        },
+        "height": {
+          "param": "volumeSize",
+          "power": 2,
+          "default": 1024
+        }
       }
     }
   ],

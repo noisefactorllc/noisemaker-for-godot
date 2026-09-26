@@ -47,6 +47,7 @@ class CompilerAutomationTests(unittest.TestCase):
                 "_parse_dump.gd": "PARSEDUMP:",
                 "_graph_dump.gd": "GRAPHDUMP:",
                 "_validate_dump.gd": "VALIDATEDUMP:",
+                "_expand_dump.gd": "EXPANDDUMP:",
             }
             if script_name not in markers:
                 raise ValueError(f"Unknown dump script: {script_name}")
@@ -1056,6 +1057,22 @@ class CompilerAutomationTests(unittest.TestCase):
         comma_dump = self._dump("_validate_dump.gd", {"comma.dsl": comma_src}, extra_args=["--strict-subchain-args"])["comma.dsl"]
         self.assertFalse(comma_dump["ok"])
         self.assertEqual(comma_dump["diagnostic"]["code"], "P010")
+
+    def test_expander_propagates_gap005_pass_fields(self):
+        source = """
+            search synth3d
+            cell3d().write(o0)
+            render(o0)
+        """
+        output = self._dump("_expand_dump.gd", {"cell3d.dsl": source})["cell3d.dsl"]
+        self.assertTrue(output["ok"], output)
+        passes = output["out"]["passes"]
+        cell_pass = next(p for p in passes if p.get("effectFunc") == "cell3d")
+        self.assertEqual(cell_pass.get("name"), "precompute")
+        self.assertIn("viewport", cell_pass)
+        self.assertIsInstance(cell_pass["viewport"], dict)
+        self.assertEqual(cell_pass["viewport"]["width"], {"param": "volumeSize", "default": 64})
+        self.assertEqual(cell_pass["viewport"]["height"], {"param": "volumeSize", "power": 2, "default": 4096})
 
 
 if __name__ == "__main__":

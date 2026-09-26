@@ -85,6 +85,57 @@ class ShaderCoverageTests(unittest.TestCase):
                         msg=f"Effect {eff_name} alias '{alias}' -> '{target}' not found in globals",
                     )
 
+    def test_registered_effect_definitions_gap004_gap005_contract(self):
+        definitions = sorted(DEFINITIONS.glob("*/*.json"))
+        self.assertEqual(len(definitions), 210)
+        viewport_effects = set()
+        viewport_pass_count = 0
+        for definition_path in definitions:
+            defn = json.loads(definition_path.read_text(encoding="utf-8"))
+            eff_name = f"{defn.get('namespace', '?')}.{defn.get('func', '?')}"
+            for p in defn.get("passes", []):
+                if "viewport" in p:
+                    viewport_effects.add(eff_name)
+                    viewport_pass_count += 1
+                    vp = p["viewport"]
+                    self.assertIsInstance(vp, dict, msg=f"Effect {eff_name} viewport is not a dict")
+                    self.assertTrue(
+                        "width" in vp or "height" in vp or "scale" in vp,
+                        msg=f"Effect {eff_name} viewport missing dimensions",
+                    )
+                if "samplerTypes" in p:
+                    st = p["samplerTypes"]
+                    self.assertIsInstance(st, dict, msg=f"Effect {eff_name} samplerTypes is not a dict")
+                    for s_k, s_v in st.items():
+                        self.assertIsInstance(s_v, str, msg=f"Effect {eff_name} samplerType {s_k} not a string")
+                if "name" in p:
+                    self.assertIsInstance(p["name"], str, msg=f"Effect {eff_name} pass name not a string")
+                if "type" in p:
+                    self.assertIsInstance(p["type"], str, msg=f"Effect {eff_name} pass type not a string")
+            for tex_field in ("textures", "textures3d"):
+                if tex_field in defn and isinstance(defn[tex_field], dict):
+                    for tex_name, tex_spec in defn[tex_field].items():
+                        if "mipmaps" in tex_spec:
+                            self.assertIsInstance(
+                                tex_spec["mipmaps"],
+                                bool,
+                                msg=f"Effect {eff_name} texture {tex_name} mipmaps not a bool",
+                            )
+                        if "persistent" in tex_spec:
+                            self.assertIsInstance(
+                                tex_spec["persistent"],
+                                bool,
+                                msg=f"Effect {eff_name} texture {tex_name} persistent not a bool",
+                            )
+                        if "filter" in tex_spec:
+                            self.assertIsInstance(
+                                tex_spec["filter"],
+                                str,
+                                msg=f"Effect {eff_name} texture {tex_name} filter not a str",
+                            )
+        self.assertEqual(len(viewport_effects), 10)
+        self.assertEqual(viewport_pass_count, 13)
+
 
 if __name__ == "__main__":
     unittest.main()

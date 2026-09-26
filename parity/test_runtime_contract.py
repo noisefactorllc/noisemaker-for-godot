@@ -558,6 +558,99 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("LENS_WARP_SPEED_TEST: PASS", result.stdout, result.stdout + result.stderr)
 
+    def test_orchestrator_texture_specs_extracts_gap004_and_gap005_keys(self):
+        script = """
+            extends SceneTree
+
+            func _init() -> void:
+                var Orchestrator := load("res://addons/noisemaker/compiler/graph/orchestrator.gd")
+                var orchestrator = Orchestrator.new(null)
+                var texture_specs := {
+                    "tex2d": {
+                        "width": 128,
+                        "height": 128,
+                        "format": "rgba8",
+                        "mipmaps": true,
+                        "persistent": true
+                    },
+                    "tex3d": {
+                        "width": 32,
+                        "height": 32,
+                        "depth": 32,
+                        "is3D": true,
+                        "filter": "linear"
+                    }
+                }
+                var extracted: Dictionary = orchestrator.call("_extract_texture_specs", [], texture_specs)
+                var t2 = extracted.get("tex2d", {})
+                var t3 = extracted.get("tex3d", {})
+                var ok: bool = t2.get("mipmaps") == true \
+                    and t2.get("persistent") == true \
+                    and t3.get("filter") == "linear" \
+                    and t3.get("is3D") == true \
+                    and t3.get("depth") == 32
+                if ok:
+                    print("TEXTURE_SPECS_GAP004_TEST: PASS")
+                    quit(0)
+                else:
+                    print("TEXTURE_SPECS_GAP004_TEST: extracted=", extracted)
+                    quit(1)
+        """
+        result = self._run_godot_script(script)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("TEXTURE_SPECS_GAP004_TEST: PASS", result.stdout, result.stdout + result.stderr)
+
+    def test_expander_propagates_sampler_types_and_clear(self):
+        script = """
+            extends SceneTree
+
+            func _init() -> void:
+                var Expander := load("res://addons/noisemaker/compiler/graph/expander.gd")
+                var EffectRegistry := load("res://addons/noisemaker/compiler/lang/effect_registry.gd")
+                var reg = EffectRegistry.new()
+                reg.call("_register_effect", {
+                    "name": "mock",
+                    "namespace": "mock",
+                    "func": "synth",
+                    "passes": [{
+                        "program": "synth_prog",
+                        "samplerTypes": {"noiseTex": "sampler3D"},
+                        "clear": true,
+                        "type": "render",
+                        "inputs": {},
+                        "outputs": {"color": "outputTex"}
+                    }],
+                    "globals": {}
+                })
+                var compilation_result := {
+                    "plans": [{
+                        "chain": [{
+                            "op": "mock.synth",
+                            "temp": 0,
+                            "args": {}
+                        }],
+                        "write": "o0"
+                    }],
+                    "render": "o0"
+                }
+                var expander = Expander.new(reg)
+                var expanded: Dictionary = expander.expand(compilation_result)
+                var passes: Array = expanded.get("passes", [])
+                var synth_pass = passes[0] if passes.size() > 0 else {}
+                var ok: bool = synth_pass.get("samplerTypes", {}).get("noiseTex") == "sampler3D" \
+                    and synth_pass.get("clear") == true \
+                    and synth_pass.get("type") == "render"
+                if ok:
+                    print("EXPANDER_GAP005_TEST: PASS")
+                    quit(0)
+                else:
+                    print("EXPANDER_GAP005_TEST: expanded=", expanded)
+                    quit(1)
+        """
+        result = self._run_godot_script(script)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("EXPANDER_GAP005_TEST: PASS", result.stdout, result.stdout + result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

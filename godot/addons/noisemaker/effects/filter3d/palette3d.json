@@ -74,6 +74,19 @@
       },
       "outputs": {
         "fragColor": "volumeCache"
+      },
+      "viewport": {
+        "width": {
+          "param": "volumeSize",
+          "default": 64,
+          "inputOverride": "inputTex3d"
+        },
+        "height": {
+          "param": "volumeSize",
+          "power": 2,
+          "default": 4096,
+          "inputOverride": "inputTex3d"
+        }
       }
     }
   ],

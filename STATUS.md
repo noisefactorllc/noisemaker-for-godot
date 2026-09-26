@@ -57,6 +57,14 @@ so unlike the sibling ports it carried real shader-math risk, not just mechanica
 
 *Incrementally synced 2026-09-25 to reference `9d3474df` (`240740dd676a..9d3474dfdc6c`, v1.0.181) — audited upstream commit `9d3474df` (GAP-003: runtime validation of effect definitions against spec via `validateEffectDefinition` in `shaders/src/runtime/effect-validator.js`). Integrated `validateEffectDefinition` into `tools/convert-definitions.mjs` to validate all effect definitions against spec before writing. Added `test_registered_effect_definitions_satisfy_specification` in `parity/test_shader_coverage.py` asserting that all 210 registered effect definitions satisfy the specification contract (`name`, `namespace`, `func`, `passes`, `program`, `globals`, `paramAliases`). All 210 effect definitions match and pass validation cleanly.*
 
+*Incrementally synced 2026-09-25 to reference `8eeb7b5a` (`9d3474dfdc6c..8eeb7b5ac14eb37a8d16037f607a88ce63924cd3`, v1.0.183) — ported GAP-004 texture definition keys (`mipmaps`, `persistent`, `filter`) and GAP-005 pass keys (`name`, `type`, `clear`, `viewport`, `samplerTypes`) from upstream:
+- `tools/convert-definitions.mjs`: updated pass and texture conversion projections to preserve `viewport`, `samplerTypes`, `mipmaps`, `persistent`, and `filter`. Regenerated all 210 JSON effect definitions cleanly with validation against specification (10 3D effects updated with canonical `viewport` specifications).
+- `godot/addons/noisemaker/compiler/graph/expander.gd`: updated optional pass field propagation (`opt_key`) to include `name`, `type`, `clear`, `viewport`, and `samplerTypes`.
+- `godot/addons/noisemaker/compiler/graph/orchestrator.gd`: updated `_extract_texture_specs` to forward `mipmaps`, `persistent`, and 3D `filter` metadata.
+- `parity/test_shader_coverage.py`: added `test_registered_effect_definitions_gap004_gap005_contract` asserting specification conformity for `viewport`, `samplerTypes`, and texture flags across all 210 effect definitions.
+- `parity/test_compiler_automation.py`: added `test_expander_propagates_gap005_pass_fields` verifying pass-level preservation across AST expansion.
+- All parity gates verified: definitions (210/210 PASS), graph (352/352 PASS), and full test suite (82/82 pytest PASS).*
+
 
 
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,

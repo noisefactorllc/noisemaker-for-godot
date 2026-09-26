@@ -441,9 +441,10 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 				var pass_obj := {"id": pass_id, "program": program_name, "inputs": {}, "outputs": {}, "uniforms": {}}
 				# Optional pass fields: include only when the passDef provides them (the reference's
 				# object literal sets them to undefined otherwise, which JSON.stringify drops).
-				for opt_key in ["entryPoint", "drawMode", "drawBuffers", "count", "countUniform", "repeat", "blend", "workgroups", "storageBuffers", "storageTextures", "conditions", "defines"]:
-					if pass_def is Dictionary and pass_def.has(opt_key):
-						pass_obj[opt_key] = pass_def[opt_key]
+				for opt_key in ["entryPoint", "drawMode", "drawBuffers", "count", "countUniform", "repeat", "blend", "workgroups", "storageBuffers", "storageTextures", "conditions", "defines", "name", "type", "clear", "viewport", "samplerTypes"]:
+					if pass_def is Dictionary and pass_def.has(opt_key) and pass_def[opt_key] != null:
+						var val = pass_def[opt_key]
+						pass_obj[opt_key] = val.duplicate(true) if (val is Dictionary or val is Array) else val
 				pass_obj["effectKey"] = effect_name
 				pass_obj["effectFunc"] = effect_def.get("func") if effect_def.get("func") else effect_name
 				pass_obj["effectNamespace"] = effect_def.get("namespace")

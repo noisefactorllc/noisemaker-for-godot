@@ -138,6 +138,8 @@ function projectPass (pass) {
   if (pass.clear !== undefined) out.clear = pass.clear
   if (pass.type !== undefined) out.type = pass.type
   if (pass.entryPoint !== undefined) out.entryPoint = pass.entryPoint
+  if (pass.viewport !== undefined) out.viewport = pass.viewport
+  if (pass.samplerTypes !== undefined) out.samplerTypes = pass.samplerTypes
   return out
 }
 
@@ -150,6 +152,9 @@ function projectTextures (textures, is3D) {
     if (spec.height !== undefined) t.height = spec.height
     if (spec.depth !== undefined) t.depth = spec.depth
     if (is3D || spec.is3D) t.is3D = true
+    if (spec.mipmaps !== undefined) t.mipmaps = spec.mipmaps
+    if (spec.persistent !== undefined) t.persistent = spec.persistent
+    if (spec.filter !== undefined) t.filter = spec.filter
     t.format = spec.format || 'rgba16f'
     out[id] = t
   }
