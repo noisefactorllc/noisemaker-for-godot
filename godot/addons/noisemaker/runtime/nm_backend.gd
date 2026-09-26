@@ -567,8 +567,6 @@ func allocate_textures(graph: Dictionary) -> void:
 	_frame_read.clear()
 	_frame_write.clear()
 	_pingpong.clear()
-	_tex_dims.clear()
-	_tex_fmt.clear()
 	var merged := _merge_uniforms(graph)
 	var pp := _pingpong_surfaces(graph)
 	# Rebuild the pooling plan from the analyzer's allocation map. Must run
