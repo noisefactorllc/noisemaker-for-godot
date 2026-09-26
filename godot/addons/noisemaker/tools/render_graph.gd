@@ -153,6 +153,22 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 		+ " surface_valid=" + str(backend.render_surface_texture().is_valid()))
 	print(sline)
 	printerr(sline)
+	# Side-car for native-runner attribution: harness tails keep only the last
+	# line of the final (compare) command, so persist the render diagnostics
+	# next to the candidate PNG where compare.py's degenerate handler can
+	# quote them into its error line.
+	var diag_lines := sline
+	if diag != null:
+		diag_lines = ("NM_SHADER_DIAG code=" + str(diag.get("code", ""))
+			+ " severity=" + str(diag.get("severity", ""))
+			+ " stage=" + str(diag.get("stage", ""))
+			+ " program=" + str(diag.get("program", ""))
+			+ " detail=" + str(diag.get("detail", "")).substr(0, 200)) + "\n" + sline
+	var stats_path := out_path.get_basename().trim_suffix(".candidate") + ".passstats.txt"
+	var sf := FileAccess.open(stats_path, FileAccess.WRITE)
+	if sf != null:
+		sf.store_string(diag_lines + "\n")
+		sf.close()
 	if texture_pooling:
 		# Observable evidence for the opt-in run: the materialized sharing plan.
 		var plan: Dictionary = backend.get_resource_plan(graph)

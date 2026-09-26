@@ -108,8 +108,20 @@ def main() -> int:
     if a.max() == 0 or b.max() == 0:
         which = "golden" if a.max() == 0 else "candidate"
         producer = ("reference mint" if which == "golden" else "Godot renderer")
-        print(f"error: degenerate {which} artifact is all-zero (no pixels "
-              f"written by the {producer})", file=sys.stderr)
+        msg = (f"error: degenerate {which} artifact is all-zero (no pixels "
+               f"written by the {producer})")
+        # Quote the renderer's side-car diagnostics (NM_PASS_STATS /
+        # NM_SHADER_DIAG written by tools/render_graph.gd next to the
+        # candidate) into the failure line: native-runner tails keep only the
+        # last line of this command.
+        sidecar = args.candidate.parent / (args.candidate.stem.replace(".candidate", "")
+                                           + ".passstats.txt")
+        try:
+            if sidecar.exists():
+                msg += "; passstats=" + sidecar.read_text().strip().replace("\n", " | ")
+        except OSError:
+            pass
+        print(msg, file=sys.stderr)
         if args.report:
             args.report.write_text(json.dumps({
                 "name": args.name or args.golden.stem,
