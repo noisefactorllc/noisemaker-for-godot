@@ -102,6 +102,24 @@ def main() -> int:
             }, indent=2) + "\n")
         return 1
 
+    # Degenerate-artifact guard: an all-zero artifact means its producer wrote
+    # no pixels (broken golden mint, or a black Godot render), not a parity
+    # miss. Attribute it instead of reporting a meaningless ssim≈0 compare.
+    if a.max() == 0 or b.max() == 0:
+        which = "golden" if a.max() == 0 else "candidate"
+        producer = ("reference mint" if which == "golden" else "Godot renderer")
+        print(f"error: degenerate {which} artifact is all-zero (no pixels "
+              f"written by the {producer})", file=sys.stderr)
+        if args.report:
+            args.report.write_text(json.dumps({
+                "name": args.name or args.golden.stem,
+                "passed": False,
+                "error": f"degenerate_{which}_all_zero",
+                "golden": str(args.golden),
+                "candidate": str(args.candidate),
+            }, indent=2) + "\n")
+        return 1
+
     max_diff = max_abs_diff(a, b)
     mean_diff = mean_abs_diff(a, b)
     ssim = global_ssim(a, b)
