@@ -39,4 +39,15 @@ fi
 
 "$PY" "$ROOT/parity/compare.py" "$GOLD" "$CAND" \
 	--name "$NAME" --tolerance "$TOL" --ssim-min "$SSIM" \
-	--report "$ROOT/parity/out/$NAME.report.json"
+	--report "$ROOT/parity/out/$NAME.report.json" || {
+	# Threshold failure: surface the full metrics report and artifact identity so a
+	# native-runner failure is diagnosable from its output tail alone (the report
+	# JSON lives only on the runner host otherwise).
+	echo "DIAG report $NAME:"
+	cat "$ROOT/parity/out/$NAME.report.json" || true
+	echo "DIAG artifacts $NAME:"
+	ls -l "$GOLD" "$CAND" 2>/dev/null || true
+	(sha256sum "$GOLD" "$CAND" 2>/dev/null || shasum -a 256 "$GOLD" "$CAND" 2>/dev/null || true)
+	grep -o '"\(error\|max_abs_diff\|mean_abs_diff\|ssim\|tolerance\|ssim_min\|golden_shape\|candidate_shape\)":[^,}]*' "$ROOT/parity/out/$NAME.report.json" 2>/dev/null | tr '\n' ' ' | sed 's/^/DIAG metrics: /'; echo
+	exit 1
+}

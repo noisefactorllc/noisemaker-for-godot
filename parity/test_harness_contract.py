@@ -622,6 +622,47 @@ class HarnessContractTests(unittest.TestCase):
         result = self._run_with_fake_renderer(1)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_runner_prints_report_diagnostics_on_threshold_failure(self):
+        parity = self.tmp / "parity"
+        (parity / "out").mkdir(parents=True)
+        (parity / ".venv" / "bin").mkdir(parents=True)
+        shutil.copy2(REPO / "parity" / "run.sh", parity / "run.sh")
+        for suffix in ("graph.json", "golden.png", "candidate.png"):
+            (parity / "out" / f"chrome.{suffix}").touch()
+        (parity / "compare.py").write_text("# comparator stub\n")
+        python = parity / ".venv" / "bin" / "python"
+        python.write_text(
+            "#!/usr/bin/env bash\n"
+            "report=''\n"
+            "prev=''\n"
+            "for a in \"$@\"; do if [ \"$prev\" = \"--report\" ]; then report=$a; fi; prev=$a; done\n"
+            "printf '%s\\n' '{\"name\":\"chrome\",\"passed\":false,\"error\":null,"
+            "\"max_abs_diff\":99.0,\"mean_abs_diff\":4.2,\"ssim\":0.9,"
+            "\"tolerance\":0.0,\"ssim_min\":0.999}' > \"$report\"\n"
+            "echo '[FAIL] chrome: max-abs-diff=99.000 mean-abs-diff=4.2000 ssim=0.90000'\n"
+            "exit 1\n"
+        )
+        python.chmod(0o755)
+        renderer = self.tmp / "fake-godot"
+        renderer.write_text(
+            "#!/usr/bin/env bash\n"
+            f"touch '{parity / 'out' / 'chrome.candidate.png'}'\n"
+            "exit 0\n"
+        )
+        renderer.chmod(0o755)
+
+        result = subprocess.run(
+            ["bash", str(parity / "run.sh"), "chrome", "0", "0.999"],
+            env={**os.environ, "GODOT": str(renderer)},
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("DIAG report chrome:", result.stdout + result.stderr)
+        self.assertIn("DIAG metrics:", result.stdout + result.stderr)
+        self.assertIn('"max_abs_diff":99.0', result.stdout + result.stderr)
+        self.assertIn("DIAG artifacts chrome:", result.stdout + result.stderr)
+
     def test_runner_requires_renderer_to_create_a_new_candidate(self):
         result = self._run_with_fake_renderer(0)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
