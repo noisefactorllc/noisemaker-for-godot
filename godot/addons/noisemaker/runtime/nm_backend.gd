@@ -2640,13 +2640,18 @@ func _snapshot_surface() -> Image:
 	for y in h:
 		for x in w:
 			var c := src.get_pixel(x, y)
-			qbytes[idx] = clampi(floori(c.r * 255.0 + 0.5), 0, 255)
-			qbytes[idx + 1] = clampi(floori(c.g * 255.0 + 0.5), 0, 255)
-			qbytes[idx + 2] = clampi(floori(c.b * 255.0 + 0.5), 0, 255)
-			qbytes[idx + 3] = clampi(floori(c.a * 255.0 + 0.5), 0, 255)
+			qbytes[idx] = _capture_byte(c.r)
+			qbytes[idx + 1] = _capture_byte(c.g)
+			qbytes[idx + 2] = _capture_byte(c.b)
+			qbytes[idx + 3] = _capture_byte(c.a)
 			idx += 4
 	out = Image.create_from_data(w, h, false, Image.FORMAT_RGBA8, qbytes)
 	return out
+
+# JS Math.round(v*255) semantics for the reference's capture: half-up in f64,
+# clamped to [0,255] exactly like the reference's Math.max(0, Math.min(255, .)).
+static func _capture_byte(v: float) -> int:
+	return clampi(floori(v * 255.0 + 0.5), 0, 255)
 
 func save_surface_png(path: String) -> bool:
 	var img := _snapshot_surface()
