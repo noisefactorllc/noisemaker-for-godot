@@ -77,6 +77,10 @@ Delivered-range diff (diffed directly in a local upstream checkout, not assumed)
 | `f83a427e` (same sync) | One structured diagnostic union for backend shader/compiler failures (`ShaderDiagnostic`, `parseGLSLInfoLog`, `parseDiagnosticText`) | Ported: new `runtime/shader_diagnostics.gd`; `nm_backend.gd` records `last_shader_diagnostic` on SPIR-V compile failure (stage 'compile', parsed messages + source), SPIR-V link failure (stage 'link'), and missing vertex/fragment sources (stage 'missing-source'); legacy `push_error` strings unchanged. WebGPU-only pieces (compilation-info parsing, bind-group retry, `ERR_NO_WGSL_SOURCE`) audited-inapplicable; the 'bind' parser is ported for contract parity |
 | `63349a7d` (same sync) | Upstream CI: retire the per-push JS snapshot release workflow | Inapplicable: upstream-only CI plumbing (`.github/workflows/js.yml`); no `shaders/` content and this port has no such workflow |
 | `919f653e`, `27590caa`, `85ded3a6`, `c6bc8e17`, `94fc880b`, `5e52a2a2`, `8eeb7b5a`, `6c3f9a26`, `428ea29b`, `ad17fd02`, `0b2866dd`, `93608f10`, `6a0af04d`, `01e9d620`, `3968f6c4`, `a651c075` (same sync) | Docs-only (GAP-004/005/006/007 closure records, texture-policy docs, llms-full.txt, Sphinx, checkpoint notes, CI evidence) | Nothing to port; verified `git diff 2f47612c2904..6a0af04d3c4f -- shaders/effects shaders/src/lang` is empty |
+| `403c2a4b` (2026-09-27 sync, `6a0af04d3c4f..12b4d74fb4f2`) | GAP-008: `replaceEffect`/`getCompatibleReplacements` predict replacement compatibility before mutation (`transform.js` +377, read-only `getParamAliases()` in `paramAliases.js`, `predictReplacement` re-export) | Inapplicable: the port has no JS AST mutation surface (execution-only compiler frontend, same ruling as the `68d37721` `transform.js` sync); the port's oracle tooling imports only `registerParamAliases`, and registry parity is identical after the change (ops 210/210, paramAliases 44/44, effectKeys 628/628) |
+| `b35361e0`, `9f85687d`, `7dc0f564`, `7443f6e6`, `c2252f0c`, `e73a44a3` (same sync) | GAP-009/010/011/012/015/014: upstream JS test-harness features only (temporal no-animation/low-variety metrics, `--strict-uniforms`, uniform deltas, WebGPU readback pin, metric mirror, explicit-time warm-up) confined to `shaders/tests/**` + `scripts/run-js-tests.js` | Nothing to port: upstream's JS harness is not a mirrored surface (the port's parity harness is its own Python/`export-and-render.mjs` stack); zero `shaders/src` changes in these commits |
+| `12b4d74f` (same sync) | GAP-016: static effect preflight (`preflightEffect()`, additive read-only `Pipeline.preflight()`; `mrtFormatBytes()` delegates to the shared impl — observed byte-identical switch) | Inapplicable: webgl2/webgpu authorability has no RenderingDevice analogue and the report is never invoked by compilation/rendering; the port already applies device-limit demotions at runtime (`nm_backend.gd` `_max_texture_size_2d` clamp, MRT format budget in `nm_backend.gd`/`device_limits_probe.gd`) |
+| `66b8ce7d`, `19fdcb56`, `132d1bf9`, `407eb7a7`, `0ac52500` (same sync) | Docs-only (upstream GAP-005..015 closure/checkpoint records, CI evidence) | Nothing to port; verified `git diff 6a0af04d3c4f..12b4d74fb4f2 -- shaders/effects` is empty and `shaders/src/lang` changes only as recorded above |
 
 Effect-catalog parity: no effect definition, effect shader, DSL lang, or registry file changed in the
 range (upstream `shaders/effects` and `shaders/src/lang` diffs are empty for the delivered range);
@@ -124,6 +128,50 @@ Observed outputs, committed verbatim so the claims are checkable from this repos
     shaders/src/runtime/pipeline.js         | 119 ++++++--
     shaders/tests/test_mip_controls.js      | 466 ++++++++++++++++
     13 files changed, 1163 insertions(+), 86 deletions(-)
+
+`git diff --stat 6a0af04d3c4f..12b4d74fb4f2` (full delivered range of the 2026-09-27 sync; observed
+2026-09-27 in a reference clone containing both endpoints):
+
+    LEDGER.md                            | 351 +++++++++++++++++++++++++++++++-
+    docs/shaders/compiler.rst            |  12 ++
+    docs/shaders/pipeline.rst            |  58 +++++-
+    llms-full.txt                        | 207 ++++++++++++++-----
+    package.json                         |   2 +-
+    scripts/run-js-tests.js              |   6 +
+    shaders/src/index.js                 |   2 +-
+    shaders/src/lang/index.js            |   4 +-
+    shaders/src/lang/paramAliases.js     |  11 +
+    shaders/src/lang/transform.js        | 377 ++++++++++++++++++++++++++++++++++-
+    shaders/src/runtime/pipeline.js      |  40 +++-
+    shaders/src/runtime/preflight.js     | 191 ++++++++++++++++++
+    shaders/tests/frame-metrics.js       |  80 ++++++++
+    shaders/tests/frame-readback.js      |  83 ++++++++
+    shaders/tests/frame-warmup.js        |  61 ++++++
+    shaders/tests/image-metrics.js       | 283 ++++++++++++++++++++++++++
+    shaders/tests/test-harness.js        | 259 ++++++++++++++++++++++--
+    shaders/tests/test_frame_metrics.js  |  71 ++++++++
+    shaders/tests/test_frame_readback.js | 183 +++++++++++++++++
+    shaders/tests/test_frame_warmup.js   | 144 +++++++++++++
+    shaders/tests/test_image_metrics.js  | 164 +++++++++++++++
+    shaders/tests/test_preflight.js      | 267 +++++++++++++++++++++++++
+    shaders/tests/test_transform.js      | 200 ++++++++++++++++++++
+    shaders/tests/test_uniform_deltas.js | 122 ++++++++++++
+    shaders/tests/test_uniform_status.js | 116 ++++++++++++
+    shaders/tests/uniform-deltas.js      | 282 ++++++++++++++++++++++++++
+    shaders/tests/uniform-status.js      |  78 ++++++++
+    27 files changed, 3561 insertions(+), 93 deletions(-)
+
+`git diff 6a0af04d3c4f..12b4d74fb4f2 -- shaders/effects` → empty output (effect catalog unchanged).
+`git diff --name-only 6a0af04d3c4f..12b4d74fb4f2 -- shaders/src` → exactly `index.js`,
+`lang/index.js`, `lang/paramAliases.js`, `lang/transform.js`, `runtime/pipeline.js`,
+`runtime/preflight.js`. `git merge-base --is-ancestor 403c2a4bf2cb 12b4d74fb4f2` → exit 0, and each
+of the other observed range-ends (`9f85687d`, `7dc0f564`, `7443f6e6`, `c2252f0c`, `e73a44a3`) is
+likewise an ancestor of `12b4d74fb4f2`, so the delivered range is the linear
+`6a0af04d3c4f..12b4d74fb4f2` (17 commits). At observation time (2026-09-27)
+`git log --oneline 12b4d74fb4f2..origin/main` listed only `ec457c2e` and `8fe3ccaf`, both docs-only;
+origin/main has since advanced to `93229933` (GAP-017), outside this job's declared/observed ranges
+and left for the next sync. Gates were re-run with `NM_REFERENCE_ROOT` at a clone
+pinned exactly at `12b4d74fb4f2` (numbers in STATUS.md).
 
 `git diff 9d3474dfdc6c..2f47612c2904 -- shaders/effects shaders/src/lang` → 0 bytes of output
 (also 0 for `13a8a0491dcf..2f47612c2904 -- shaders/effects shaders/src/lang`): no effect

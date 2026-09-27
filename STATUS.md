@@ -282,6 +282,74 @@ source range `fca611fd8f91..6a0af04d3c4f` spans this and the previous syncs, aud
   unmodified baseline — no display/Vulkan in this container). No pixel-parity re-sweep (pooling is
   default-off; shader math untouched).
 
+*Incrementally synced 2026-09-27 to reference `12b4d74f` (`6a0af04d3c4f..12b4d74fb4f2`; the declared
+job range was `6a0af04d3c4f..403c2a4bf2cb` with a `forced` flag and eight observed non-contiguous
+ranges — audited rather than assumed: `git merge-base --is-ancestor` shows every observed range-end
+(`9f85687d`, `7dc0f564`, `7443f6e6`, `c2252f0c`, `e73a44a3`, `12b4d74f`) is a descendant of the
+declared end `403c2a4b` and an ancestor of upstream `main`, so the effective delivered range is the
+linear `6a0af04d3c4f..12b4d74fb4f2`, 17 commits — the two commits after `12b4d74f` on upstream `main`
+(`ec457c2e`, `8fe3ccaf`) are docs-only) — audit-only sync, nothing to port:
+- `403c2a4b` (GAP-008, predict `replaceEffect` compatibility before mutation): JS
+  `shaders/src/lang/transform.js` +377 (`getCompatibleReplacements`/`replaceEffect` prediction,
+  `predictReplacement` re-export from `shaders/src/index.js`/`lang/index.js`) and a new read-only
+  `getParamAliases()` in `shaders/src/lang/paramAliases.js`. Inapplicable to Godot: the port does not
+  implement JS AST mutation introspection (its compiler frontend is execution-only — same ruling as
+  the `68d37721` `transform.js` sync); the port's oracle tooling (`tools/dump-registry.mjs`,
+  `tools/dump-validate.mjs`) imports only `registerParamAliases`, and the new accessor neither
+  changes registry output nor any oracle dump (registry parity re-verified identical: ops 210/210,
+  enums 8/8, paramAliases 44/44, effectAliases 0/0, effectKeys 628/628).
+- `b35361e0` (GAP-009 temporal no-animation + universal low-variety metrics), `9f85687d` (GAP-010
+  `--strict-uniforms` aggregation), `7dc0f564` (GAP-011 measured uniform deltas), `7443f6e6`
+  (GAP-012 WebGPU render-surface readback pin), `c2252f0c` (GAP-015 metric mirror), `e73a44a3`
+  (GAP-014 explicit-time warm-up) — all confined to the upstream JS test harness
+  (`shaders/tests/test-harness.js`, `frame-metrics.js`, `uniform-*.js`, `test_*.js` +
+  `scripts/run-js-tests.js` registration). Upstream's harness is not a mirrored surface of this port
+  (the port's parity harness is its own Python/`export-and-render.mjs` stack; the harness-contract
+  gate pins the port's own files); no `shaders/src` change in these commits.
+- `12b4d74f` (GAP-016 static effect preflight): new pure-reporting `shaders/src/runtime/preflight.js`
+  (`preflightEffect()`: per-backend authorability for webgl2/webgpu from source fields, predicted MRT
+  `rgba32f->rgba16f` demotions, predicted `maxTextureSize` clamps) and additive
+  `Pipeline.preflight(capabilities?)`; `Pipeline.mrtFormatBytes()` now delegates to the shared
+  `mrtFormatBytes()` — observed byte-identical switch (rgba32f 16 / rgba8 4 / default 8), so runtime
+  behavior is unchanged. Inapplicable to Godot: authorability here is a webgl2/webgpu source-language
+  question with no RenderingDevice analogue, the report is read-only and additive (never invoked by
+  compilation or rendering), and the port's backend already applies its device-limit demotions at
+  runtime (ported in the earlier device-limits syncs; `parity/test_device_limits.py` unchanged).
+- Docs-only: `01e9d620`, `3968f6c4`, `a651c075`, `66b8ce7d`, `19fdcb56`, `132d1bf9`, `407eb7a7`,
+  `0ac52500` — upstream gap closure records, Sphinx, checkpoint notes, CI evidence; nothing to port.
+- Effect catalog unchanged: `git diff 6a0af04d..12b4d74 -- shaders/effects` is empty and
+  `shaders/src/lang` changed only as recorded above; no definition, shader, or registry file moved.
+- Observed gate outputs on Linux headless (Godot `4.7.stable.official.5b4e0cb0f`,
+  `NM_REFERENCE_ROOT` at upstream `12b4d74f`, fresh clone at
+  `/state/cache/scratch/noisemaker-upstream` checked out exactly at `12b4d74fb4f2`):
+  definitions 210/210 PASS; registry PASS (ops 210/210, enums 8/8, paramAliases 44/44,
+  effectAliases 0/0, effectKeys 628/628); lex 352/352, parse 352/352, validate 352/352,
+  graph 352/352; expand 344/352 (the same 8 documented pass-defines diffs); smoke
+  SMOKE: ALL PASS; unittest 96 tests / 12 failures with a Godot binary present but no
+  display/Vulkan. Count reconciliation vs the preceding record's "unittest 83/88, 5 failures":
+  that run had NO Godot binary, so the live-render suites were skipped/collect-error; this run
+  downloaded Godot 4.7, which un-skips 8 live-render tests that then fail on display-server init
+  (every failure log is Godot's "X11 Display is not available / Unable to create DisplayServer",
+  an environmental failure, not a code assertion). Baseline identity verified directly: the same
+  96-test run at the parent commit `6ae3329` in a clean clone produces the identical 12-test
+  failure set (compared by test id), and no parity test reads `STATUS.md`/`docs/COMPLETION_GAPS.md`.
+  The 12 live-render failures are environmental (no display/Vulkan in this container); live
+  rendering is covered by the job's native parity cases. No pixel-parity re-sweep (no shader math
+  touched). Upstream evidence, observed verbatim in the pinned clone (re-runnable against any
+  upstream clone; the scratch path is ephemeral): `git diff 6a0af04d3c4f..12b4d74fb4f2 --
+  shaders/effects` → empty output; `git diff --name-only 6a0af04d3c4f..12b4d74fb4f2 -- shaders/src`
+  → exactly `shaders/src/index.js`, `shaders/src/lang/index.js`,
+  `shaders/src/lang/paramAliases.js`, `shaders/src/lang/transform.js`,
+  `shaders/src/runtime/pipeline.js`, `shaders/src/runtime/preflight.js`;
+  `git merge-base --is-ancestor 403c2a4bf2cb 12b4d74fb4f2` → 0 (declared end is an ancestor of the
+  delivered end; every other observed range-end is likewise an ancestor-of-delivered-end, verified
+  per-commit); at observation time (2026-09-27) `git log --oneline 12b4d74fb4f2..origin/main` listed
+  `ec457c2e`, `8fe3ccaf`, both docs-only (no `shaders/` paths); on re-fetch later the same day,
+  origin/main had additionally advanced to `93229933` ("feat(harness): complete, lossless
+  definition-schema introspection with an upstream-loss audit (GAP-017)"), which is outside this
+  job's declared/observed ranges and is left for the next sync. Full-range `git diff --stat` is
+  committed verbatim in `docs/COMPLETION_GAPS.md` §1.
+
 
 
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
