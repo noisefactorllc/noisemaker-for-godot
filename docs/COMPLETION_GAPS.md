@@ -81,6 +81,8 @@ Delivered-range diff (diffed directly in a local upstream checkout, not assumed)
 | `b35361e0`, `9f85687d`, `7dc0f564`, `7443f6e6`, `c2252f0c`, `e73a44a3` (same sync) | GAP-009/010/011/012/015/014: upstream JS test-harness features only (temporal no-animation/low-variety metrics, `--strict-uniforms`, uniform deltas, WebGPU readback pin, metric mirror, explicit-time warm-up) confined to `shaders/tests/**` + `scripts/run-js-tests.js` | Nothing to port: upstream's JS harness is not a mirrored surface (the port's parity harness is its own Python/`export-and-render.mjs` stack); zero `shaders/src` changes in these commits |
 | `12b4d74f` (same sync) | GAP-016: static effect preflight (`preflightEffect()`, additive read-only `Pipeline.preflight()`; `mrtFormatBytes()` delegates to the shared impl — observed byte-identical switch) | Inapplicable: webgl2/webgpu authorability has no RenderingDevice analogue and the report is never invoked by compilation/rendering; the port already applies device-limit demotions at runtime (`nm_backend.gd` `_max_texture_size_2d` clamp, MRT format budget in `nm_backend.gd`/`device_limits_probe.gd`) |
 | `66b8ce7d`, `19fdcb56`, `132d1bf9`, `407eb7a7`, `0ac52500` (same sync) | Docs-only (upstream GAP-005..015 closure/checkpoint records, CI evidence) | Nothing to port; verified `git diff 6a0af04d3c4f..12b4d74fb4f2 -- shaders/effects` is empty and `shaders/src/lang` changes only as recorded above |
+| `93229933` (2026-09-27 sync, `12b4d74fb4f2..93229933b102`) | GAP-017: complete lossless definition-schema introspection — new `shaders/tests/definition-schema.js` imports each definition live (Effect-instance and Effect-subclass exports) and pins the Shade-MCP projection loss via `auditSchemaLoss()`/`auditDefinitionLoss()`; +161 `test_definition_schema.js`, +60 `test-harness.js`, 1 registration line in `scripts/run-js-tests.js` | Nothing to port: upstream's JS test harness is not a mirrored surface (same ruling as the GAP-009..015 harness syncs); no `shaders/src` file changed and the port's oracle tooling (`tools/dump-registry.mjs`, `tools/dump-validate.mjs`, `tools/export-graph.mjs`) imports only from `shaders/src` |
+| `ec457c2e`, `8fe3ccaf` (same sync) | Docs-only (AI-development-contract checkpoint through `12b4d74`, post-publication deployed-contract evidence) | Nothing to port; no `shaders/` paths touched |
 
 Effect-catalog parity: no effect definition, effect shader, DSL lang, or registry file changed in the
 range (upstream `shaders/effects` and `shaders/src/lang` diffs are empty for the delivered range);
@@ -396,6 +398,41 @@ Native-cases gating note: the required `godot-parity` native cases (`adjust`, `a
 followed by `compare.py`. They do not execute the full ~345-program sweep batch, so the recorded
 `heightGrid_billboard_alpha` full-batch anomaly (STATUS.md, open, root cause unfound) cannot gate
 or mask the required cases. The anomaly itself remains open in STATUS.md.
+
+2026-09-27 second sync of the day (`12b4d74fb4f2..93229933b102`; declared job range
+`403c2a4bf2cb..93229933b102`, forced, one observed non-contiguous range `8fe3ccaf2cc8..93229933b102`).
+Ancestry observed verbatim (fresh full clone, both endpoints present):
+`git merge-base --is-ancestor 403c2a4bf2cb56307448ea2fc1d6fa3cd74b7d6e 12b4d74fb4f2` → exit 0;
+`git merge-base --is-ancestor 12b4d74fb4f2 93229933b102ba82e713402be19db57207698850` → exit 0.
+The already-audited prefix `6a0af04d..12b4d74f` carries over, so the effective new delta is the
+linear 3-commit `12b4d74fb4f2..93229933b102` (`git log --oneline` → `93229933`, `8fe3ccaf`,
+`ec457c2e`).
+
+    $ git diff --stat 12b4d74fb4f2..93229933b102
+        LEDGER.md                               |  94 +++++++++++++-
+        llms-full.txt                           |  27 +++-
+        scripts/run-js-tests.js                 |   1 +
+        shaders/tests/definition-schema.js      | 220 ++++++++++++++++++++++++++++++++
+        shaders/tests/test-harness.js           |  60 ++++++++-
+        shaders/tests/test_definition_schema.js | 161 ++++++++++++++++++++++++
+        6 files changed, 553 insertions(+), 10 deletions(-)
+    $ git diff --stat 403c2a4bf2cb..93229933b102 -- shaders/effects
+    (empty — 0 bytes: no effect definition, effect shader, or DSL-lang change anywhere in the
+    declared job range)
+    $ git diff --name-only 403c2a4bf2cb..93229933b102 -- shaders/src
+        shaders/src/runtime/pipeline.js
+        shaders/src/runtime/preflight.js
+    (exactly the two GAP-016 files already ruled inapplicable in the previous sync)
+    $ git log -1 --format='%H %s' 93229933b102
+    93229933b102ba82e713402be19db57207698850 feat(harness): complete, lossless definition-schema introspection with an upstream-loss audit (GAP-017)
+
+Gate re-run at `NM_REFERENCE_ROOT` pinned exactly at `93229933b102` (Godot
+`4.7.stable.official.5b4e0cb0f`, Linux headless; numbers in STATUS.md): definitions 210/210,
+registry ops 210/210 / enums 8/8 / paramAliases 44/44 / effectAliases 0/0 / effectKeys 628/628,
+lex/parse/validate/graph 352/352 each, expand 344/352 (the same 8 documented pass-defines diffs),
+`SMOKE: ALL PASS`, unittest 96 tests / 12 failures — all 12 Godot display-server-init
+environmental failures ("X11 Display is not available / Can't create the Wayland display
+server"), the identical set recorded for the previous sync.
 
 ## 2. Completion claims
 

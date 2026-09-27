@@ -350,6 +350,39 @@ linear `6a0af04d3c4f..12b4d74fb4f2`, 17 commits — the two commits after `12b4d
   job's declared/observed ranges and is left for the next sync. Full-range `git diff --stat` is
   committed verbatim in `docs/COMPLETION_GAPS.md` §1.
 
+*Incrementally synced 2026-09-27 to reference `93229933` (`12b4d74fb4f2..93229933b102`; the declared
+job range was `403c2a4bf2cb..93229933b102` with a `forced` flag and one observed non-contiguous range
+`8fe3ccaf2cc8..93229933b102` — audited rather than assumed: `git merge-base --is-ancestor 403c2a4bf2cb
+12b4d74fb4f2` → 0 and `git merge-base --is-ancestor 12b4d74fb4f2 93229933b102` → 0, so the already-audited
+prefix `6a0af04d..12b4d74f` carries over and the effective new delta is the linear
+`12b4d74fb4f2..93229933b102`, 3 commits) — audit-only sync, nothing to port:
+- `93229933` (GAP-017, complete lossless definition-schema introspection): new upstream
+  `shaders/tests/definition-schema.js` (imports each definition live — Effect-instance and
+  Effect-subclass exports — and pins the Shade-MCP projection loss via `auditSchemaLoss()`/
+  `auditDefinitionLoss()`), new `shaders/tests/test_definition_schema.js` (161 lines), +60 lines in
+  `shaders/tests/test-harness.js`, and one registration line in `scripts/run-js-tests.js`. Same ruling
+  as the GAP-009/010/011/012/015/014 harness syncs: upstream's JS test harness is not a mirrored
+  surface of this port (the port's parity harness is its own Python/`export-and-render.mjs` stack;
+  `parity/test_harness_contract.py` pins the port's own files). The introspection reads `shaders/src`
+  definitions live but changes no `shaders/src` file, and the port's oracle tooling
+  (`tools/dump-registry.mjs`, `tools/dump-validate.mjs`, `tools/export-graph.mjs`) imports only from
+  `shaders/src` — no parity-gate input changed (verified: no repo tooling imports `shaders/tests`).
+- `ec457c2e`, `8fe3ccaf` — docs-only (AI-development-contract checkpoint through `12b4d74`,
+  post-publication deployed-contract evidence); no `shaders/` paths.
+- Effect catalog unchanged: `git diff 403c2a4bf2cb..93229933b102 -- shaders/effects` is empty, and the
+  full-range `shaders/src` delta remains exactly the two GAP-016 files already ruled inapplicable
+  (`shaders/src/runtime/pipeline.js`, `shaders/src/runtime/preflight.js`).
+- Observed gate outputs on Linux headless (Godot `4.7.stable.official.5b4e0cb0f`,
+  `NM_REFERENCE_ROOT` at upstream `93229933b102`, fresh full clone): definitions 210/210 PASS;
+  registry PASS (ops 210/210, enums 8/8, paramAliases 44/44, effectAliases 0/0, effectKeys 628/628);
+  lex 352/352, parse 352/352, validate 352/352, graph 352/352; expand 344/352 (the same 8 documented
+  pass-defines diffs, unchanged); smoke SMOKE: ALL PASS; unittest 96 tests / 12 failures, every
+  failure Godot display-server init ("X11 Display is not available / Can't create the Wayland display
+  server") — the identical environmental failure set recorded for the previous sync (live rendering
+  is covered by the job's native parity cases). No port file changed in this sync, so no
+  pixel-parity re-sweep. Delta `git diff --stat 12b4d74fb4f2..93229933b102` committed verbatim in
+  `docs/COMPLETION_GAPS.md` §1.
+
 
 
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
