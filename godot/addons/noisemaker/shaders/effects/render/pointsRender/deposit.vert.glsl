@@ -48,14 +48,16 @@ void main() {
 		return;
 	}
 
-	// Density-based culling. PARITY (large-stateSize precision): fract(id*GR) loses float32
-	// precision at ~1M agents (step ~0.06 near 6.5e5 → ~16 buckets → ~8x over-deposit on Metal
-	// vs the golden's ANGLE). Hi/lo split keeps the products small so fract is exact.
+	// Density-based culling — reference formula, VERBATIM (fract(pid*GR)). The
+	// golden minted by the reference harness uses exactly this expression, so the
+	// port must too: the hi/lo "exact" split previously used here computed a
+	// slightly DIFFERENT random (the f32 product fract is not associative), which
+	// flips agents across the cull threshold vs the golden. Known large-stateSize
+	// hazard (~1M agents: raw product exceeds float32 fractional precision, step
+	// ~0.06 near 6.5e5, ~16 fract buckets) is a reference-inherited property,
+	// not a port deviation.
 	float cullThreshold = density / 100.0;
-	float pidf = float(gl_VertexIndex);
-	float pidHi = floor(pidf / 4096.0);
-	float pidLo = pidf - pidHi * 4096.0;
-	float particleRandom = fract(pidHi * fract(4096.0 * 0.618033988749895) + pidLo * 0.618033988749895);
+	float particleRandom = fract(float(gl_VertexIndex) * 0.618033988749895);
 	if (particleRandom > cullThreshold) {
 		// Cull this particle by placing it off-screen
 		gl_Position = vec4(2.0, 2.0, 0.0, 1.0);

@@ -2625,9 +2625,27 @@ func _snapshot_surface() -> Image:
 	if img_fmt == Image.FORMAT_RGBA8:
 		return src
 	var out := Image.create(screen.x, screen.y, false, Image.FORMAT_RGBA8)
-	for y in screen.y:
-		for x in screen.x:
-			out.set_pixel(x, y, src.get_pixel(x, y))
+	# Reference capture quantizes the float readback with Math.round(v*255) (JS,
+	# half-up). Godot's Image.set_pixel on RGBA8 TRUNCATES (v*255.0 -> uint8, e.g.
+	# 0.5 -> 127, 0.253 -> 64), which biased every candidate PNG 1 LSB low on ~half
+	# the pixels (GAP-002: the bias amplified through the height grid + perspective
+	# projection into 243 max-abs-diff point flips). Quantize by hand with
+	# round(v*255 + 0.5) in float64 (GDScript floats), matching the reference's
+	# Math.round on the half-precision readback exactly.
+	var w := screen.x
+	var h := screen.y
+	var qbytes := PackedByteArray()
+	qbytes.resize(w * h * 4)
+	var idx := 0
+	for y in h:
+		for x in w:
+			var c := src.get_pixel(x, y)
+			qbytes[idx] = clampi(floori(c.r * 255.0 + 0.5), 0, 255)
+			qbytes[idx + 1] = clampi(floori(c.g * 255.0 + 0.5), 0, 255)
+			qbytes[idx + 2] = clampi(floori(c.b * 255.0 + 0.5), 0, 255)
+			qbytes[idx + 3] = clampi(floori(c.a * 255.0 + 0.5), 0, 255)
+			idx += 4
+	out = Image.create_from_data(w, h, false, Image.FORMAT_RGBA8, qbytes)
 	return out
 
 func save_surface_png(path: String) -> bool:
