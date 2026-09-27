@@ -83,6 +83,9 @@ Delivered-range diff (diffed directly in a local upstream checkout, not assumed)
 | `66b8ce7d`, `19fdcb56`, `132d1bf9`, `407eb7a7`, `0ac52500` (same sync) | Docs-only (upstream GAP-005..015 closure/checkpoint records, CI evidence) | Nothing to port; verified `git diff 6a0af04d3c4f..12b4d74fb4f2 -- shaders/effects` is empty and `shaders/src/lang` changes only as recorded above |
 | `93229933` (2026-09-27 sync, `12b4d74fb4f2..93229933b102`) | GAP-017: complete lossless definition-schema introspection — new `shaders/tests/definition-schema.js` imports each definition live (Effect-instance and Effect-subclass exports) and pins the Shade-MCP projection loss via `auditSchemaLoss()`/`auditDefinitionLoss()`; +161 `test_definition_schema.js`, +60 `test-harness.js`, 1 registration line in `scripts/run-js-tests.js` | Nothing to port: upstream's JS test harness is not a mirrored surface (same ruling as the GAP-009..015 harness syncs); no `shaders/src` file changed and the port's oracle tooling (`tools/dump-registry.mjs`, `tools/dump-validate.mjs`, `tools/export-graph.mjs`) imports only from `shaders/src` |
 | `ec457c2e`, `8fe3ccaf` (same sync) | Docs-only (AI-development-contract checkpoint through `12b4d74`, post-publication deployed-contract evidence) | Nothing to port; no `shaders/` paths touched |
+| `a912749f` (2026-09-27 sync, `93229933b102..a912749fab5c`) | GAP-019: true input-passthrough probe — new `shaders/tests/passthrough-input.js` (reads the consumed input texture and render surface at time 0 under a determinism guard, mean-abs output-to-input diff at the 0.01 boundary, final write-blit positive control, `--passthrough-input` opt-in), +259 `test_passthrough_input.js`, +70 `test-harness.js`, 1 registration line in `scripts/run-js-tests.js` | Nothing to port: upstream's JS test harness is not a mirrored surface (same ruling as the GAP-009..015/017 harness syncs); no `shaders/src` file changed and no port tooling imports `shaders/tests` |
+| `7c5f1765` (same sync) | Docs-only (AI-development-contract checkpoint through `9322993`) | Nothing to port; no `shaders/` paths touched |
+| `296e0138` (2026-09-27 sync, observed non-contiguous range `11d7c69922f3..296e0138c474`; endpoint NOT an ancestor of the delivered end `a912749fab5c`) | GAP-021: report requested-vs-returned frame resolution on every `renderEffectFrame` result — `shaders/tests/frame-resolution.js`, +189 `test_frame_resolution.js`, +34 `test-harness.js`, 1 registration line | Nothing to port: upstream's JS test harness only, not a mirrored surface; no `shaders/src` file changed in the range |
 
 Effect-catalog parity: no effect definition, effect shader, DSL lang, or registry file changed in the
 range (upstream `shaders/effects` and `shaders/src/lang` diffs are empty for the delivered range);
@@ -433,6 +436,43 @@ lex/parse/validate/graph 352/352 each, expand 344/352 (the same 8 documented pas
 `SMOKE: ALL PASS`, unittest 96 tests / 12 failures — all 12 Godot display-server-init
 environmental failures ("X11 Display is not available / Can't create the Wayland display
 server"), the identical set recorded for the previous sync.
+
+2026-09-27 third sync of the day (`93229933b102..a912749fab5c`; declared job range
+`403c2a4bf2cb..a912749fab5c`, forced, observed non-contiguous ranges `7c5f17658d8c..a912749fab5c`
+and `11d7c69922f3..296e0138c474`).
+Ancestry observed verbatim (fresh full clone, all endpoints present):
+`git merge-base --is-ancestor 403c2a4bf2cb56307448ea2fc1d6fa3cd74b7d6e 93229933b102` → exit 0;
+`git merge-base --is-ancestor 93229933b102 a912749fab5c3819e56a8abde664ff30e40870f4` → exit 0.
+The already-audited prefix `93229933` carries over, so the effective new delta is the linear
+2-commit `93229933b102..a912749fab5c` (`git log --oneline` → `a912749f`, `7c5f1765`).
+The second observed range `11d7c69922f3..296e0138c474` is one commit (`296e0138`, GAP-021,
+harness/docs only: `shaders/tests/frame-resolution.js`, `test_frame_resolution.js`,
+`test-harness.js`, `scripts/run-js-tests.js`, `llms-full.txt`) whose endpoint is NOT an ancestor of
+the delivered end; audited separately with the same harness-only ruling.
+
+    $ git diff --stat 93229933b102..a912749fab5c
+        LEDGER.md                               |  75 ++++-
+        llms-full.txt                           |  29 ++-
+        scripts/run-js-tests.js                 |   1 +
+        shaders/tests/passthrough-input.js      | 489 ++++++++++++++++++++++
+        shaders/tests/test-harness.js           |  70 +++++-
+        shaders/tests/test_passthrough_input.js | 259 +++++++++++++++++
+        6 files changed, 918 insertions(+), 5 deletions(-)
+    $ git diff --stat 403c2a4bf2cb..a912749fab5c -- shaders/effects
+    (empty — 0 bytes: no effect definition, effect shader, or DSL-lang change anywhere in the
+    declared job range)
+    $ git diff --name-only 93229933b102..a912749fab5c -- shaders/src
+    (empty — 0 files)
+    $ git log -1 --format='%H %s' a912749fab5c
+    a912749fab5c3819e56a8abde664ff30e40870f4 feat(harness): true input-passthrough probe with a live write-blit control (GAP-019)
+
+Gate re-run at `NM_REFERENCE_ROOT` pinned exactly at `a912749fab5c` (Godot
+`4.7.stable.official.5b4e0cb0f`, Linux headless; numbers in STATUS.md): definitions 210/210,
+registry ops 210/210 / enums 8/8 / paramAliases 44/44 / effectAliases 0/0 / effectKeys 628/628,
+lex/parse/validate/graph 352/352 each, expand 344/352 (the same 8 documented pass-defines diffs),
+`SMOKE: ALL PASS`, unittest 96 tests / 12 failures — all 12 Godot display-server-init
+environmental failures ("X11 Display is not available / Can't create the Wayland display
+server"), the identical set recorded for the previous syncs.
 
 ## 2. Completion claims
 

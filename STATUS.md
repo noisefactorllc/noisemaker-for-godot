@@ -383,6 +383,41 @@ prefix `6a0af04d..12b4d74f` carries over and the effective new delta is the line
   pixel-parity re-sweep. Delta `git diff --stat 12b4d74fb4f2..93229933b102` committed verbatim in
   `docs/COMPLETION_GAPS.md` §1.
 
+*Incrementally synced 2026-09-27 to reference `a912749f` (`93229933b102..a912749fab5c`; the declared
+job range was `403c2a4bf2cb..a912749fab5c` with a `forced` flag and observed non-contiguous ranges
+`7c5f17658d8c..a912749fab5c` and `11d7c69922f3..296e0138c474` — audited rather than assumed:
+`git merge-base --is-ancestor 403c2a4bf2cb 93229933b102` → 0 and `git merge-base --is-ancestor
+93229933b102 a912749fab5c` → 0, so the already-audited prefix `93229933` carries over and the
+effective new delta is the linear 2-commit `93229933b102..a912749fab5c`; the second observed range's
+endpoint `296e0138` (GAP-021 frame-resolution harness, `11d7c69922f3..296e0138c474`, one commit,
+`shaders/tests/**` + `scripts/run-js-tests.js` + `llms-full.txt` only) is NOT an ancestor of the
+delivered end `a912749fab5c` and was audited separately — same harness-only ruling, nothing to port)
+— audit-only sync, nothing to port:
+- `a912749f` (GAP-019, true input-passthrough probe): new upstream `shaders/tests/passthrough-input.js`
+  (489 lines — reads back the consumed input texture and render surface at time 0 under a
+  bit-for-bit determinism guard, reports aligned/flipped mean abs output-to-input diff at the
+  0.01 boundary, final write-blit as in-program positive control, `--passthrough-input` opt-in),
+  +259 `shaders/tests/test_passthrough_input.js`, +70 `shaders/tests/test-harness.js`, one
+  registration line in `scripts/run-js-tests.js`. Same ruling as the GAP-009..015/017 harness
+  syncs: upstream's JS test harness is not a mirrored surface of this port (the port's parity
+  harness is its own Python/`export-and-render.mjs` stack); no `shaders/src` file changed and no
+  repo tooling imports `shaders/tests`, so no parity-gate input changed.
+- `7c5f1765` — docs-only (AI-development-contract checkpoint through `9322993`); no `shaders/`
+  paths.
+- Effect catalog unchanged: `git diff 403c2a4bf2cb..a912749fab5c -- shaders/effects` is empty
+  (verified); the effective-range `shaders/src` delta is empty.
+- Observed gate outputs on Linux headless (Godot `4.7.stable.official.5b4e0cb0f`,
+  `NM_REFERENCE_ROOT` at upstream `a912749fab5c`, fresh full clone pinned exactly at the end):
+  definitions 210/210 PASS; registry PASS (ops 210/210, enums 8/8, paramAliases 44/44,
+  effectAliases 0/0, effectKeys 628/628); lex 352/352, parse 352/352, validate 352/352,
+  graph 352/352; expand 344/352 (the same 8 documented pass-defines diffs, unchanged); smoke
+  SMOKE: ALL PASS; unittest 96 tests / 12 failures, every failure Godot display-server init
+  ("X11 Display is not available / Can't create the Wayland display server") — the identical
+  environmental failure set recorded for the previous syncs (live rendering is covered by the
+  job's native parity cases). No port file changed in this sync, so no pixel-parity re-sweep.
+  Delta `git diff --stat 93229933b102..a912749fab5c` committed verbatim in
+  `docs/COMPLETION_GAPS.md` §1.
+
 
 
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
