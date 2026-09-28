@@ -81,6 +81,23 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
     }
     rm -rf "$CACHE"
     mv "$CACHE.tmp" "$CACHE"
+    # The reference harness's minting path imports playwright, resolving from
+    # the harness's own directory inside the clone ($NM_REFERENCE_ROOT/vendor/
+    # shade-mcp/harness); a fresh clone ships without node_modules. Install a
+    # pinned version so minted reference goldens do not drift with the browser
+    # bundled by whatever the registry happens to serve.
+    if [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
+      echo "[REFERENCE] installing playwright@1.63.0 into the reference clone" >&2
+      if ! ( cd "$CACHE" && npm install --no-save "playwright@1.63.0" >/dev/null 2>&1 ) \
+         || [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
+        echo "parity-summary: playwright unavailable for the reference harness (set NM_REFERENCE_ROOT to a prepared checkout)" >&2
+        # Drop the half-prepared cache so the next run re-clones and retries
+        # the install instead of trusting a cache that cannot mint.
+        rm -rf "$CACHE"
+        echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
+        exit 2
+      fi
+    fi
     rm -f "$CACHE.lock/lock"
   fi
   echo "[REFERENCE] using $NM_REFERENCE_ROOT" >&2
