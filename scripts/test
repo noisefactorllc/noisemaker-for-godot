@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# Repository test entrypoint.
+#
+#   scripts/test                    engine-free suites (no Godot, no GPU)
+#   GODOT=<bin> scripts/test --godot-headless
+#                                   suites that need a Godot 4.7 binary under
+#                                   --headless (no GPU, no display)
+#
+# Any failure, error, skip, or empty run exits nonzero.
+#
+# Not run by this script:
+#   - The windowed suites in GODOT_WINDOWED. They need a RenderingDevice,
+#     which is null under --headless, so they need a GPU and a window.
+#   - The compiler and definition parity gates (parity/check_*.mjs). They need
+#     a checkout of the reference engine through NM_REFERENCE_ROOT.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+export PYTHONDONTWRITEBYTECODE=1
+
+# Every parity/test_*.py module must be listed in one of these groups, so a
+# new suite cannot be silently left out.
+ENGINE_FREE=(
+	parity.test_artistic_matrix
+	parity.test_harness_contract
+	parity.test_shader_coverage
+)
+GODOT_HEADLESS=(
+	parity.test_capture_quantization
+	parity.test_compiler_automation
+	parity.test_frame_export.FrameExportTests.test_sink_manager_and_bounded_queue_contracts
+	parity.test_runtime_contract
+)
+GODOT_WINDOWED=(
+	parity.test_device_limits
+	parity.test_frame_export.FrameExportTests.test_async_readback_preserves_metadata_and_premultiplies
+	parity.test_kit_playback
+	parity.test_mesh_pipeline
+	parity.test_missing_effects_live
+	parity.test_shader_compile
+	parity.test_shader_import
+)
+
+fail() {
+	echo "scripts/test: $*" >&2
+	exit 1
+}
+
+check_classification() {
+	local path module entry found
+	local unlisted=()
+	for path in parity/test_*.py; do
+		module="parity.$(basename "$path" .py)"
+		found=0
+		for entry in "${ENGINE_FREE[@]}" "${GODOT_HEADLESS[@]}" "${GODOT_WINDOWED[@]}"; do
+			if [[ "$entry" == "$module" || "$entry" == "$module".* ]]; then
+				found=1
+				break
+			fi
+		done
+		if [[ "$found" -eq 0 ]]; then
+			unlisted+=("$path")
+		fi
+	done
+	if [[ "${#unlisted[@]}" -gt 0 ]]; then
+		fail "add these suites to a group in scripts/test: ${unlisted[*]}"
+	fi
+}
+
+# Run unittest names; fail on any failure, error, skip, expected failure,
+# unexpected success, or an empty run.
+run_unittest() {
+	python3 -c '
+import sys
+import unittest
+
+suite = unittest.defaultTestLoader.loadTestsFromNames(sys.argv[1:])
+result = unittest.TextTestRunner(stream=sys.stdout, verbosity=2).run(suite)
+print(
+    "SUMMARY: ran=%d failures=%d errors=%d skipped=%d expected_failures=%d unexpected_successes=%d"
+    % (
+        result.testsRun,
+        len(result.failures),
+        len(result.errors),
+        len(result.skipped),
+        len(result.expectedFailures),
+        len(result.unexpectedSuccesses),
+    )
+)
+clean = (
+    result.testsRun > 0
+    and result.wasSuccessful()
+    and not result.skipped
+    and not result.expectedFailures
+)
+sys.exit(0 if clean else 1)
+' "$@"
+}
+
+require_python() {
+	command -v python3 >/dev/null || fail "python3 is required"
+	python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' \
+		|| fail "python3 3.11 or newer is required (found $(python3 --version 2>&1))"
+	echo "python3: $(python3 --version 2>&1)"
+}
+
+run_engine_free() {
+	require_python
+	command -v node >/dev/null || fail "node is required"
+	echo "node: $(node --version)"
+	echo "== engine-free suites"
+	run_unittest "${ENGINE_FREE[@]}"
+}
+
+run_godot_headless() {
+	require_python
+	[[ -n "${GODOT:-}" ]] || fail "--godot-headless needs GODOT=<path to a Godot 4.7 binary>"
+	[[ -x "$GODOT" ]] || fail "GODOT is not an executable file: $GODOT"
+	echo "godot: $("$GODOT" --headless --version 2>&1 | tail -n 1)"
+
+	echo "== compiler smoke (_smoke.gd)"
+	local smoke
+	if ! smoke="$("$GODOT" --headless --path godot \
+		--script res://addons/noisemaker/compiler/_smoke.gd 2>&1)"; then
+		printf '%s\n' "$smoke"
+		fail "compiler smoke exited nonzero"
+	fi
+	printf '%s\n' "$smoke"
+	grep -qx 'SMOKE: ALL PASS' <<<"$smoke" || fail "compiler smoke did not report SMOKE: ALL PASS"
+
+	echo "== Godot headless suites"
+	run_unittest "${GODOT_HEADLESS[@]}"
+}
+
+check_classification
+case "${1:-}" in
+	"")
+		run_engine_free
+		;;
+	--godot-headless)
+		run_godot_headless
+		;;
+	*)
+		fail "unknown argument: $1 (usage: scripts/test [--godot-headless])"
+		;;
+esac

@@ -1,0 +1,72 @@
+name: Tests
+
+# Runs the repository test entrypoint on every push to main.
+# engine-free: scripts/test (no Godot, no GPU).
+# godot-headless: scripts/test --godot-headless against a pinned, checksum-verified
+# official Godot 4.7 Linux build. Windowed suites need a GPU and do not run here.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run per commit; a newer push never cancels the result for an older commit.
+concurrency:
+  group: tests-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  engine-free:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26
+
+      - name: Run engine-free suites
+        run: scripts/test
+
+  godot-headless:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GODOT_RELEASE: 4.7-stable
+      GODOT_ARCHIVE: Godot_v4.7-stable_linux.x86_64.zip
+      GODOT_BINARY: Godot_v4.7-stable_linux.x86_64
+      # SHA-512 of GODOT_ARCHIVE, as published in the release's SHA512-SUMS.txt.
+      GODOT_SHA512: b639ca9c1ddea39bb3df89bd5283a51ca6047467abe6b25e9436566f2b2082ede633025073989ecf39c7d5d3c2493d80ea13e3af6dd5e261bbf89e462d6d2214
+      GODOT_VERSION_STRING: 4.7.stable.official.5b4e0cb0f
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download and verify Godot
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/godot"
+          mkdir -p "$dir"
+          cd "$dir"
+          base="https://github.com/godotengine/godot-builds/releases/download/$GODOT_RELEASE"
+          curl -fsSL --retry 3 -o "$GODOT_ARCHIVE" "$base/$GODOT_ARCHIVE"
+          curl -fsSL --retry 3 -o SHA512-SUMS.txt "$base/SHA512-SUMS.txt"
+          # The pinned digest must appear in the published list and match the archive.
+          grep -Fx "$GODOT_SHA512  $GODOT_ARCHIVE" SHA512-SUMS.txt
+          echo "$GODOT_SHA512  $GODOT_ARCHIVE" | sha512sum -c -
+          unzip -q "$GODOT_ARCHIVE" "$GODOT_BINARY"
+          chmod +x "$GODOT_BINARY"
+          version="$("./$GODOT_BINARY" --headless --version 2>&1 | tail -n 1)"
+          echo "Godot version: $version"
+          [ "$version" = "$GODOT_VERSION_STRING" ]
+          echo "GODOT=$dir/$GODOT_BINARY" >> "$GITHUB_ENV"
+
+      - name: Run Godot headless suites
+        run: scripts/test --godot-headless
