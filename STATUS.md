@@ -418,7 +418,49 @@ delivered end `a912749fab5c` and was audited separately — same harness-only ru
   Delta `git diff --stat 93229933b102..a912749fab5c` committed verbatim in
   `docs/COMPLETION_GAPS.md` §1.
 
-
+*Incrementally synced 2026-09-28 to reference `73c15be0` (`a912749fab5c..73c15be00d68`; the declared
+job range was `a912749fab5c..73c15be00d68` with a `forced` flag and three observed ranges
+`04e8582c..c28e8fdb`, `c28e8fdb..7aff843a`, `7aff843a..73c15be0` — audited rather than assumed:
+`git merge-base --is-ancestor a912749fab5c 73c15be00d68` → exit 0 and each observed range endpoint
+is an ancestor of the delivered end, so the range is contiguous and the effective new delta is the
+linear 6-commit `a912749fab5c..73c15be00d68`) — audit-only sync, nothing to port:
+- `296e0138` (GAP-021 frame-resolution harness) and `7aff843a` (GAP-024 session-identity harness):
+  `shaders/tests/**` + `test-harness.js` + `scripts/run-js-tests.js` only. Same ruling as the
+  GAP-009..015/017/019/021 harness syncs: upstream's JS test harness is not a mirrored surface of
+  this port; no repo tooling imports `shaders/tests`.
+- `c28e8fdb` (fix: preserve mesh target after depth allocation): +2 lines in
+  `shaders/src/runtime/backends/webgl2.js` — after `ensureDepthBuffer(fbo, …)` the WebGL2 backend
+  rebinds the framebuffer, because allocating a new depth renderbuffer unbinds the FBO mid-pass.
+  Inapplicable to Godot: the port's RenderingDevice backend has no persistent FBO binding —
+  `nm_backend.gd` creates the depth texture when building the framebuffer's attachment list
+  (`_depth_texture`, appended before `draw_list_begin`), so a depth allocation can never occur
+  between bind and draw. No analogous window exists.
+- `73c15be0` (GAP-026, invoke onInit/onUpdate/onDestroy lifecycle hooks in the production
+  renderer): +129 `shaders/src/runtime/pipeline.js`, +3 `shaders/src/runtime/compiler.js`. The
+  hooks are the JS Effect object model's config/subclass callbacks (`effect.js`
+  `_configOnInit`/`_configOnUpdate`/`_configOnDestroy`, base-class no-ops). The only shipped
+  effect defining them is `synth/media` (`shaders/effects/synth/media/definition.js`, unchanged
+  this range), whose `onUpdate` returns `imageSize` from JS media state set by the host app via
+  `setMediaDimensions` — web-app integration state, not render-graph math. Inapplicable to Godot:
+  the port's effect surface is data (JSON definitions + GLSL) with no Effect object model — there
+  is no per-effect callback the production renderer could invoke, and `imageSize` for
+  `mediaInput` is resolved from the supplied input texture by the port's own uniform machinery
+  (grep for onInit/onUpdate/onDestroy/asyncInit across the addon returns nothing).
+- `04e8582c`, `11d7c699` — docs-only; no `shaders/` paths.
+- Effect catalog unchanged: `git diff a912749fab5c..73c15be00d68 -- shaders/effects` is empty
+  (verified).
+- Observed gate outputs on Linux headless (Godot `4.7.stable.official.5b4e0cb0f`,
+  `NM_REFERENCE_ROOT` at upstream `73c15be00d68`, fresh full clone pinned exactly at the end):
+  definitions 210/210 PASS; registry PASS (enums 8/8, paramAliases 44/44, effectAliases 0/0,
+  effectKeys 628/628); lex 352/352, parse 352/352, validate 352/352, graph 352/352; expand
+  344/352 (the same 8 documented pass-defines diffs, unchanged); smoke SMOKE: ALL PASS; unittest
+  118 tests / 13 failures, every failure Godot display-server init ("X11 Display is not
+  available / Can't create the Wayland display server") — the same environmental class recorded
+  for the previous syncs (the count moved from 96/12 because test files added since that record
+  — kit playback, mesh pipeline — are themselves display-dependent and fail identically; live
+  rendering is covered by the job's native parity cases). No port file changed in this sync, so
+  no pixel-parity re-sweep. Delta `git diff --stat a912749fab5c..73c15be00d68` committed verbatim
+  in `docs/COMPLETION_GAPS.md` §1.
 
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
 both pre-existing gaps only now exercised by this round's `viewMode`-conditional pass pattern, not

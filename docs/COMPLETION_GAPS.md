@@ -86,6 +86,8 @@ Delivered-range diff (diffed directly in a local upstream checkout, not assumed)
 | `a912749f` (2026-09-27 sync, `93229933b102..a912749fab5c`) | GAP-019: true input-passthrough probe — new `shaders/tests/passthrough-input.js` (reads the consumed input texture and render surface at time 0 under a determinism guard, mean-abs output-to-input diff at the 0.01 boundary, final write-blit positive control, `--passthrough-input` opt-in), +259 `test_passthrough_input.js`, +70 `test-harness.js`, 1 registration line in `scripts/run-js-tests.js` | Nothing to port: upstream's JS test harness is not a mirrored surface (same ruling as the GAP-009..015/017 harness syncs); no `shaders/src` file changed and no port tooling imports `shaders/tests` |
 | `7c5f1765` (same sync) | Docs-only (AI-development-contract checkpoint through `9322993`) | Nothing to port; no `shaders/` paths touched |
 | `296e0138` (2026-09-27 sync, observed non-contiguous range `11d7c69922f3..296e0138c474`; endpoint NOT an ancestor of the delivered end `a912749fab5c`) | GAP-021: report requested-vs-returned frame resolution on every `renderEffectFrame` result — `shaders/tests/frame-resolution.js`, +189 `test_frame_resolution.js`, +34 `test-harness.js`, 1 registration line | Nothing to port: upstream's JS test harness only, not a mirrored surface; no `shaders/src` file changed in the range |
+| `73c15be0` (2026-09-28 sync, `a912749fab5c..73c15be00d68`) | GAP-026: invoke `onInit`/`onUpdate`/`onDestroy` lifecycle hooks in the production renderer — +129 `shaders/src/runtime/pipeline.js` (hook detection, managed-effect map, per-frame `onUpdate` uniform overlay with fallback priority), +3 `shaders/src/runtime/compiler.js` (`recompile` re-runs lifecycle init) | Nothing to port: the hooks are the JS Effect object model's config/subclass callbacks; the only shipped effect defining them is `synth/media` (unchanged this range) whose `onUpdate` returns `imageSize` from web-app media state (`setMediaDimensions`), not render-graph math. The Godot port's effect surface is data (JSON definitions + GLSL) with no Effect object model — no per-effect callback exists to invoke, and `mediaInput`'s `imageSize` is resolved from the supplied input texture by the port's own uniform machinery |
+| `c28e8fdb` (2026-09-28 sync, same range) | GAP-026-adjacent WebGL2 fix: after `ensureDepthBuffer` the WebGL2 backend rebinds the framebuffer (allocating a depth renderbuffer unbinds the FBO mid-pass) — +2 `shaders/src/runtime/backends/webgl2.js` | Nothing to port: RenderingDevice has no persistent FBO binding — `nm_backend.gd` allocates the depth texture when building the framebuffer attachment list, before `draw_list_begin`, so no bind→draw window exists for an allocation to invalidate |
 
 Effect-catalog parity: no effect definition, effect shader, DSL lang, or registry file changed in the
 range (upstream `shaders/effects` and `shaders/src/lang` diffs are empty for the delivered range);
@@ -473,6 +475,58 @@ lex/parse/validate/graph 352/352 each, expand 344/352 (the same 8 documented pas
 `SMOKE: ALL PASS`, unittest 96 tests / 12 failures — all 12 Godot display-server-init
 environmental failures ("X11 Display is not available / Can't create the Wayland display
 server"), the identical set recorded for the previous syncs.
+
+2026-09-28 sync of the day (`a912749fab5c..73c15be00d68`; declared job range
+`a912749fab5c..73c15be00d68`, forced, observed ranges `04e8582c1db4..c28e8fdb9218`,
+`c28e8fdb9218..7aff843a4e33`, `7aff843a4e33..73c15be00d68`). Ancestry observed verbatim (fresh
+full clone, all endpoints present): `git merge-base --is-ancestor a912749fab5c 73c15be00d68` →
+exit 0; `04e8582c1db4`, `c28e8fdb9218`, `7aff843a4e33` each an ancestor of the delivered end —
+the range is contiguous, the last-synced reference `a912749f` is its start, so the effective new
+delta is the linear 6-commit `a912749fab5c..73c15be00d68` (`git log --oneline` → `73c15be0`,
+`7aff843a`, `c28e8fdb`, `04e8582c`, `296e0138`, `11d7c699`).
+
+    $ git diff --stat a912749fab5c..73c15be00d68
+        LEDGER.md                               |  83 ++++++-
+        demo/shaders/index.html                 |   2 +
+        llms-full.txt                           |  38 ++-
+        package.json                            |   4 +-
+        scripts/run-js-tests.js                 |   3 +
+        shaders/src/runtime/backends/webgl2.js  |   2 +
+        shaders/src/runtime/compiler.js         |   3 +
+        shaders/src/runtime/pipeline.js         | 129 +++++++++-
+        shaders/tests/frame-resolution.js       |  95 ++++++++
+        shaders/tests/session-identity.js       | 237 ++++++++++++++++++
+        shaders/tests/test-harness.js           | 285 ++++++++++++++++++++--
+        shaders/tests/test_frame_resolution.js  | 189 +++++++++++++++
+        shaders/tests/test_lifecycle_hooks.js   | 407 ++++++++++++++++++++++++++++++
+        shaders/tests/test_mesh_first_frame.mjs |  61 +++++
+        shaders/tests/test_session_identity.js  | 410 ++++++++++++++++++++++++++++++++
+        15 files changed, 1921 insertions(+), 27 deletions(-)
+    $ git diff --stat a912749fab5c..73c15be00d68 -- shaders/effects
+    (empty — 0 bytes: no effect definition, effect shader, or DSL-lang change anywhere in the
+    declared job range)
+    $ git diff --name-only a912749fab5c..73c15be00d68 -- shaders/src
+    shaders/src/runtime/backends/webgl2.js
+    shaders/src/runtime/compiler.js
+    shaders/src/runtime/pipeline.js
+    $ git log -1 --format='%H %s' 73c15be00d68
+    73c15be00d6888f4b5d2835d8e242ee9e840df45 feat(runtime): invoke onInit/onUpdate/onDestroy lifecycle hooks in the production renderer (GAP-026)
+
+Rulings per commit: `296e0138`/`7aff843a` harness-only (`shaders/tests/**` + `test-harness.js` +
+`scripts/run-js-tests.js` — same never-ported ruling as GAP-009..015/017/019/021);
+`04e8582c`/`11d7c699` docs-only; `73c15be0` (GAP-026 lifecycle hooks) and `c28e8fdb` (WebGL2
+depth-allocation FBO rebind) both inapplicable to the RenderingDevice port — per-commit reasoning
+in the §1 table and STATUS.md. Audit-only sync: no port file changed.
+
+Gate re-run at `NM_REFERENCE_ROOT` pinned exactly at `73c15be00d68` (Godot
+`4.7.stable.official.5b4e0cb0f`, Linux headless; numbers in STATUS.md): definitions 210/210,
+registry ops 210/210 / enums 8/8 / paramAliases 44/44 / effectAliases 0/0 / effectKeys 628/628,
+lex/parse/validate/graph 352/352 each, expand 344/352 (the same 8 documented pass-defines diffs),
+`SMOKE: ALL PASS`, unittest 118 tests / 13 failures — all 13 Godot display-server-init
+environmental failures ("X11 Display is not available / Can't create the Wayland display
+server"); the count moved from the previously recorded 96/12 because test files added since that
+record (kit playback, mesh pipeline) are themselves display-dependent and fail identically — the
+same environmental class, no non-environmental failure.
 
 ## 2. Completion claims
 
