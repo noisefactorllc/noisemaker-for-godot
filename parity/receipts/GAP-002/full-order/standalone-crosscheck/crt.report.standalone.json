@@ -1,0 +1,16 @@
+{
+  "name": "crt",
+  "golden": "parity/out/crt.golden.png",
+  "candidate": "parity/receipts/GAP-002/full-order/standalone-crosscheck/crt.standalone.png",
+  "shape": [
+    256,
+    256,
+    4
+  ],
+  "max_abs_diff": 92.0,
+  "mean_abs_diff": 30.418371200561523,
+  "ssim": 0.6007646918296814,
+  "tolerance": 2.001,
+  "ssim_min": 0.98,
+  "passed": false
+}

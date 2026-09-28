@@ -1,0 +1,16 @@
+{
+  "name": "filter3dFlow3d",
+  "golden": "parity/out/filter3dFlow3d.golden.png",
+  "candidate": "parity/receipts/GAP-002/full-order/standalone-crosscheck/filter3dFlow3d.standalone.png",
+  "shape": [
+    256,
+    256,
+    4
+  ],
+  "max_abs_diff": 188.0,
+  "mean_abs_diff": 5.177341938018799,
+  "ssim": 0.877383291721344,
+  "tolerance": 2.001,
+  "ssim_min": 0.98,
+  "passed": false
+}
