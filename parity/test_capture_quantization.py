@@ -7,8 +7,9 @@ This suite runs the real nm_backend._capture_byte used by _snapshot_surface
 and judges its bytes against a Python transliteration of the reference
 capture spec (JS Math.round(v*255): half-up on exact f64, clamped to
 [0,255]) — a cross-language conformance check of the same spec; end-to-end
-PNG capture equivalence is evidenced separately by the committed comparator
-receipts (parity/receipts/GAP-002/). It also asserts the defect
+PNG capture equivalence is evidenced separately by the job's archived
+comparator receipts (evidence gap002-in-tree-receipts/ and
+gap002-native-metal/ of Worker Elves job e5d3fe6f). It also asserts the defect
 discriminators: truncation (0.5 -> 127, 0.253 -> 64) must NOT occur. Per
 the repo standard (test_kit_playback.py), the suite FAILS LOUDLY when no
 Godot binary is available instead of passing as a vacuous 0-test run.
