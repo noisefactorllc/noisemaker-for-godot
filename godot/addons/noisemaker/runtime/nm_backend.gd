@@ -126,6 +126,7 @@ var screen: Vector2i
 var _sampler: RID
 var _vfmt: int
 var _varr: RID
+var _vbuf: RID             # fullscreen-triangle vertex buffer behind _varr (freed on close)
 var _vfmt_empty: int        # no vertex format for procedural point/billboard/mesh draws
 var _shaders := {}
 var _pipelines := {}
@@ -144,7 +145,14 @@ var _render_scale := 1.0
 var _delta_time := 0.0
 var _frame_index := 0
 var sink_manager := SinkManager.new()
+var _export_queues := []   # FrameExportQueues this backend created (closed on teardown)
 var _closed := false
+# Textures THIS backend allocated (RIDs created by _make_tex, _make_sampled_float_tex,
+# and _depth_texture). Only these are released by teardown or by allocation-replacement
+# frees: a consumer may inject its own texture into the backend's maps (e.g. an
+# externally-owned render surface for sink/export submission — see the frame-export
+# probe's "probe" texture) and remains its owner (GAP-003 ownership contract).
+var _owned_textures := {}
 
 # Double-buffered "ping-pong" surfaces (reference/04 §6/§8/§10). A `global_<name>`
 # texId that is BOTH read and written by passes gets a physical read/write texture
@@ -251,6 +259,7 @@ func setup(p_rd: RenderingDevice, p_addon_dir: String, p_screen: Vector2i) -> vo
 	attr.offset = 0
 	_vfmt = rd.vertex_format_create([attr])
 	_varr = rd.vertex_array_create(3, _vfmt, [vbuf])
+	_vbuf = vbuf
 	# No-vertex-input format: agent deposit passes draw N procedural vertices (gl_VertexIndex
 	# indexes the agent state textures) with NO vertex buffer. A pipeline built with
 	# INVALID_FORMAT_ID does not expect a bound vertex array — see execute_pass custom-draw path.
@@ -287,30 +296,90 @@ func create_frame_export_queue(options := {}):
 	if _closed or rd == null:
 		push_error("Noisemaker backend must be set up before creating a frame export queue")
 		return null
-	return FrameExportQueue.new(RenderingDeviceFrameExport.new(rd), options)
+	var queue := FrameExportQueue.new(RenderingDeviceFrameExport.new(rd), options)
+	# The backend tracks queues it handed out so teardown can cancel an ACTIVE
+	# export (whose async readback reads a backend-owned render-surface texture)
+	# BEFORE those textures are freed here — see close().
+	_export_queues.append(queue)
+	return queue
 
 
+# Backend/device ownership contract (GAP-003):
+#   - The CONSUMER owns the RenderingDevice: it creates the device, passes it to
+#     setup(), and destroys it only after close() returns.
+#   - The BACKEND owns every RID it derived from that device: samplers, textures
+#     (including ping-pong halves, depth textures, the black texture and mip
+#     scratch), the fullscreen vertex buffer/array/format, shaders, and render
+#     pipelines. close() releases all of them — and ONLY those: a consumer may
+#     inject its own texture into the backend's maps (externally-owned render
+#     surface for sink or export submission); it stays the consumer's to free,
+#     and teardown leaves it untouched.
+#   - Per-pass transients (framebuffers, uniform sets, parameter UBOs) are
+#     released by the render call that created them, so the retained handle
+#     count stays flat across repeated frames and resizes.
+#   - Frame-export queues created by this backend are cancelled (their pending
+#     async readbacks abandoned) at teardown, before the textures they read are
+#     freed; consumers may also close a queue early via its own close().
 func close(options := {}) -> void:
 	if _closed:
 		return
 	_closed = true
-	# Free the mip-regeneration scratch allocations (bounded per (dims, format)
-	# but still device memory): the scratch texture, per-fb-format pipelines,
-	# and the shared resample shader. Main textures stay with the RenderingDevice.
+	# Cancel active frame exports FIRST: each queue closes with backendLost so
+	# its in-flight async readback of a backend texture is abandoned before the
+	# texture below is destroyed (queue slots own byte buffers only — the source
+	# textures always stayed backend-owned).
+	for queue in _export_queues:
+		if queue is Object and queue.has_method("close"):
+			queue.call("close", {"backendLost": true})
+	_export_queues.clear()
 	if rd != null:
-		for key in _mip_scratch:
-			var scratch: RID = _mip_scratch[key]
-			if scratch.is_valid():
-				rd.free_rid(scratch)
-		_mip_scratch.clear()
-		for fmt_key in _mip_pipelines:
-			var pipe: RID = _mip_pipelines[fmt_key]
-			if pipe.is_valid():
-				rd.free_rid(pipe)
-		_mip_pipelines.clear()
+		# Free in dependency order (RenderingDevice auto-frees dependents when
+		# their owner is released): pipelines before their shaders, shaders
+		# before textures/samplers, so no RID is freed twice. Textures go
+		# through the ownership gate: only textures this backend allocated are
+		# released; consumer-injected textures stay the consumer's to free.
+		var free_rid := func(rid: RID) -> void:
+			if rid.is_valid():
+				rd.free_rid(rid)
+		var free_owned := func(rid: RID) -> void:
+			_free_owned(rid)
+		release_unique_rids(_pipelines, free_rid)
+		release_unique_rids(_mip_pipelines, free_rid)
+		release_unique_rids(_shaders, free_rid)
 		if _mip_shader.is_valid():
 			rd.free_rid(_mip_shader)
-		_mip_shader = RID()
+		release_unique_rids(_textures, free_owned)
+		release_unique_rids(_depth_textures, free_owned)
+		release_unique_rids(_mip_scratch, free_owned)
+		# Samplers, the black texture, and the fullscreen vertex array chain
+		# (array, buffer, format).
+		for rid in [_sampler, _mip_sampler, _black_tex, _varr, _vbuf, _vfmt]:
+			if rid is RID and rid.is_valid():
+				rd.free_rid(rid)
+	# Drop every cache map so no stale handle record survives teardown.
+	_textures.clear()
+	_depth_textures.clear()
+	_tex_dims.clear()
+	_tex_fmt.clear()
+	_tex_mip.clear()
+	_mip_targets.clear()
+	_mip_scratch.clear()
+	_mip_pipelines.clear()
+	_shaders.clear()
+	_pipelines.clear()
+	_surfaces.clear()
+	_frame_read.clear()
+	_frame_write.clear()
+	_pingpong.clear()
+	_texture_aliases.clear()
+	_samplers.clear()
+	_sampler = RID()
+	_mip_sampler = RID()
+	_black_tex = RID()
+	_varr = RID()
+	_vbuf = RID()
+	_mip_shader = RID()
+	_owned_textures.clear()
 	sink_manager.close(options)
 
 # Runtime-fed 128-sample audio buffers used by synth/scope and synth/spectrum. Callers may
@@ -464,6 +533,7 @@ func _make_tex(w: int, h: int, fmt: int, mip_levels: int = 1) -> RID:
 	# Zero-init (matches the reference's null-data textures). Deterministic first-frame
 	# read for feedback/state surfaces; harmless for transients (fully overwritten).
 	rd.texture_clear(rid, Color(0, 0, 0, 0), 0, mip_levels, 0, 1)
+	_owned_textures[rid] = true
 	return rid
 
 # Full mip chain length for a 2D texture dimension pair (reference mipLevelCount,
@@ -488,7 +558,9 @@ func _make_sampled_float_tex(w: int, h: int, values: PackedFloat32Array) -> RID:
 	tf.height = h
 	tf.format = RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT
 	tf.usage_bits = RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT
-	return rd.texture_create(tf, RDTextureView.new(), [values.to_byte_array()])
+	var rid := rd.texture_create(tf, RDTextureView.new(), [values.to_byte_array()])
+	_owned_textures[rid] = true
+	return rid
 
 func _depth_texture(size: Vector2i) -> RID:
 	if _depth_textures.has(size):
@@ -500,6 +572,7 @@ func _depth_texture(size: Vector2i) -> RID:
 	tf.usage_bits = RenderingDevice.TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
 	var texture := rd.texture_create(tf, RDTextureView.new())
 	_depth_textures[size] = texture
+	_owned_textures[texture] = true
 	return texture
 
 func _ensure_default_mesh_texture(tex_id: String) -> bool:
@@ -646,6 +719,14 @@ func allocate_textures(graph: Dictionary) -> void:
 					# previous contents into the replacement through a NEAREST blit.
 					_resample_tex(existing, new_rid, prior_dims, Vector2i(w, h), fmt)
 				_textures[tex_id] = new_rid
+				# Replaced allocation: release the old backend texture so repeated
+				# renders and resizes do not accumulate stale RIDs (GAP-003).
+				# Pooled members are exempt: their shared storage RID is released
+				# exactly once through _apply_texture_aliases below (or
+				# release_regrouped_textures above for a dissolved group); freeing
+				# here too would double-free the group's storage.
+				if existing.is_valid() and not _texture_aliases.has(tex_id):
+					_free_owned(existing)
 			_tex_mip[tex_id] = levels
 	var rs = graph.get("renderSurface", null)
 	if rs != null:
@@ -835,7 +916,52 @@ static func release_regrouped_textures(textures: Dictionary, previous_aliases: D
 
 func _release_regrouped_textures(previous_aliases: Dictionary, next_aliases: Dictionary) -> void:
 	release_regrouped_textures(_textures, previous_aliases, next_aliases,
-		func(rid: RID) -> void: rd.free_rid(rid))
+		func(rid: RID) -> void: _free_owned(rid))
+
+
+# Free every unique valid RID value in a map exactly once (pooling aliases and
+# ping-pong bookkeeping can point several ids at one storage texture) and
+# clear the map. Static over an injected map + free callable so the dedupe is
+# testable headless (GAP-003 lifecycle contract).
+static func release_unique_rids(records: Dictionary, free_rid: Callable) -> void:
+	var freed := {}
+	var keys := records.keys()
+	for key in keys:
+		var rid: RID = records[key]
+		records.erase(key)
+		if rid is RID and rid.is_valid() and not freed.has(rid):
+			freed[rid] = true
+			free_rid.call(rid)
+
+
+# Free `rid` only when THIS backend allocated it: a consumer may inject its own
+# texture into the backend's maps (externally-owned render surface for sink or
+# export submission — e.g. the frame-export probe's "probe" texture) and stays
+# its owner; teardown and allocation-replacement frees must not release it
+# (GAP-003 ownership contract). Safe on already-released owned RIDs — the
+# ownership record is erased at release.
+func _free_owned(rid: RID) -> void:
+	if rid.is_valid() and _owned_textures.has(rid):
+		_owned_textures.erase(rid)
+		rd.free_rid(rid)
+
+
+# Probe-facing accounting (GAP-003 lifecycle): number of live backend-owned
+# RIDs tracked in the cache maps plus the singleton handles. Per-pass
+# transients are released by the render call that created them and never
+# accumulate here. Lifecycle probes assert this is flat across repeated
+# create/render/resize cycles and 0 after close().
+func tracked_handle_count() -> int:
+	var count := 0
+	for map in [_textures, _depth_textures, _mip_scratch, _shaders, _pipelines, _mip_pipelines]:
+		for key in map:
+			var rid: RID = map[key]
+			if rid.is_valid():
+				count += 1
+	for rid in [_sampler, _mip_sampler, _black_tex, _varr, _vbuf, _mip_shader]:
+		if rid.is_valid():
+			count += 1
+	return count
 
 
 static func _group_unchanged(members: Array, storage, next_aliases: Dictionary) -> bool:
@@ -870,7 +996,7 @@ static func apply_texture_aliases(textures: Dictionary, texture_aliases: Diction
 
 func _apply_texture_aliases() -> void:
 	apply_texture_aliases(_textures, _texture_aliases,
-		func(rid: RID) -> void: rd.free_rid(rid))
+		func(rid: RID) -> void: _free_owned(rid))
 
 
 # Query the actual runtime texture allocation/reuse plan (reference
@@ -953,6 +1079,8 @@ func _alloc_pingpong(tex_id: String, w: int, h: int, fmt: int, mip_levels: int =
 		prior_dims: Vector2i = Vector2i()) -> void:
 	var read_key := tex_id + "_read"
 	var write_key := tex_id + "_write"
+	var old_read: RID = _textures.get(read_key, RID())
+	var old_write: RID = _textures.get(write_key, RID())
 	_textures[read_key] = _make_tex(w, h, fmt, mip_levels)
 	_textures[write_key] = _make_tex(w, h, fmt, mip_levels)
 	if persistent and prior_dims.x > 0 and prior_read.is_valid() and prior_write.is_valid():
@@ -961,6 +1089,13 @@ func _alloc_pingpong(tex_id: String, w: int, h: int, fmt: int, mip_levels: int =
 		# resample of each old half into its replacement.
 		_resample_tex(prior_read, _textures[read_key], prior_dims, Vector2i(w, h), fmt)
 		_resample_tex(prior_write, _textures[write_key], prior_dims, Vector2i(w, h), fmt)
+	# Replaced halves release their old RIDs once the (optional) resample has
+	# consumed them — repeated frames/resizes must not accumulate stale
+	# textures (GAP-003). Ping-pong halves are never pooled.
+	if old_read.is_valid():
+		_free_owned(old_read)
+	if old_write.is_valid():
+		_free_owned(old_write)
 	_tex_mip[read_key] = mip_levels
 	_tex_mip[write_key] = mip_levels
 	var bare := tex_id.substr("global_".length())
@@ -1058,6 +1193,10 @@ func _draw_resample(src: RID, dst: RID, src_dims: Vector2i, dst_dims: Vector2i,
 	rd.draw_list_bind_vertex_array(dl, _varr)
 	rd.draw_list_draw(dl, false, 1)
 	rd.draw_list_end()
+	# Transients released per draw (GAP-003, see execute_pass).
+	rd.free_rid(fb)
+	rd.free_rid(set0)
+	rd.free_rid(ubo)
 
 # Scratch texture for one mip-level render, cached per (size, format).
 func _scratch_tex(size: Vector2i, fmt: int) -> RID:
@@ -2208,7 +2347,8 @@ func execute_pass(p: Dictionary) -> bool:
 		# OVERWRITES last_shader_diagnostic with the fuller record (same code,
 		# detail now carries the actual per-attachment texture formats) so the
 		# harness side-car quotes the enriched failure. Then bail instead of
-		# binding a dead pipeline into a doomed draw list.
+		# binding a dead pipeline into a doomed draw list. The transient
+		# framebuffer is released before bailing (GAP-003).
 		var fmts := PackedStringArray()
 		for rid in out_rids:
 			# texture_get_format returns an RDTextureFormat struct, not a
@@ -2226,9 +2366,11 @@ func execute_pass(p: Dictionary) -> bool:
 			"program": cache_key,
 			"detail": rich,
 		})
+		rd.free_rid(fb)
 		return false
 
 	var set0_uniforms := []
+	var ubo := RID()
 	if ptype == "blit":
 		var src_id := str(p.get("inputs", {}).get("src", "none"))
 		var su := RDUniform.new()
@@ -2244,7 +2386,7 @@ func execute_pass(p: Dictionary) -> bool:
 		set0_uniforms.append(su)
 	else:
 		var ubytes := _pack_pass(p)
-		var ubo := rd.uniform_buffer_create(ubytes.size(), ubytes)
+		ubo = rd.uniform_buffer_create(ubytes.size(), ubytes)
 		var u0 := RDUniform.new()
 		u0.uniform_type = RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER
 		u0.binding = 0
@@ -2294,6 +2436,11 @@ func execute_pass(p: Dictionary) -> bool:
 			"program": cache_key,
 			"detail": dlmsg,
 		})
+		# Release the transients created for this pass before bailing (GAP-003).
+		rd.free_rid(fb)
+		rd.free_rid(set0)
+		if ubo.is_valid():
+			rd.free_rid(ubo)
 		return false
 	rd.draw_list_bind_render_pipeline(dl, pipeline)
 	rd.draw_list_bind_uniform_set(dl, set0, 0)
@@ -2308,6 +2455,14 @@ func execute_pass(p: Dictionary) -> bool:
 		rd.draw_list_bind_vertex_array(dl, _varr)
 		rd.draw_list_draw(dl, false, 1)
 	rd.draw_list_end()
+	# Per-pass transients (framebuffer, uniform set, param UBO) are released
+	# immediately: RenderingDevice defers the actual destruction until the
+	# recorded commands complete, so this leaks nothing while keeping the
+	# retained handle count flat across repeated frames and resizes (GAP-003).
+	rd.free_rid(fb)
+	rd.free_rid(set0)
+	if ubo.is_valid():
+		rd.free_rid(ubo)
 	return true
 
 # --- ping-pong resolution -------------------------------------------------
