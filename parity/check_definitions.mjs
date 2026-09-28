@@ -21,11 +21,13 @@
 // writes currently-live effects and never unlinks the stale committed file copied into the temp
 // tree, so the committed and generated copies match themselves forever. The independent live
 // reference census below closes that gap without sharing the converter's namespace enumeration.
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
+
+const promisesCp = (await import('node:fs/promises')).cp
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO = resolve(HERE, '..')
@@ -57,7 +59,9 @@ function liveReferenceEffects () {
 
 const tmp = mkdtempSync(join(tmpdir(), 'nm-godot-defs-'))
 try {
-  cpSync(EFFECTS_DIR, tmp, { recursive: true })
+  // fs.cpSync (the SYNC implementation) fails with EACCES on virtiofs
+  // directories (Node 26.5.1); fs.promises.cp handles the same copy fine.
+  await promisesCp(EFFECTS_DIR, tmp, { recursive: true })
   execFileSync('node', [join(REPO, 'tools', 'convert-definitions.mjs')],
     { env: { ...process.env, NM_OUT_DIR: tmp }, stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8' })
 

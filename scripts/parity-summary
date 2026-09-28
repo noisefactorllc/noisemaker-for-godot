@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+# scripts/parity-summary [case-id ...]
+#
+# Renders the current authority's manifest cases with this port (Godot) and
+# compares each with the authority's golden, then prints one summary line:
+#
+#   PARITY-SUMMARY {"expected":N,"executed":N,"exact":N,"strict":N,"near":N,"defer":N,"skip":N,"fail":N,"missing":N}
+#
+# Case selection:
+#   - With case-id arguments, only those cases are expected and counted.
+#   - Without arguments, every program in parity/ledger.json is expected.
+#
+# Buckets (each case lands in exactly one):
+#   exact   — candidate PNG byte-identical to the golden, comparator exit 0.
+#   strict  — comparator exit 0 within the port's published numerical contract
+#             (parity/run.sh defaults: tolerance 2.001, ssim-min 0.98) but not
+#             byte-identical.
+#   near    — comparator exit 1, but the case is listed with an explicit
+#             tolerated-mismatch record in parity/parity-deferrals.json
+#             ({"<case>": {"max_abs_diff": X, "ssim": Y}} and the measured
+#             metrics are within those recorded bounds).
+#   defer   — the case is listed in parity/parity-deferrals.json as deferred
+#             from rendering in this environment ({"<case>": "deferred"}).
+#   skip    — the case cannot execute here: no parity/programs/<case>.dsl, no
+#             Godot binary (GODOT env, /Applications/Godot.app, or godot in
+#             PATH), or no node to mint a missing golden.
+#   fail    — rendered and compared, comparator exit 1, not covered by a
+#             recorded tolerated mismatch.
+#   missing — expected but no candidate PNG was produced.
+#
+# executed = exact + strict + near + fail. Exit 0 iff every expected case was
+# executed and passed within the published contract (exact + strict equals
+# expected and near/defer/skip/fail/missing are all zero); otherwise exit 1.
+#
+# Environment: NM_REFERENCE_ROOT must point at the reference engine checkout
+# (the goldens' authority); missing goldens are minted fresh via
+# parity/export-and-render.mjs at that revision.
+set -uo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+TOL="2.001"
+SSIM_MIN="0.98"
+
+if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
+  echo "parity-summary: NM_REFERENCE_ROOT is not set (point it at the reference engine checkout)" >&2
+  echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
+  exit 2
+fi
+
+GODOT_BIN="${GODOT:-}"
+if [ -z "$GODOT_BIN" ]; then
+  for c in /Applications/Godot.app/Contents/MacOS/Godot godot; do
+    if command -v "$c" >/dev/null 2>&1 || [ -x "$c" ]; then GODOT_BIN="$c"; break; fi
+  done
+fi
+PY="${PYTHON:-python3}"
+
+DEFERRALS_FILE="$ROOT/parity/parity-deferrals.json"
+DEFERRALS='{}'
+if [ -f "$DEFERRALS_FILE" ]; then
+  DEFERRALS="$(cat "$DEFERRALS_FILE")"
+fi
+
+# Build the expected case list.
+if [ "$#" -gt 0 ]; then
+  CASES=("$@")
+else
+  CASES=()
+  while IFS= read -r line; do CASES+=("$line"); done < <("$PY" - "$ROOT/parity/ledger.json" <<'PYEOF'
+import json, sys
+try:
+    ledger = json.load(open(sys.argv[1]))
+except Exception as e:
+    sys.stderr.write(f"parity-summary: unreadable manifest {sys.argv[1]}: {e}\n")
+    raise SystemExit(3)
+if not isinstance(ledger, list) or not ledger:
+    sys.stderr.write(f"parity-summary: manifest {sys.argv[1]} is empty or not a list\n")
+    raise SystemExit(3)
+n = 0
+for e in ledger:
+    name = e.get("program") if isinstance(e, dict) else None
+    if name:
+        print(name); n += 1
+if n == 0:
+    sys.stderr.write(f"parity-summary: manifest {sys.argv[1]} has no program entries\n")
+    raise SystemExit(3)
+PYEOF
+)
+  # A failed or empty process substitution must not pass vacuously with
+  # expected:0 — bash `while read < <(cmd)` cannot carry cmd's status, so
+  # require at least one case after the loop.
+  [ "${#CASES[@]}" -gt 0 ] || {
+    echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
+    exit 2
+  }
+fi
+EXPECTED=${#CASES[@]}
+
+classify () { # $1 = case, sets CLS
+  local case="$1"
+  PARITY_ROOT="$ROOT" "$PY" - "$case" "$DEFERRALS" <<'PYEOF'
+import json, sys, os
+case, deferrals = sys.argv[1], json.loads(sys.argv[2])
+root = os.environ["PARITY_ROOT"]
+rec = deferrals.get(case)
+report_path = os.path.join(root, "parity", "out", case + ".parity-summary.report.json")
+gold_path = os.path.join(root, "parity", "out", case + ".golden.png")
+cand_path = os.path.join(root, "parity", "out", case + ".candidate.png")
+if not os.path.exists(report_path) or not os.path.exists(cand_path):
+    print("missing"); raise SystemExit
+report = json.load(open(report_path))
+if report.get("passed"):
+    same = (open(gold_path, "rb").read() == open(cand_path, "rb").read())
+    print("exact" if same else "strict"); raise SystemExit
+if isinstance(rec, dict) and "deferred" in rec:
+    print("defer"); raise SystemExit
+if isinstance(rec, dict) and "max_abs_diff" in rec:
+    # near = comparator exit 1 but measured metrics within the case's RECORDED
+    # tolerated-mismatch bounds ({\"max_abs_diff\": X, \"ssim\": Y}); a record
+    # without explicit bounds cannot excuse a comparator failure.
+    if ("max_abs_diff" in rec and "ssim" in rec
+            and report.get("max_abs_diff", 1e9) <= rec["max_abs_diff"]
+            and report.get("ssim", 0) >= rec["ssim"]):
+        print("near"); raise SystemExit
+print("fail")
+PYEOF
+}
+
+# Read the recorded classification decision for a deferral before rendering.
+is_deferred () { # $1 = case
+  "$PY" - "$1" "$DEFERRALS" <<'PYEOF'
+import json, sys
+case, deferrals = sys.argv[1], json.loads(sys.argv[2])
+rec = deferrals.get(case)
+print("yes" if isinstance(rec, dict) and "deferred" in rec else "no")
+PYEOF
+}
+
+exact=0; strict=0; near=0; defer=0; skip=0; fail=0; missing=0; executed=0
+mkdir -p "$ROOT/parity/out"
+for case in "${CASES[@]}"; do
+  if [ "$(is_deferred "$case")" = "yes" ]; then
+    defer=$((defer+1)); echo "[DEFER] $case"; continue
+  fi
+  prog="$ROOT/parity/programs/$case.dsl"
+  gold="$ROOT/parity/out/$case.golden.png"
+  if [ ! -f "$prog" ]; then
+    skip=$((skip+1)); echo "[SKIP] $case: no parity/programs/$case.dsl"; continue
+  fi
+  if [ ! -f "$gold" ]; then
+    if command -v node >/dev/null 2>&1; then
+      echo "[MINT] $case (reference $NM_REFERENCE_ROOT)"
+      node "$ROOT/parity/export-and-render.mjs" "$prog" "$ROOT/parity/out" \
+        --size 256 --backend webgl2 >/dev/null 2>&1 || true
+    fi
+  fi
+  if [ ! -f "$gold" ]; then
+    skip=$((skip+1)); echo "[SKIP] $case: no golden and it could not be minted"; continue
+  fi
+  if [ -z "$GODOT_BIN" ]; then
+    skip=$((skip+1)); echo "[SKIP] $case: no Godot binary (set GODOT)"; continue
+  fi
+  echo "[RENDER] $case"
+  rm -f "$ROOT/parity/out/$case.parity-summary.report.json"
+  if GODOT="$GODOT_BIN" bash "$ROOT/parity/run.sh" "$case" "$TOL" "$SSIM_MIN" 256 \
+      > "$ROOT/parity/out/$case.parity-summary.log" 2>&1; then
+    :
+  else
+    echo "[NONZERO] $case: run.sh exited nonzero (see parity/out/$case.parity-summary.log)"
+  fi
+  # run.sh writes report.json on both paths (compare.py --report always runs).
+  if [ ! -f "$ROOT/parity/out/$case.candidate.png" ]; then
+    missing=$((missing+1)); echo "[MISSING] $case: no candidate produced"; continue
+  fi
+  if [ ! -f "$ROOT/parity/out/$case.report.json" ]; then
+    # Candidate exists but compare.py died before its report: fail, not missing.
+    fail=$((fail+1)); executed=$((executed+1))
+    echo "[FAIL] $case: comparator wrote no report (see parity/out/$case.parity-summary.log)"
+    continue
+  fi
+  cp "$ROOT/parity/out/$case.report.json" "$ROOT/parity/out/$case.parity-summary.report.json" 2>/dev/null || true
+  case "$(classify "$case")" in
+    exact)   exact=$((exact+1)); executed=$((executed+1)); echo "[PASS] $case (exact)";;
+    strict)  strict=$((strict+1)); executed=$((executed+1)); echo "[PASS] $case (strict)";;
+    near)    near=$((near+1)); executed=$((executed+1)); echo "[NEAR] $case";;
+    fail)    fail=$((fail+1)); executed=$((executed+1)); echo "[FAIL] $case";;
+    missing) missing=$((missing+1)); echo "[MISSING] $case";;
+  esac
+done
+
+echo "PARITY-SUMMARY {\"expected\":$EXPECTED,\"executed\":$executed,\"exact\":$exact,\"strict\":$strict,\"near\":$near,\"defer\":$defer,\"skip\":$skip,\"fail\":$fail,\"missing\":$missing}"
+if [ "$executed" -eq "$EXPECTED" ] && [ "$((exact+strict))" -eq "$EXPECTED" ] \
+   && [ "$near" -eq 0 ] && [ "$defer" -eq 0 ] && [ "$skip" -eq 0 ] \
+   && [ "$fail" -eq 0 ] && [ "$missing" -eq 0 ]; then
+  exit 0
+fi
+exit 1
