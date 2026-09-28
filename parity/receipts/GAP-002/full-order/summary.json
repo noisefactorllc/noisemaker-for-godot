@@ -57,5 +57,110 @@
     "heightGrid_billboard_alpha",
     "heightGrid_pointsRender_perspective"
   ],
-  "note": "The retained parity/ledger.json prefix verdicts were recorded on the historical M4 Metal environment and are not reproduced by this Linux container; the non-GAP-002 failures here (threshold-amplified isolated-pixel signatures: dither 85, edge 255, hatch 220, halftone 47-255, etc.) were not diagnosed in this round and are outside GAP-002's scope; they are recorded as environment observations, not gate verdicts."
+  "note": "The retained parity/ledger.json prefix verdicts were recorded on the historical M4 Metal environment and are not reproduced by this Linux container; the non-GAP-002 failures here (threshold-amplified isolated-pixel signatures: dither 85, edge 255, hatch 220, halftone 47-255, etc.) were not diagnosed in this round and are outside GAP-002's scope; they are recorded as environment observations, not gate verdicts.",
+  "native_metal_followup": {
+    "date": "2026-09-27",
+    "candidate": "c0aa43dbcd8fbcd8082a8c70a6e0cf79532321bf",
+    "reference": "a912749fab5c3819e56a8abde664ff30e40870f4",
+    "host": "macOS 26.5 arm64, Apple M4",
+    "godot": "4.7.stable.official.5b4e0cb0f, Metal 4.0 Forward+",
+    "reference_backend": "Chromium 151.0.7922.34, ANGLE Metal WebGL2",
+    "protocol": {
+      "size": 256,
+      "time": 0.25,
+      "reference_frames": 8,
+      "candidate_frames": 2,
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "order": "same 100-program ledger prefix and exclusions as the original receipt",
+      "capture": "reset textures, ping-pong orientation and frame clock; capture presented surface.read, half-up RGBA8, top-down"
+    },
+    "results": {
+      "total": 100,
+      "pass": 89,
+      "fail": 11
+    },
+    "gap002_cases": [
+      {
+        "program": "heightGrid_billboard_alpha",
+        "max_abs_diff": 0.9999999403953552,
+        "mean_abs_diff": 3.8146970382513246e-06,
+        "ssim": 1.0,
+        "golden_sha256": "b562fc2632ee6fc67ae1456f741d15d1e678fd8b8ee37ecd2bce5271c2171875",
+        "candidate_sha256": "e4bbdb221d682259bfa6e7b80c8bfba3f548d1814884cbafe8654878ea197873",
+        "passed": true
+      },
+      {
+        "program": "heightGrid_pointsRender_perspective",
+        "max_abs_diff": 0.0,
+        "mean_abs_diff": 0.0,
+        "ssim": 1.0,
+        "golden_sha256": "194329518d8fbfdfa27c51e7dee91aa54871833493558dabe28d8522fdf74d6f",
+        "candidate_sha256": "5aa1e005210726bd21047bbcbda52e520e1552226984cd1db274eb192d1ded4e",
+        "passed": true
+      }
+    ],
+    "remaining_failures": [
+      {
+        "program": "bulge",
+        "max_abs_diff": 3.999999761581421,
+        "ssim": 1.0
+      },
+      {
+        "program": "chrome",
+        "max_abs_diff": 31.999998092651367,
+        "ssim": 0.9999990463256836
+      },
+      {
+        "program": "chromeLiquid",
+        "max_abs_diff": 17.999998092651367,
+        "ssim": 0.9999991655349731
+      },
+      {
+        "program": "degauss",
+        "max_abs_diff": 3.999999761581421,
+        "ssim": 0.9999985694885254
+      },
+      {
+        "program": "distortion",
+        "max_abs_diff": 9.999999046325684,
+        "ssim": 0.9999998211860657
+      },
+      {
+        "program": "ditherErrorDiffusion",
+        "max_abs_diff": 85.0,
+        "ssim": 0.9999261498451233
+      },
+      {
+        "program": "ditherReferenceErrorDiffusion",
+        "max_abs_diff": 85.0,
+        "ssim": 0.9999261498451233
+      },
+      {
+        "program": "edge",
+        "max_abs_diff": 5.999999523162842,
+        "ssim": 1.0
+      },
+      {
+        "program": "hatchPencil",
+        "max_abs_diff": 241.0,
+        "ssim": 0.9997842907905579
+      },
+      {
+        "program": "hatchReferenceColoredPencil",
+        "max_abs_diff": 207.0,
+        "ssim": 0.9998632669448853
+      },
+      {
+        "program": "hatchReferenceColoredPencilLeftDiag",
+        "max_abs_diff": 216.0,
+        "ssim": 0.999911904335022
+      }
+    ],
+    "receipts": {
+      "directory": "/tmp/worker-elves-godot-native/full-order",
+      "comparison_sha256": "0508a868ec972899d9f71ad561edd8f2a62955c530b28f57bae617bcf12ea68e"
+    },
+    "limit": "The two point cases pass standalone and full-order. Eleven other prefix cases still fail; Linux failures and unchanged thresholds remain recorded."
+  }
 }
