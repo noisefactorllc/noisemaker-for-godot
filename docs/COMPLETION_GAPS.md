@@ -612,16 +612,17 @@ warnings) inapplicable to the Godot port — both hunks live inside the web `Aud
 (`_channelShortfall()` helper and a post-open validation loop in `_syncCaptures()` covering the
 deviceless null-`deviceId` capture); the graph-side `nm_backend.gd get_audio_input_requirements()`
 is unchanged upstream in this range. `c4606d11`, `42843597`, `8fec3d05`, `bff453e9` docs/ledger-only.
-Per-commit reasoning in the §1 table and STATUS.md. Audit-only sync: no port file changed.
+Per-commit reasoning in the §1 table; STATUS.md carries only a summary pointing here.
+Audit-only sync: no port file changed.
 
 Gate re-run at `NM_REFERENCE_ROOT` pinned exactly at `4f5e0d28bdc1` (Godot
-`4.7.stable.official.5b4e0cb0f`, Linux headless; numbers in STATUS.md): definitions 210/210,
+`4.7.stable.official.5b4e0cb0f`, Linux headless): definitions 210/210,
 registry ops 210/210 / enums 8/8 / paramAliases 44/44 / effectAliases 0/0 / effectKeys 628/628,
 lex/parse/validate/graph 352/352 each, expand 344/352 (the same 8 documented pass-defines diffs),
 `SMOKE: ALL PASS`, unittest 121 tests / 14 failures — the same recorded Godot display-server-init
 environmental class, no non-environmental failure. Audit evidence (ancestry checks, range log,
-per-path diffs, and the verbatim `external-input.js` delta) archived with the job as
-`evidence/4f5e0d28-sync/`.
+per-path diffs, and the verbatim `external-input.js` delta) archived with the job (Worker Elves
+job `842e2a10-6026-420d-aa5b-1e64a0ddb4f5`, evidence `4f5e0d28-sync`).
 
 Daily review date: 2026-09-29 UTC. Review ID: `review-20260929-050000`.
 No new worker audit result exists after `20260924-remaining-gap-documents-godot`.
