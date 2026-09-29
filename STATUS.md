@@ -462,6 +462,45 @@ linear 6-commit `a912749fab5c..73c15be00d68`) — audit-only sync, nothing to po
   no pixel-parity re-sweep. Delta `git diff --stat a912749fab5c..73c15be00d68` committed verbatim
   in `docs/COMPLETION_GAPS.md` §1.
 
+*Incrementally synced 2026-09-29 to reference `68273906` (`73c15be00d68..682739066d3b`; the declared
+job range was `73c15be00d68..682739066d3b` with a `forced` flag and two observed ranges
+`3e21906e..a5059106`, `a5059106..68273906` — audited rather than assumed: `git merge-base
+--is-ancestor 73c15be00d68 682739066d3b` → exit 0 and each observed range endpoint is an ancestor
+of the delivered end, so the range is contiguous and the effective new delta is the linear 8-commit
+`73c15be00d68..682739066d3b`) — audit-only sync, nothing to port:
+- `a5059106` and `68273906` (upstream GAP-032, multi-device audio capture): +272
+  `shaders/src/runtime/external-input.js`, +312 `shaders/tests/test_external_input.js` — the test is
+  never-ported (upstream's JS test harness is not a mirrored surface, same ruling as the
+  GAP-009..015/017/019/021/024 harness syncs). The runtime change is entirely inside the web
+  `AudioInputManager`: it now opens one extra `getUserMedia` stream per selected-device requirement
+  from `Pipeline.getAudioInputRequirements()`, registers devices/channels on `AudioState`
+  (`registerDevice`/`registerDefaultChannels`), splits channels through a `ChannelSplitterNode` with
+  a per-channel `AnalyserNode`, and tears captures down through the public reset paths. This is
+  browser host capture integration — `getUserMedia`/`AudioContext`/media-device enumeration — not
+  render-graph math. Inapplicable to Godot: the port's mirrored audio surface is the graph-side
+  requirements query, `nm_backend.gd` `get_audio_input_requirements()` (gated by
+  `parity/test_runtime_contract.py`), which upstream did not change in this range; the port consumes
+  host-fed audio samples (`set_audio_samples`) and capture belongs to the Godot host application.
+  No analogous capture manager exists in the port to update.
+- `3e21906e`, `d95d0c8c`, `cdb60cfc`, `53398923` — docs-only (contract checkpoints, GAP-029
+  narrowing); no `shaders/` paths. `6b05a270`, `a50c90bc` — dependency bumps (eslint, ruff);
+  no `shaders/` paths.
+- Effect catalog unchanged: `git diff 73c15be00d68..682739066d3b -- shaders/effects` and
+  `-- shaders/src/lang` are both empty (verified).
+- Observed gate outputs on Linux headless (Godot `4.7.stable.official.5b4e0cb0f`,
+  `NM_REFERENCE_ROOT` at upstream `682739066d3b`, fresh full clone pinned exactly at the end):
+  definitions 210/210 PASS; registry PASS (ops 210/210, enums 8/8, paramAliases 44/44,
+  effectAliases 0/0, effectKeys 628/628); lex 352/352, parse 352/352, validate 352/352, graph
+  352/352; expand 344/352 (the same 8 documented pass-defines diffs, unchanged); smoke
+  SMOKE: ALL PASS; unittest 121 tests / 14 failures — 13 direct Godot display-server-init failures
+  ("X11 Display is not available / Can't create the Wayland display server") plus
+  `test_cancellation_then_recovery`, which spawns the windowed observer and requires the 1800-frame
+  render to still be running at the 5 s cancel window; in the display-less container Godot exits
+  immediately on display-init failure, the same environmental class (live rendering is covered by
+  the job's native parity cases). No port file changed in this sync, so no pixel-parity re-sweep.
+  Delta `git diff --stat 73c15be00d68..682739066d3b` committed verbatim in
+  `docs/COMPLETION_GAPS.md` §1.
+
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
 both pre-existing gaps only now exercised by this round's `viewMode`-conditional pass pattern, not
 introduced by it:

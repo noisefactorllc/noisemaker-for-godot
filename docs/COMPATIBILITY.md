@@ -13,9 +13,13 @@ Godot 4.7 Forward+ compiler and GPU renderer. [Source contract](https://github.c
 Historical tested authority revisions remain in the linked gap register. They are not relabeled as current qualification.
 The goldens' bound reference revision is `a912749fab5c3819e56a8abde664ff30e40870f4`.
 The port's last synced reference is `73c15be00d6888f4b5d2835d8e242ee9e840df45` (2026-09-28).
-Upstream head observed 2026-09-29: `42843597e8ae954c27be60075688d00a4064ad14`.
+The delivered upstream end for the 2026-09-29 sync round is `682739066d3b74962febbdcdae85b5aa4d2e19f3`
+(an ancestor of the previously observed `42843597e8ae…`; delivery order is not ancestry order).
 The delta past the synced reference changes `shaders/src/runtime/external-input.js`
-(audio capture, GAP-032 upstream) plus docs and dependency files.
+(audio capture, GAP-032 upstream) plus docs and dependency files; the 2026-09-29 sync round ruled
+it never-ported/inapplicable to this port (browser host capture integration — the port's mirrored
+graph-side `get_audio_input_requirements()` is unchanged upstream in the range) and re-ran all
+gates at the pinned reference `682739066d3b` ([completion gaps](COMPLETION_GAPS.md) §1, STATUS.md).
 The effect catalog is unchanged in that delta.
 Published authority alias `1.0` serves a 210-ID manifest, SHA-256 `05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e`.
 The sampled releases `1.0.176`, `1.0.196`, `1.0.197`, and `1.0.198` serve byte-identical manifests.
@@ -329,7 +333,7 @@ A successful dispatch or unit-test summary does not establish a full rendered ga
 See [GAP-002 and the complete gap register](COMPLETION_GAPS.md#4-known-gaps) for evidence, dependencies, and acceptance criteria.
 
 1. Route the parity entrypoint repair through the implementation job: a nonzero render exit must never classify from an earlier run's report or candidate. Resolve the 11 native prefix failures and execute all 342 ledger programs. Reconcile ledger fixture coverage to the current authority manifest: 27 of 210 authority effects still lack any fixture. GAP-002 closure needs the supervisor-run `scripts/parity-summary` exact or strict for every expected case. Then close GAP-002 in a records-only commit.
-2. Port or rule on the upstream delta past the synced reference: `external-input.js` audio capture plus docs and dependency files.
+2. Ruled (2026-09-29 sync): the upstream delta past the synced reference (`73c15be0..682739066d3b`, `external-input.js` audio capture plus docs and dependency files) is never-ported/inapplicable — browser host capture integration; the port's mirrored graph-side `get_audio_input_requirements()` is unchanged upstream in the range. Rulings in [completion gaps](COMPLETION_GAPS.md) §1 and STATUS.md.
 3. Resolve GAP-004 diagnostics and GAP-008 standalone notices through the implementation job.
 4. Continue GAP-005 catalog, editor, upgrade, and platform qualification. Define GAP-006 release acceptance.
 5. Inspect exact-source CI and retain artifact hashes. Keep unresolved qualification failed or unverified.

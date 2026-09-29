@@ -88,6 +88,7 @@ Delivered-range diff (diffed directly in a local upstream checkout, not assumed)
 | `296e0138` (2026-09-27 sync, observed non-contiguous range `11d7c69922f3..296e0138c474`; endpoint NOT an ancestor of the delivered end `a912749fab5c`) | GAP-021: report requested-vs-returned frame resolution on every `renderEffectFrame` result — `shaders/tests/frame-resolution.js`, +189 `test_frame_resolution.js`, +34 `test-harness.js`, 1 registration line | Nothing to port: upstream's JS test harness only, not a mirrored surface; no `shaders/src` file changed in the range |
 | `73c15be0` (2026-09-28 sync, `a912749fab5c..73c15be00d68`) | GAP-026: invoke `onInit`/`onUpdate`/`onDestroy` lifecycle hooks in the production renderer — +129 `shaders/src/runtime/pipeline.js` (hook detection, managed-effect map, per-frame `onUpdate` uniform overlay with fallback priority), +3 `shaders/src/runtime/compiler.js` (`recompile` re-runs lifecycle init) | Nothing to port: the hooks are the JS Effect object model's config/subclass callbacks; the only shipped effect defining them is `synth/media` (unchanged this range) whose `onUpdate` returns `imageSize` from web-app media state (`setMediaDimensions`), not render-graph math. The Godot port's effect surface is data (JSON definitions + GLSL) with no Effect object model — no per-effect callback exists to invoke, and `mediaInput`'s `imageSize` is resolved from the supplied input texture by the port's own uniform machinery |
 | `c28e8fdb` (2026-09-28 sync, same range) | GAP-026-adjacent WebGL2 fix: after `ensureDepthBuffer` the WebGL2 backend rebinds the framebuffer (allocating a depth renderbuffer unbinds the FBO mid-pass) — +2 `shaders/src/runtime/backends/webgl2.js` | Nothing to port: RenderingDevice has no persistent FBO binding — `nm_backend.gd` allocates the depth texture when building the framebuffer attachment list, before `draw_list_begin`, so no bind→draw window exists for an allocation to invalidate |
+| `a5059106` + `68273906` (2026-09-29 sync, `73c15be00d68..682739066d3b`) | GAP-032: multi-device audio capture — +272 `shaders/src/runtime/external-input.js` (the web `AudioInputManager` opens one extra `getUserMedia` stream per selected-device requirement from `Pipeline.getAudioInputRequirements()`, registers devices/channels on `AudioState`, splits channels via `ChannelSplitterNode` with per-channel analysers, tears down through public reset paths), +312 `shaders/tests/test_external_input.js` | Nothing to port: browser host capture integration (`getUserMedia`/`AudioContext`/device enumeration), not render-graph math. The port's mirrored audio surface is the graph-side `nm_backend.gd get_audio_input_requirements()` (gated by `parity/test_runtime_contract.py`), which upstream did not change in this range; the port consumes host-fed samples (`set_audio_samples`) and capture belongs to the Godot host application. The JS test is never-ported (upstream's harness is not a mirrored surface) |
 
 Effect-catalog parity: no effect definition, effect shader, DSL lang, or registry file changed in the
 range (upstream `shaders/effects` and `shaders/src/lang` diffs are empty for the delivered range);
@@ -528,6 +529,50 @@ server"); the count moved from the previously recorded 96/12 because test files 
 record (kit playback, mesh pipeline) are themselves display-dependent and fail identically — the
 same environmental class, no non-environmental failure.
 
+2026-09-29 sync (`73c15be00d68..682739066d3b`; declared job range `73c15be00d68..682739066d3b`,
+forced, observed ranges `3e21906e4f6f..a5059106ea75`, `a5059106ea75..682739066d3b`). Ancestry
+observed verbatim (fresh full clone, all endpoints present): `git merge-base --is-ancestor
+73c15be00d68 682739066d3b` → exit 0; `3e21906e` and `a5059106` each an ancestor of the delivered
+end — the range is contiguous, the last-synced reference `73c15be0` is its start, so the effective
+new delta is the linear 8-commit `73c15be00d68..682739066d3b` (`git log --oneline` → `68273906`,
+`a5059106`, `3e21906e`, `d95d0c8c`, `6b05a270`, `a50c90bc`, `cdb60cfc`, `53398923`).
+
+    $ git diff --stat 73c15be00d68..682739066d3b
+        LEDGER.md                             | 169 +++++++++++++++++-
+        llms-full.txt                         |  80 +++++++--
+        package-lock.json                     |   8 +-
+        package.json                          |   2 +-
+        pyproject.toml                        |   2 +-
+        shaders/src/runtime/external-input.js | 272 +++++++++++++++++++++++++++--
+        shaders/tests/test_external_input.js  | 312 +++++++++++++++++++++++++++++++-
+        7 files changed, 806 insertions(+), 39 deletions(-)
+    $ git diff --stat 73c15be00d68..682739066d3b -- shaders/effects
+    (empty — 0 bytes: no effect definition, effect shader, or effect change anywhere in the range)
+    $ git diff --stat 73c15be00d68..682739066d3b -- shaders/src/lang
+    (empty — 0 bytes)
+    $ git diff --name-only 73c15be00d68..682739066d3b -- shaders/src
+    shaders/src/runtime/external-input.js
+    $ git log -1 --format='%H %s' 682739066d3b
+    682739066d3b74962febbdcdae85b5aa4d2e19f3 fix(audio): capture every selected-device audio binding the graph requires (GAP-032)
+
+Rulings per commit: `a5059106`/`68273906` (upstream GAP-032 multi-device audio capture) inapplicable
+to the Godot port — the change lives entirely in the web `AudioInputManager` (browser
+`getUserMedia` capture integration), while the port's mirrored audio surface, the graph-side
+`nm_backend.gd get_audio_input_requirements()`, is unchanged upstream in this range and the port
+consumes host-fed samples (`set_audio_samples`); `3e21906e`, `d95d0c8c`, `cdb60cfc`, `53398923`
+docs-only; `6b05a270`, `a50c90bc` dependency bumps. Per-commit reasoning in the §1 table and
+STATUS.md. Audit-only sync: no port file changed.
+
+Gate re-run at `NM_REFERENCE_ROOT` pinned exactly at `682739066d3b` (Godot
+`4.7.stable.official.5b4e0cb0f`, Linux headless; numbers in STATUS.md): definitions 210/210,
+registry ops 210/210 / enums 8/8 / paramAliases 44/44 / effectAliases 0/0 / effectKeys 628/628,
+lex/parse/validate/graph 352/352 each, expand 344/352 (the same 8 documented pass-defines diffs),
+`SMOKE: ALL PASS`, unittest 121 tests / 14 failures — 13 direct Godot display-server-init
+environmental failures ("X11 Display is not available / Can't create the Wayland display server")
+plus `test_cancellation_then_recovery`, which requires the windowed 1800-frame render to still be
+running at its 5 s cancel window and so fails identically when Godot exits immediately on
+display-init failure — the same environmental class, no non-environmental failure.
+
 Daily review date: 2026-09-29 UTC. Review ID: `review-20260929-050000`.
 No new worker audit result exists after `20260924-remaining-gap-documents-godot`.
 This review covers the published implementation range since that report and the current documents.
@@ -891,9 +936,12 @@ The reviewer checked all entries on 2026-09-24, with the coverage limits in sect
    Close GAP-002 in a records-only commit only after the supervisor-run
    `scripts/parity-summary` reports every expected case exact or strict, with zero
    near, defer, skip, fail, or missing.
-3. Port or rule on the upstream delta `73c15be0..42843597` in the next sync round:
-   `shaders/src/runtime/external-input.js` audio capture (upstream GAP-032) plus docs and dependency files.
-   The effect catalog is unchanged. Re-run all gates at the pinned reference and record the rulings.
+3. Ruled (2026-09-29 sync): the upstream delta `73c15be00d68..682739066d3b` is
+   `shaders/src/runtime/external-input.js` audio capture (upstream GAP-032, commits `a5059106` and
+   `68273906`) plus its JS test, docs, and dependency files — all ruled never-ported or
+   inapplicable (browser host capture integration; the port's mirrored
+   `get_audio_input_requirements()` surface is unchanged upstream in the range). The effect catalog
+   is unchanged. All gates re-run at the pinned reference; rulings in STATUS.md and the §1 table.
 4. Resolve GAP-004: propagate the unknown-effect diagnostic through `compiler/graph/orchestrator.gd`
    and both public entry points. Require a diagnostic before rendering and recovery after correction.
 5. Correct GAP-008: ship the port and upstream license notices with the documented standalone addon copy.
