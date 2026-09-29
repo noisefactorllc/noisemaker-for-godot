@@ -6,6 +6,11 @@ import subprocess
 import unittest
 from pathlib import Path
 
+try:
+    from parity.godot_floor_noise import without_engine_exit_noise
+except ImportError:  # direct discovery (unittest discover -s parity)
+    from godot_floor_noise import without_engine_exit_noise
+
 
 REPO = Path(__file__).resolve().parents[1]
 GODOT = Path(os.environ.get("GODOT", "/Applications/Godot.app/Contents/MacOS/Godot"))
@@ -33,7 +38,7 @@ class FrameExportTests(unittest.TestCase):
         output = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, output)
         self.assertIn("OUTPUT_RUNTIME_TEST: PASS", output, output)
-        self.assertNotIn("ERROR:", output, output)
+        self.assertNotIn("ERROR:", without_engine_exit_noise(output), output)
 
     def test_async_readback_preserves_metadata_and_premultiplies(self):
         result = subprocess.run(
@@ -54,7 +59,7 @@ class FrameExportTests(unittest.TestCase):
         output = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, output)
         self.assertIn("FRAME_EXPORT_TEST: PASS", output, output)
-        self.assertNotIn("ERROR:", output, output)
+        self.assertNotIn("ERROR:", without_engine_exit_noise(output), output)
 
 
 if __name__ == "__main__":

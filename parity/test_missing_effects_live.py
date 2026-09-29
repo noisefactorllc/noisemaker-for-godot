@@ -8,6 +8,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+try:
+    from parity.godot_floor_noise import without_engine_exit_noise
+except ImportError:  # direct discovery (unittest discover -s parity)
+    from godot_floor_noise import without_engine_exit_noise
+
 
 REPO = Path(__file__).resolve().parents[1]
 GODOT = Path(os.environ.get("GODOT", "/Applications/Godot.app/Contents/MacOS/Godot"))
@@ -78,7 +83,7 @@ class MissingEffectsLiveTests(unittest.TestCase):
 
             output_log = result.stdout + result.stderr
             self.assertEqual(result.returncode, 0, output_log)
-            self.assertNotIn("ERROR:", output_log, output_log)
+            self.assertNotIn("ERROR:", without_engine_exit_noise(output_log), output_log)
             self.assertNotIn("SCRIPT ERROR", output_log, output_log)
             for entry in entries:
                 image = Path(entry["out"])

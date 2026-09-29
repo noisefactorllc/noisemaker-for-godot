@@ -109,7 +109,8 @@ class LiveLifecycleTests(unittest.TestCase):
         # which never loads the backend and fails the same scan).
         for needle in ["Attempted to free invalid ID", "eaked instance",
                        "eaked resource", "till registered in the device",
-                       "eaked RID", "till in use"]:
+                       "eaked RID", "till in use",
+                       "ObjectDB instances were leaked at exit"]:
             self.assertNotIn(needle, output, output)
 
 

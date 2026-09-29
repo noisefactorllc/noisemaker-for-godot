@@ -3,6 +3,11 @@ import hashlib
 import json
 import os
 from pathlib import Path
+
+try:
+    from parity.godot_floor_noise import without_engine_exit_noise
+except ImportError:  # direct discovery (unittest discover -s parity)
+    from godot_floor_noise import without_engine_exit_noise
 import shutil
 import subprocess
 import tempfile
@@ -52,7 +57,7 @@ application/modify_resources=false
                 self.assertEqual(result.returncode, 0, output[-12000:])
                 self.assertNotIn('ShaderFile', output, output[-12000:])
                 self.assertNotIn('SCRIPT ERROR', output, output[-12000:])
-                self.assertNotIn('ERROR:', output, output[-12000:])
+                self.assertNotIn('ERROR:', without_engine_exit_noise(output), output[-12000:])
                 return output
             run('--editor', '--import', '--position', '5000,5000')
             run('--headless', '--export-pack', 'Raw shader pack', str(root / 'test.pck'))

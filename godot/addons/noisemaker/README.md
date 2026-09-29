@@ -66,8 +66,17 @@ func render_dsl_to_texture(dsl: String, size := 512) -> ImageTexture:
     var backend := Backend.new()
     backend.setup(rd, "res://addons/noisemaker", Vector2i(size, size))
     var img: Image = backend.render_samples(graph, 1, 1)[0]   # render one frame, return the Image
+    backend.close()                                 # release ALL backend-owned GPU handles
+    backend.free()
+    rd.free()                                       # the device is YOURS: free it only after close()
     return ImageTexture.create_from_image(img)
 ```
+
+**Ownership order.** The backend owns every GPU handle it derives from the
+device you hand it; you keep the device. Teardown order is: `backend.close()`
+(frees backend-owned RIDs, cancels active frame exports, and leaves any
+texture you injected into it alone), then free your `RenderingDevice`. Freeing
+the device first leaks backend-owned handles; closing twice is a no-op.
 
 ```gdscript
 # Example: a static generator onto a TextureRect.
@@ -121,6 +130,8 @@ var final_img: Image = frames[0]
 | `render_samples(graph, total_frames: int, sample_every: int) -> Array[Image]` | Step `total_frames` at 60 fps. Return an `Image` at each `frame % sample_every == 0`. The general way to get pixels (single frame: `render_samples(g, 1, 1)`). |
 | `save_surface_png(path: String) -> bool` | Write the current render surface to a PNG (8-bit RGBA). |
 | `render_surface_tex: String` | The surface presented (e.g. `"global_o1"`). The graph's `renderSurface` sets it. |
+| `create_frame_export_queue(options := {}) -> FrameExportQueue` | Queue for async frame export (background PNG packing of submitted frames via the device). Returns `null` (with an error) if called before `setup` or after `close`. Active exports are cancelled (readbacks abandoned) if the backend closes first. |
+| `close(options := {}) -> void` | Release ALL backend-owned GPU handles (textures it allocated, samplers, shaders, pipelines, vertex buffer) and cancel active frame exports. The device stays yours — free it only after `close()` returns. Call once; repeat calls are no-ops. Textures you injected into the backend stay yours. |
 
 The result is **8-bit RGBA, linear (no sRGB), top-down**. Convert with
 `ImageTexture.create_from_image(img)` and use it on any material / `TextureRect`.
