@@ -499,9 +499,11 @@ of the delivered end, so the range is contiguous and the effective new delta is 
   immediately on display-init failure, the same environmental class (live rendering is covered by
   the job's native parity cases). No port file changed in this sync, so no pixel-parity re-sweep.
   Delta `git diff --stat 73c15be00d68..682739066d3b` committed verbatim in
-  `docs/COMPLETION_GAPS.md` §1, which now also carries the verbatim range log, ancestry checks, and
-  the complete `external-input.js` delta inline — the no-port ruling is checkable from the
-  repository alone, no upstream checkout required.
+  `docs/COMPLETION_GAPS.md` §1. Audit evidence (ancestry checks, full range log, per-path diffs,
+  and the verbatim `external-input.js` delta) archived with the job:
+  `evidence/68273906-sync/ancestry-and-delta.txt` and `evidence/68273906-sync/external-input.diff`
+  (Worker Elves job `cf361d7b-0d95-472f-acad-6b2ff8a1ea55`); the upstream reference checkout itself
+  is not part of this repository.
 
 **Compiler parity, fixed this round** (`expander.gd`) — found via `check_expand.mjs`/`check_graph.mjs`,
 both pre-existing gaps only now exercised by this round's `viewMode`-conditional pass pattern, not
