@@ -2,37 +2,48 @@
 
 ## 1. Source and authority revisions
 
-Report date: 2026-09-24. Source inspected: [`79e8a9794bccc04d2a29a40a7e21096b06115ccd`](https://github.com/noisefactorllc/noisemaker-for-godot/commit/79e8a9794bccc04d2a29a40a7e21096b06115ccd).
+Report date: 2026-09-29. Source inspected: [`5e215aee76797a419a41d6feedf810bc55052ccc`](https://github.com/noisefactorllc/noisemaker-for-godot/commit/5e215aee76797a419a41d6feedf810bc55052ccc).
+Local `main` and remote `main` match at this SHA.
 Full rendered parity at this SHA: **unverified**. This is not a release approval.
 A later documentation-only commit does not change this tested source identity.
 Any runtime, package, or authority update requires fresh evidence before this report can qualify it.
 
-Godot 4.7 Forward+ compiler and GPU renderer. [Source contract](https://github.com/noisefactorllc/noisemaker-for-godot/blob/79e8a9794bccc04d2a29a40a7e21096b06115ccd/README.md).
+Godot 4.7 Forward+ compiler and GPU renderer. [Source contract](https://github.com/noisefactorllc/noisemaker-for-godot/blob/5e215aee76797a419a41d6feedf810bc55052ccc/README.md).
 
 Historical tested authority revisions remain in the linked gap register. They are not relabeled as current qualification.
-Current upstream discovery SHA: `c9ee8a049b2b63cd300da67c01ee40baf29dc288`.
-Published authority: `1.0.176`, source `c9ee8a049b2b63cd300da67c01ee40baf29dc288`.
-[Immutable published manifest](https://shaders.noisedeck.app/1.0.176/effects/manifest.json) contains 210 effect IDs.
-Its SHA-256 is `05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e`.
+The goldens' bound reference revision is `a912749fab5c3819e56a8abde664ff30e40870f4`.
+The port's last synced reference is `73c15be00d6888f4b5d2835d8e242ee9e840df45` (2026-09-28).
+Upstream head observed 2026-09-29: `42843597e8ae954c27be60075688d00a4064ad14`.
+The delta past the synced reference changes `shaders/src/runtime/external-input.js`
+(audio capture, GAP-032 upstream) plus docs and dependency files.
+The effect catalog is unchanged in that delta.
+Published authority alias `1.0` serves a 210-ID manifest, SHA-256 `05c4d7b7744837ae90a3bb4c89e5403ff09448a74d9d7e824abb3d719ad3314e`.
+The sampled releases `1.0.176`, `1.0.196`, `1.0.197`, and `1.0.198` serve byte-identical manifests.
+Intermediate releases are unmeasured.
 These IDs do not define complete parameter, state, input, or platform coverage.
 
-Served kit `0.1.17` records `6335960ea16d7a1231355eafe5086ad3c73afd58`. [Source metadata](https://kits.noisedeck.app/godot/0/deployment-meta.json).
+Served kit `0.1.40` records `5e215aee76797a419a41d6feedf810bc55052ccc`. [Source metadata](https://kits.noisedeck.app/godot/0/deployment-meta.json).
+Daily review 2026-09-29 verified it: 1517 of 1517 manifest entries match by SHA-256 and byte count.
+All 883 source entries are verified. 882 are byte-identical to the commit tree.
+`LICENSES/noisemaker-MIT.txt` is byte-identical to the reference `LICENSE` at `a912749f`.
+The builder-generated `compat.json` holds 210 effect IDs that equal the repository effect set.
+The 634 `.glsl.import` entries are Godot-editor-generated import metadata.
 Historical measurements remain bound to their original revisions in [completion gaps](COMPLETION_GAPS.md).
 
 ## 2. Host and distribution matrix
 
 | Dimension | Status | Measured scope or limit |
 |---|---|---|
-| Source-level checks | unverified | Current probes render, but retained-golden comparisons differ: noise maximum 1 byte, perspective points maximum 243 bytes. Teardown reports leaked objects. |
-| Actual host rendering | verified | Only the bounded probes in section 3 executed. This is not full host qualification. |
+| Source-level checks | verified | Review 2026-09-29 re-ran engine-free suites 58/58, Godot-headless suites 49/49, and all compiler gates at `5e215ae`. |
+| Actual host rendering | partial | Native Metal receipts pass the two GAP-002 gate cases. The windowed battery ran green on the qualified host. Both are archived job evidence. The review container did not repeat them. |
 | Minimum and current host versions | unverified | Declared requirements are not a tested version matrix. |
-| Supported operating systems and backends | unverified | This pass does not establish Windows, Linux, and macOS coverage. |
-| Installed package and first useful result | unverified | Complete isolated installation was not qualified for this source. |
+| Supported operating systems and backends | unverified | macOS Metal and Linux headless are measured. Windows and Linux windowed rendering are not measured. |
+| Installed package and first useful result | verified for the served kit | Kit `0.1.40` fully byte-verified. 883 source entries: 882 match the commit tree, one matches the reference `LICENSE`. Kit playback evidence lives in the gap register. |
 | Parameters, external inputs, state, and chains | unverified | Full current-authority combinations remain unmeasured. |
-| Invalid input and recovery | unverified | Unit checks do not establish every installed public entry point. |
-| Upgrade, removal, and resource cleanup | unverified | Prior defects and missing workflows remain in the gap register. |
+| Invalid input and recovery | partial | Missing-device, invalid-DSL, and recovery probes pass at recorded revisions. The unknown-effect diagnostic stays open under GAP-004. |
+| Upgrade, removal, and resource cleanup | partial | The teardown ownership contract is implemented and gated (GAP-003 closed). Upgrade and removal remain unverified. |
 | Accessibility of provided controls | unverified | Keyboard, focus, labels, and diagnostics need host observations where applicable. |
-| Release readiness | blocked | Full parity, installation, host, and artifact evidence remain incomplete. |
+| Release readiness | blocked | Whole-port rendered parity, standalone notices (GAP-008), and release gating (GAP-006) remain open. |
 
 ## 3. Parity coverage
 
@@ -43,19 +54,23 @@ Unknown values mean `not measured`, never zero.
 
 | Gate | Expected cases | Executed | Strict passes | Failures | Skips | Status |
 |---|---|---|---|---|---|---|
-| Current full render suite | not measured | not measured | not measured | not measured | not measured | unverified |
+| Definitions versus reference `73c15be0` | 210 | 210 | 210 | 0 | 0 | Verified 2026-09-29. |
+| Compiler language gates versus reference | 352 each | 352 each | 352 each | 0 | 0 | Verified 2026-09-29. |
+| Registry (ops, enums, aliases, keys) | 210 / 8 / 44+0 / 628 | all | all | 0 | 0 | Verified 2026-09-29. |
+| Expansion | 352 | 352 | 344 | 0 | 0 | 8 documented pass-define differences. Normalized graphs match. |
+| Whole-port rendered parity | 342 | 0 | 0 | 0 | 342 | unexecuted in the check containers. Rendering needs a GPU-capable display, and none is present. |
+| GAP-002 gate cases | 2 | 2 | 2 | 0 | 0 | passed on native Metal (archived job evidence). Supervisor summary pending. |
 
 Served compatibility inventory declares 210 effect IDs. Declaration does not establish execution or parity.
 No missing ID conclusion follows without reconciling fixture behavior and the source contract.
 Missing effects remain visible toward the full-parity goal. Contract exclusions do not become successful tests.
 
-These probes use current candidate sources and retained golden files. Their historical authority provenance remains unresolved in this pass.
-They do not qualify the current upstream revision or full catalog. Exact comparison uses zero byte tolerance.
-
-| Probe | Evidence | Exact comparison |
-|---|---|---|
-| `noise` | [Retained-golden measurement](/Users/alex/.codex/automations/noisemaker-port-completion-audit/evidence-20260924-remaining-gap-documents/godot-noise-comparison.json) | failed |
-| `heightGrid_pointsRender_perspective` | [Retained-golden measurement](/Users/alex/.codex/automations/noisemaker-port-completion-audit/evidence-20260924-remaining-gap-documents/godot-heightGrid_pointsRender_perspective-comparison.json) | failed |
+Whole-port rendered parity is the qualification gap: `scripts/parity-summary` counts 342 expected ledger
+programs and has not executed them in a check environment. The two GAP-002 gate cases
+(`heightGrid_pointsRender_perspective`, `heightGrid_billboard_alpha`) pass on the qualified native host
+with comparator tolerance 2.001 and SSIM minimum 0.98, standalone and in ledger order.
+Eleven other native prefix cases still fail and stay recorded in the gap register.
+No tolerance, golden, or deferral record exists in this repository.
 
 ### Effect inventory
 
@@ -274,6 +289,8 @@ They do not qualify the current upstream revision or full catalog. Exact compari
 
 ### Native observations, 2026-09-24
 
+Historical record. Evidence paths refer to files retained on the audit source host.
+
 Godot 4.7, Forward+, Metal 4.0, Apple M4. 2 selected fixtures rendered. Exact comparison: 0 passes and 2 differences.
 The graphs and goldens are retained historical inputs. Their full authority provenance remains unresolved in this pass.
 These results do not qualify current upstream parity. Exact comparison uses zero byte tolerance.
@@ -293,8 +310,11 @@ Fixture counts do not prove coverage of every current effect, parameter, or stat
 
 ## 4. Evidence
 
-[Earlier audit and review evidence](COMPLETION_GAPS.md#3-methods-and-evidence). [Exact-source Actions](https://github.com/noisefactorllc/noisemaker-for-godot/actions?query=head_sha%3A79e8a9794bccc04d2a29a40a7e21096b06115ccd).
-[This run evidence](/Users/alex/.codex/automations/noisemaker-port-completion-audit/evidence-20260924-remaining-gap-documents) retains commands, exit codes, source identities, and distribution metadata.
+[Earlier audit and review evidence](COMPLETION_GAPS.md#3-methods-and-evidence). [Exact-source Actions](https://github.com/noisefactorllc/noisemaker-for-godot/actions?query=head_sha%3A5e215aee76797a419a41d6feedf810bc55052ccc).
+Review 2026-09-29 (`review-20260929-050000`) re-ran the engine-free and Godot-headless suites and all
+compiler gates, verified exact-source runs `36520432939` (Tests) and `36520432864` (Export kit) at the head,
+and byte-verified served kit `0.1.40` against the commit. Series evidence: `/series/review-20260929-050000/result.json`.
+Historical evidence paths recorded before the series migration refer to files retained on the audit source host.
 Official host references and historical environment limits remain in the linked gap register.
 Source CI, export dispatch, artifact delivery, and rendered parity are separate evidence dimensions.
 A successful dispatch or unit-test summary does not establish a full rendered gate.
@@ -303,10 +323,11 @@ A successful dispatch or unit-test summary does not establish a full rendered ga
 
 See [GAP-002 and the complete gap register](COMPLETION_GAPS.md#4-known-gaps) for evidence, dependencies, and acceptance criteria.
 
-1. Reconcile the current authority and complete case inventory, including parameters, inputs, stateful frames, and host versions.
-2. Run the existing actual-renderer suite without skip options. Record every missing, failed, refused, or timed-out case.
-3. Verify installation, useful output, errors, recovery, upgrades, and removal with the actual distribution.
-4. Inspect exact-source CI and retain artifact hashes. Keep unresolved qualification failed or unverified.
+1. Resolve the 11 native prefix failures and execute all 342 ledger programs. GAP-002 closure needs the supervisor-run `scripts/parity-summary` exact or strict for every case. Then close GAP-002 in a records-only commit.
+2. Port or rule on the upstream delta past the synced reference: `external-input.js` audio capture plus docs and dependency files.
+3. Resolve GAP-004 diagnostics and GAP-008 standalone notices through the implementation job.
+4. Continue GAP-005 catalog, editor, upgrade, and platform qualification. Define GAP-006 release acceptance.
+5. Inspect exact-source CI and retain artifact hashes. Keep unresolved qualification failed or unverified.
 
 All eligible ports have equal priority. Full parity and zero skipped cases remain the goal.
 Implementation corrections remain with the separate job. This report does not advance the parity checkpoint.
@@ -316,5 +337,6 @@ Implementation corrections remain with the separate job. This report does not ad
 | Date | Source | Result | Change |
 |---|---|---|---|
 | 2026-09-24 | `79e8a9794bccc04d2a29a40a7e21096b06115ccd` | Full qualification unverified | Created the requested maintained compatibility report. Preserved historical evidence and open gaps. |
+| 2026-09-29 | `5e215aee76797a419a41d6feedf810bc55052ccc` | Full qualification unverified. GAP-001 and GAP-003 closed in the register | Daily review refreshed source, kit, gate, and matrix records to the current head. Whole-port rendered parity stays unverified. |
 
-Run: `20260924-remaining-gap-documents`. Later audits and reviews update this report with source-bound results.
+Run: `20260924-remaining-gap-documents`, then daily review `review-20260929-050000`. Later audits and reviews update this report with source-bound results.

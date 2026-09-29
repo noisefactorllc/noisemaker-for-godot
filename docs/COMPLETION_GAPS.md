@@ -523,10 +523,43 @@ Gate re-run at `NM_REFERENCE_ROOT` pinned exactly at `73c15be00d68` (Godot
 registry ops 210/210 / enums 8/8 / paramAliases 44/44 / effectAliases 0/0 / effectKeys 628/628,
 lex/parse/validate/graph 352/352 each, expand 344/352 (the same 8 documented pass-defines diffs),
 `SMOKE: ALL PASS`, unittest 118 tests / 13 failures — all 13 Godot display-server-init
-environmental failures ("X11 Display is not available / Can't create the Wayland display
+environmental failures ("X11 Display is not available / Can't create the Wayland
 server"); the count moved from the previously recorded 96/12 because test files added since that
 record (kit playback, mesh pipeline) are themselves display-dependent and fail identically — the
 same environmental class, no non-environmental failure.
+
+Daily review date: 2026-09-29 UTC. Review ID: `review-20260929-050000`.
+No new worker audit result exists after `20260924-remaining-gap-documents-godot`.
+This review covers the published implementation range since that report and the current documents.
+
+| Review source | Revision |
+| --- | --- |
+| Reviewed local and remote `main` | `5e215aee76797a419a41d6feedf810bc55052ccc` |
+| Current published Godot kit | `0.1.40`, same source SHA |
+| Port's last synced reference | `73c15be00d6888f4b5d2835d8e242ee9e840df45` |
+| Upstream head observed | `42843597e8ae954c27be60075688d00a4064ad14` |
+| Goldens' bound reference | `a912749fab5c3819e56a8abde664ff30e40870f4` |
+
+Independent re-verification at the head (Linux container, Godot `4.7.stable.official.5b4e0cb0f`,
+reference pinned at `73c15be0`): engine-free `scripts/test` 58/58, `--godot-headless` 49/49,
+definitions 210/210, lex/parse/validate/graph 352/352 each, registry all PASS
+(ops 210/210, enums 8/8, paramAliases 44/44, effectAliases 0/0, effectKeys 628/628),
+expand 344/352 with exactly the 8 documented pass-define diffs, smoke `SMOKE: ALL PASS`.
+Exact-source CI at `5e215ae`: Tests run `36520432939` and Export kit run `36520432864` both pass.
+Tests `36495184989` and Export kit `36495185025` pass at `7d26d93` (kit `0.1.39`).
+Tests `36470085678` passes at `938527f`.
+Served kit `0.1.40` byte-verified. 1517 of 1517 manifest entries match by SHA-256 and byte count.
+882 source entries are byte-identical to `git show 5e215ae:<path>`.
+`LICENSES/noisemaker-MIT.txt` is byte-identical to the reference `LICENSE` at `a912749f`.
+`compat.json` is builder-generated and its ID set equals the repository's 210 effect IDs.
+The 634 `.glsl.import` entries are editor-generated metadata.
+Upstream delta past the synced reference: `shaders/src/runtime/external-input.js` (audio capture,
+commits `a5059106` and `68273906`, upstream GAP-032), its test, and docs/dependency files.
+`shaders/effects` and `shaders/src/lang` diffs are empty.
+The published authority alias `1.0` serves the unchanged 210-ID manifest
+(SHA-256 `05c4d7b7…`). The sampled releases `1.0.176`, `1.0.196`, `1.0.197`,
+and `1.0.198` serve byte-identical manifests. Intermediate releases are unmeasured.
+Evidence: `/series/review-20260929-050000/result.json`.
 
 ## 2. Completion claims
 
@@ -538,7 +571,7 @@ same environmental class, no non-environmental failure.
 | C-004 | Published README, Run it and Editing it | Sampled animation playback and editable frame controls | supported | (2026-09-26) Kit `main.gd` now steps `FRAMES`, samples every `SAMPLE_EVERY`, and loops stills at `PLAYBACK_FPS`; all controls verified on Godot 4.7 with `navierStokes.dsl` (see GAP-001 closure evidence). Historical finding: published 0.1.16/0.1.17 rendered one frame with no controls. |
 | C-005 | Addon README, troubleshooting | Developers receive useful errors and can recover | partial | Missing-device error explains recovery. Invalid effect reports a missing surface. Corrected DSL renders successfully. |
 | C-006 | Addon README, integration | Useful Godot scripting integration | partial | Public compiler, renderer, and `ImageTexture` path work. Cleanup reports resource warnings. Editor interaction remains unverified. |
-| C-007 | Export kit workflow and artifact | Release readiness | partial | Exact-source release succeeds. All 882 file hashes match the 2026-09-23 audit authority (`893a9a558ad9...`) only; the delivered upstream range (`9d3474df..2f47612c`) is later than that authority, so hash identity does not evidence the ported changes (see the 2026-09-25 sync row in section 1). Rebuild inventory matches. CI does not run Godot behavior or pixel comparisons. |
+| C-007 | Export kit workflow and artifact | Release readiness | partial | Exact-source release succeeds. All 882 file hashes match the 2026-09-23 audit authority (`893a9a558ad9...`) only; the delivered upstream range (`9d3474df..2f47612c`) is later than that authority, so hash identity does not evidence the ported changes (see the 2026-09-25 sync row in section 1). Rebuild inventory matches. Review 2026-09-29: served kit `0.1.40` at the head is byte-verified, 883 source entries against the commit tree or the reference `LICENSE`. `tests.yml` now runs the engine-free and Godot-headless suites at every push (run `36520432939`). Rendered pixel parity and windowed suites remain outside CI. |
 | C-008 | README and STATUS platform limits | Apple Silicon qualification | partial | Audit checks cover M2 and Godot 4.7.2. Review checks cover bounded M4 workflows on Godot 4.7. Other platforms remain unverified. |
 | C-009 | Root README, Install | Standalone addon distribution | contradicted | The instructed addon copy omits license notices. The export kit includes both notices. See GAP-008. |
 
@@ -772,6 +805,7 @@ The reviewer checked all entries on 2026-09-24, with the coverage limits in sect
 - Scope: Existing export-kit dispatch and Scaffold release checks.
 - Expected: Release evidence identifies which runtime and parity requirements passed for the shipped source.
 - Observed: Both exact-source jobs pass, but their checks validate packaging rather than Godot execution or rendered parity.
+- Review correction (2026-09-29): `tests.yml` (added at `66b6dbf`) runs the engine-free and Godot-headless suites at every push to `main`. It uses a checksum-verified official Godot 4.7 build. Release evidence now includes real Godot execution. Rendered pixel parity and the windowed suites remain outside CI, so the gap stays open for those.
 - Evidence: Source run `35810075402`, release run `35810082616`, and retained logs.
 - Review evidence: Source run `35951202302` and release run `35951211347` still qualify packaging only.
 - Next action: Define release acceptance through the existing systems. Keep package integrity, runtime correctness, and human usability separate.
@@ -809,24 +843,26 @@ The reviewer checked all entries on 2026-09-24, with the coverage limits in sect
 
 ## 5. Ordered next actions
 
-1. Preserve both source checkpoints, immutable kit manifests, raw images, and the worker's authority before implementation.
-2. Resolve GAP-001 in `export-kit/kit/main.gd` and its template. Execute the scene observer with a temporal fixture.
-   Require changing displayed frames and working documented controls. Then check cancellation and recovery from the installed artifact.
-3. Diagnose GAP-002 using the retained failing point images and the comparator command above. Require both existing thresholds.
-   Recover the historical reference and full execution order before evaluating the separate alpha failure.
-4. Correct GAP-008's standalone distribution independently of playback work. Require exact notice comparisons and the isolated first render.
-5. Define ownership under GAP-003. Repeat `consumer-api.gd` across creation, resize, rendering, and disposal.
-   Require no leaked-handle warnings or growing retained counts. Preserve frame-export cancellation and the existing runtime tests.
-6. Trace GAP-004 through `compiler/graph/orchestrator.gd` and both public entry points.
-   Require an unknown-effect diagnostic before rendering. Then require successful output from corrected DSL in the same installation.
-7. Resolve GAP-005's evidence dependencies after the behavior checks. Qualify filtering modes, stateful chains, editor operation, upgrades, and supported hosts.
-8. Define GAP-006's acceptance through existing CI after required behavior and distribution checks. Preserve failures and platform exclusions.
-9. Correct GAP-007's current summaries after the supported behavior is clear. Preserve historical status evidence.
+1. Resolve the 11 native prefix failures recorded in the GAP-002 record, then execute all 342
+   ledger programs. GAP-002 lists no `Parity cases:` field, so closure counts the whole port.
+   The 2 gate cases that pass on the qualified native host cover only 2 of 342.
+   Close GAP-002 in a records-only commit only after the supervisor-run
+   `scripts/parity-summary` reports every expected case exact or strict, with zero
+   near, defer, skip, fail, or missing.
+2. Port or rule on the upstream delta `73c15be0..42843597` in the next sync round:
+   `shaders/src/runtime/external-input.js` audio capture (upstream GAP-032) plus docs and dependency files.
+   The effect catalog is unchanged. Re-run all gates at the pinned reference and record the rulings.
+3. Resolve GAP-004: propagate the unknown-effect diagnostic through `compiler/graph/orchestrator.gd`
+   and both public entry points. Require a diagnostic before rendering and recovery after correction.
+4. Correct GAP-008: ship the port and upstream license notices with the documented standalone addon copy.
+   Require exact notice comparisons and the isolated first render.
+5. Continue GAP-005: qualify the remaining catalog, editor workflow,
+   upgrades, and removal. Bind each measurement to exact source revisions.
+6. Define GAP-006 release acceptance through existing CI. Keep rendered parity, platform limits,
+   and unresolved failures explicit in the release record.
+7. Correct GAP-007 summaries after the supported behavior is clear. Preserve historical status evidence.
 
-`KIT` identifies the installed candidate. `WORKER` identifies `evidence-20260923-godot-05` in the automation store.
-`OUT` identifies an isolated evidence directory. `ADDON` identifies the installed standalone addon.
-`GOLDEN` and `CANDIDATE` identify the preserved reference and candidate PNGs.
-
+Implementation belongs to the separate job.
 These actions specify acceptance work. They do not authorize new effect ports or advancement beyond the current parity checkpoint.
 
 ## 6. Pass history
@@ -850,6 +886,7 @@ smoke re-run after it, counts unchanged). Gates on Linux headless: smoke 85/85, 
 `76b4dac0d21c8cd265a635d7942a91b98a991fd7` (refs/heads/main; machine-verified receipt
 `8addaf72-3d63-4fb4-bf4b-afeda4b91320`, 2026-09-26) — the first CI run covering this candidate. | No gap closes. No pixel-parity re-sweep, windowed GPU run, or editor interaction evidence for this commit yet; upstream runtime fidelity (`fsMip`/`fsScale`, `extractTextureSpecs`, `recreateTexturePreserving`, the `13a8a049..2f47612c` empty-diff claim) is audited by content against the reference clone with the reproducible commands AND committed observed outputs recorded in section 1 (no independent party has re-run them in its own environment); the 5 display-dependent test failures are baseline-identical at `55c3c92` (verified, recorded in section 1); the post-audit upstream changes remain unqualified pending windowed checks. |
 | 2026-09-26 | This sync commit (upstream `2f47612c2904..6a0af04d3c4f`; see the 2026-09-26 rows in section 1) | Closed the remaining delta to upstream `6a0af04d`: ported GAP-006 opt-in texture pooling (`6113da00`+`95743621` — plan build from `graph.allocations` with all reference safety guards, alias application, regroup release with per-unique-RID free dedupe, `get_resource_plan`, default OFF, wired through `render_graph.gd --texture-pooling`/batch requests which now actually call `set_texture_pooling` and print `NM_RESOURCE_PLAN`) and the structured backend diagnostic union (`f83a427e` — new `runtime/shader_diagnostics.gd`, `last_shader_diagnostic` on compile/link/missing-source failures with unchanged legacy `push_error` text); `fa83eeab` confirmed already ported; docs-only/CI-only commits audited with outputs committed verbatim in section 1 (empty `shaders/effects`/`shaders/src/lang` diff). Gates on Linux headless (Godot `4.7.stable.official.5b4e0cb0f`, reference clone at upstream `6a0af04d`): definitions 210/210, lex/parse/validate/graph 352/352, registry pass, expand 344/352 (the same 8 documented diffs), smoke ALL PASS, unittest 83/88 (4 new tests incl. headless alias/release bookkeeping with a counting free callable; the 5 failures are the same display-dependent windowed tests as the baseline). | No gap closes. No pixel-parity re-sweep and no windowed GPU run for this commit (pooling is default-off and shader math untouched; the opt-in runtime path is exercised headless at the plan/alias/release bookkeeping level and via the now-live `--texture-pooling` CLI, but not yet under a real windowed RenderingDevice); the 5 windowed test failures and the historical GAP-001..GAP-008 findings remain open. |
+| 2026-09-29 | `5e215aee76797a419a41d6feedf810bc55052ccc` | Daily review `review-20260929-050000`. Re-ran engine-free 58/58 and Godot-headless 49/49 suites plus all compiler gates. Verified exact-source CI (Tests `36520432939`, Export kit `36520432864`). Byte-verified served kit `0.1.40`: 883 source entries match the commit tree or the reference `LICENSE`. GAP-001 and GAP-003 closures retained after source-level verification. Corrected C-007 and GAP-006 CI observations. Refreshed next actions and the compatibility report. | Whole-port rendered parity stays unverified. GAP-002 awaits the supervisor-run parity summary. GAP-004 through GAP-008 remain open. Upstream delta `73c15be0..42843597` awaits the next sync round. |
 
 Post-sync native-run note (2026-09-26): the first `godot-parity` native run of `59c1a6f` FAILED on
 its first required case (`compare-adjust` exit 1, `parity/out/adjust.report.json` written on the
