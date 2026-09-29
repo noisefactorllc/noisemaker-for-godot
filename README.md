@@ -103,9 +103,11 @@ $GODOT --path godot --script res://addons/noisemaker/tools/render_graph.gd \
   directional/spin blur, scatter, wind, pond ripples, extrude, halftone, stipple, oil paint,
   watercolor, plastic wrap, relief, photocopy, stamp, chrome, hatch, strokes, craquelure, mosaic
   tiles, patchwork, and lens flare — plus low poly extended with stained-glass borders/light), plus
-  the agent sims, **renders**. The parity sweep passes **216/216** programs: most land within 1-2/255
-  (SSIM ≈ 1.0); ~20 are SSIM-gated for sub-pixel resampling / discontinuity / discrete-selection
-  drift. See **[STATUS.md](STATUS.md)**.
+  the agent sims, **renders**. The committed parity ledger (`parity/ledger.json`, 342 programs) holds
+  291 PASS, 49 NEAR, and 2 FAIL verdicts from sweep runs. Most PASS cases land within 1-2/255
+  (SSIM ≈ 1.0). The NEAR cases are accepted only under widened per-case tolerances and SSIM gates
+  defined inline in `parity/sweep.sh` (`tol_for`). They are not strict parity passes, and no separate
+  tolerance record is published. See **[STATUS.md](STATUS.md)**.
 - **Particle/agent sims and fluid (navier–stokes)** render and match the reference.
 - **Chaotic** particle-and-fluid programs render correctly, but as a *different instance* of the same
   chaos — they match in look and behavior, not pixel-for-pixel (tiny GPU rounding differences get

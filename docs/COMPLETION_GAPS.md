@@ -559,6 +559,20 @@ commits `a5059106` and `68273906`, upstream GAP-032), its test, and docs/depende
 The published authority alias `1.0` serves the unchanged 210-ID manifest
 (SHA-256 `05c4d7b7…`). The sampled releases `1.0.176`, `1.0.196`, `1.0.197`,
 and `1.0.198` serve byte-identical manifests. Intermediate releases are unmeasured.
+Final-acceptance round corrections (2026-09-29): `README.md` claimed a 216/216 sweep pass while
+the committed ledger holds 291 PASS, 49 NEAR, and 2 FAIL, and about 50 programs run widened
+tolerances — the claim is restated from the ledger with the tolerance source named.
+`scripts/parity-summary` can classify a case from an earlier run's report and candidate after
+a nonzero render exit, because `parity/run.sh` can exit on a missing graph before deleting the
+old candidate. The fix is routed to the implementation job: delete the stale report and
+candidate before rendering and add regression tests. This review's authority is documents
+only, so the published entrypoint is unchanged.
+`ARCHITECTURE.md` still records a stale sweep claim ("last recorded 216/216, 3 skips").
+That file is outside this review's edit authority and the claim is routed through GAP-007.
+Fixture coverage is measured from the programs' normalized render graphs
+(reference compiler): 183 of 210 authority effects are exercised, 27 have no fixture.
+The first measurement, 144/210, wrongly joined on the ledger's `effect` field, which is
+null for 36 entries. The graph-based count supersedes it.
 Evidence: `/series/review-20260929-050000/result.json`.
 
 ## 2. Completion claims
@@ -747,6 +761,23 @@ The reviewer checked all entries on 2026-09-24, with the coverage limits in sect
 - Required checks: Run the existing comparator with tolerance 2.001 and SSIM minimum 0.98. Preserve rejected cases and raw images.
 - Executable check: `python3 parity/compare.py "$GOLDEN" "$CANDIDATE" --tolerance 2.001 --ssim-min 0.98 --report "$OUT/report.json"`.
 - Pass condition: Exit 0 with both thresholds satisfied. A high SSIM alone cannot excuse the failing maximum difference.
+- Review corrections (2026-09-29, final-acceptance rounds): First, `scripts/parity-summary` can
+  classify a case from an earlier run's report and candidate after a nonzero render exit, and
+  `parity/run.sh` can exit on a missing graph before deleting the old candidate. The fix is
+  routed to the implementation job: delete the stale report and candidate before rendering and
+  add regression tests. This review's authority is documents only, so the published entrypoint
+  is unchanged. Second, fixture coverage is measured from the programs' normalized render graphs
+  (reference compiler): 183 of 210 authority effects are exercised and 27 have no fixture —
+  9 `points/*` sims (attractor, buddhabrot, dla, flock, hydraulic, lenia, life, physarum,
+  physical), 7 `render/*` effects (`loopBegin`, `loopEnd`, `meshLoader`, `meshRender`,
+  `renderCubemap3d`, `renderCubemapSurface`, `renderLit3d`), and 11 others listed in the
+  series evidence. `points/flow`, `points/heightGrid`, and `render/pointsRender` are covered.
+  Executing the 342 ledger programs alone cannot establish current-authority coverage, so
+  closure additionally requires fixtures for the uncovered effects or an explicit recorded
+  accounting. The first measurement, 144/210, wrongly joined on the ledger's `effect` field,
+  which is null for 36 entries. The graph-based count supersedes it. The native Metal and
+  windowed results above are implementation-job reports. This review could not re-read the
+  archived receipts and verified the source-level implementation and headless suites instead.
 
 ### GAP-003: Backend teardown leaves GPU resources allocated
 
@@ -819,7 +850,7 @@ The reviewer checked all entries on 2026-09-24, with the coverage limits in sect
 - Scope: Root README, addon README, STATUS, and parity README.
 - Expected: Current guidance separates present behavior from historical measurements and explicit exclusions.
 - Observed: Counts include approximately 180 effects, 216/216 programs, 209 definitions, and 214/214 compiler cases.
-- Evidence: Current source contains 210 definitions and 352 compiler fixtures. STATUS still calls some shipped shader namespaces staged with zero shaders.
+- Evidence: Current source contains 210 definitions and 352 compiler fixtures. STATUS still calls some shipped shader namespaces staged with zero shaders. Review 2026-09-29: `ARCHITECTURE.md` line 105 still claims `parity/sweep.sh` "last recorded 216/216, 3 skips". The committed ledger contradicts it with 291 PASS, 49 NEAR, and 2 FAIL. That file is outside the review's edit authority and awaits scoped documentation work.
 - Additional inconsistency: The addon excludes audio input broadly while runtime state APIs and tests support bounded audio behavior.
 - Next action: Correct current summaries through scoped documentation work. Preserve historical measurements with their dates and source qualifications.
 - Dependencies: GAP-001, GAP-002, and GAP-005 establish the acceptance boundaries.
@@ -843,24 +874,32 @@ The reviewer checked all entries on 2026-09-24, with the coverage limits in sect
 
 ## 5. Ordered next actions
 
-1. Resolve the 11 native prefix failures recorded in the GAP-002 record, then execute all 342
+1. Route the parity entrypoint repair through the implementation job: `parity/run.sh` must
+   delete the stale report before its early exits, and `scripts/parity-summary` must delete
+   the stale candidate and report before rendering, with regression tests, so a nonzero
+   render exit can never classify from an earlier run's artifacts.
+2. Resolve the 11 native prefix failures recorded in the GAP-002 record, then execute all 342
    ledger programs. GAP-002 lists no `Parity cases:` field, so closure counts the whole port.
    The 2 gate cases that pass on the qualified native host cover only 2 of 342.
+   Reconcile ledger fixture coverage to the current authority manifest first: 183 of 210
+   authority effects have a fixture and 27 have none. Closure requires a fixture for
+   every uncovered effect or an explicit recorded accounting.
    Close GAP-002 in a records-only commit only after the supervisor-run
    `scripts/parity-summary` reports every expected case exact or strict, with zero
    near, defer, skip, fail, or missing.
-2. Port or rule on the upstream delta `73c15be0..42843597` in the next sync round:
+3. Port or rule on the upstream delta `73c15be0..42843597` in the next sync round:
    `shaders/src/runtime/external-input.js` audio capture (upstream GAP-032) plus docs and dependency files.
    The effect catalog is unchanged. Re-run all gates at the pinned reference and record the rulings.
-3. Resolve GAP-004: propagate the unknown-effect diagnostic through `compiler/graph/orchestrator.gd`
+4. Resolve GAP-004: propagate the unknown-effect diagnostic through `compiler/graph/orchestrator.gd`
    and both public entry points. Require a diagnostic before rendering and recovery after correction.
-4. Correct GAP-008: ship the port and upstream license notices with the documented standalone addon copy.
+5. Correct GAP-008: ship the port and upstream license notices with the documented standalone addon copy.
    Require exact notice comparisons and the isolated first render.
-5. Continue GAP-005: qualify the remaining catalog, editor workflow,
+6. Continue GAP-005: qualify the remaining catalog, editor workflow,
    upgrades, and removal. Bind each measurement to exact source revisions.
-6. Define GAP-006 release acceptance through existing CI. Keep rendered parity, platform limits,
+7. Define GAP-006 release acceptance through existing CI. Keep rendered parity, platform limits,
    and unresolved failures explicit in the release record.
-7. Correct GAP-007 summaries after the supported behavior is clear. Preserve historical status evidence.
+8. Correct GAP-007 summaries after the supported behavior is clear, including the stale
+   `ARCHITECTURE.md` sweep claim. Preserve historical status evidence.
 
 Implementation belongs to the separate job.
 These actions specify acceptance work. They do not authorize new effect ports or advancement beyond the current parity checkpoint.
@@ -886,7 +925,7 @@ smoke re-run after it, counts unchanged). Gates on Linux headless: smoke 85/85, 
 `76b4dac0d21c8cd265a635d7942a91b98a991fd7` (refs/heads/main; machine-verified receipt
 `8addaf72-3d63-4fb4-bf4b-afeda4b91320`, 2026-09-26) — the first CI run covering this candidate. | No gap closes. No pixel-parity re-sweep, windowed GPU run, or editor interaction evidence for this commit yet; upstream runtime fidelity (`fsMip`/`fsScale`, `extractTextureSpecs`, `recreateTexturePreserving`, the `13a8a049..2f47612c` empty-diff claim) is audited by content against the reference clone with the reproducible commands AND committed observed outputs recorded in section 1 (no independent party has re-run them in its own environment); the 5 display-dependent test failures are baseline-identical at `55c3c92` (verified, recorded in section 1); the post-audit upstream changes remain unqualified pending windowed checks. |
 | 2026-09-26 | This sync commit (upstream `2f47612c2904..6a0af04d3c4f`; see the 2026-09-26 rows in section 1) | Closed the remaining delta to upstream `6a0af04d`: ported GAP-006 opt-in texture pooling (`6113da00`+`95743621` — plan build from `graph.allocations` with all reference safety guards, alias application, regroup release with per-unique-RID free dedupe, `get_resource_plan`, default OFF, wired through `render_graph.gd --texture-pooling`/batch requests which now actually call `set_texture_pooling` and print `NM_RESOURCE_PLAN`) and the structured backend diagnostic union (`f83a427e` — new `runtime/shader_diagnostics.gd`, `last_shader_diagnostic` on compile/link/missing-source failures with unchanged legacy `push_error` text); `fa83eeab` confirmed already ported; docs-only/CI-only commits audited with outputs committed verbatim in section 1 (empty `shaders/effects`/`shaders/src/lang` diff). Gates on Linux headless (Godot `4.7.stable.official.5b4e0cb0f`, reference clone at upstream `6a0af04d`): definitions 210/210, lex/parse/validate/graph 352/352, registry pass, expand 344/352 (the same 8 documented diffs), smoke ALL PASS, unittest 83/88 (4 new tests incl. headless alias/release bookkeeping with a counting free callable; the 5 failures are the same display-dependent windowed tests as the baseline). | No gap closes. No pixel-parity re-sweep and no windowed GPU run for this commit (pooling is default-off and shader math untouched; the opt-in runtime path is exercised headless at the plan/alias/release bookkeeping level and via the now-live `--texture-pooling` CLI, but not yet under a real windowed RenderingDevice); the 5 windowed test failures and the historical GAP-001..GAP-008 findings remain open. |
-| 2026-09-29 | `5e215aee76797a419a41d6feedf810bc55052ccc` | Daily review `review-20260929-050000`. Re-ran engine-free 58/58 and Godot-headless 49/49 suites plus all compiler gates. Verified exact-source CI (Tests `36520432939`, Export kit `36520432864`). Byte-verified served kit `0.1.40`: 883 source entries match the commit tree or the reference `LICENSE`. GAP-001 and GAP-003 closures retained after source-level verification. Corrected C-007 and GAP-006 CI observations. Refreshed next actions and the compatibility report. | Whole-port rendered parity stays unverified. GAP-002 awaits the supervisor-run parity summary. GAP-004 through GAP-008 remain open. Upstream delta `73c15be0..42843597` awaits the next sync round. |
+| 2026-09-29 | `5e215aee76797a419a41d6feedf810bc55052ccc` | Daily review `review-20260929-050000`. Re-ran engine-free 58/58 and Godot-headless 49/49 suites plus all compiler gates. Verified exact-source CI (Tests `36520432939`, Export kit `36520432864`). Byte-verified served kit `0.1.40`: 883 source entries match the commit tree or the reference `LICENSE`. GAP-001 and GAP-003 closures retained after source-level verification. Corrected C-007 and GAP-006 CI observations. Final-acceptance rounds: corrected the README sweep claim from the ledger. Recorded the stale-artifact classification defect in the parity entrypoint, with the fix routed to the implementation job. Measured fixture coverage (183/210 authority effects, from render graphs). | Whole-port rendered parity stays unverified. GAP-002 awaits the supervisor-run parity summary and authority-manifest fixture coverage. GAP-004 through GAP-008 remain open. Upstream delta `73c15be0..42843597` awaits the next sync round. |
 
 Post-sync native-run note (2026-09-26): the first `godot-parity` native run of `59c1a6f` FAILED on
 its first required case (`compare-adjust` exit 1, `parity/out/adjust.report.json` written on the

@@ -34,8 +34,8 @@ Historical measurements remain bound to their original revisions in [completion 
 
 | Dimension | Status | Measured scope or limit |
 |---|---|---|
-| Source-level checks | verified | Review 2026-09-29 re-ran engine-free suites 58/58, Godot-headless suites 49/49, and all compiler gates at `5e215ae`. |
-| Actual host rendering | partial | Native Metal receipts pass the two GAP-002 gate cases. The windowed battery ran green on the qualified host. Both are archived job evidence. The review container did not repeat them. |
+| Source-level checks | verified | Review 2026-09-29 re-ran engine-free 58/58, Godot-headless 49/49, and all compiler gates at `5e215ae`. The same batteries stayed green at the documents-only review candidates. |
+| Actual host rendering | partial | The implementation job reports native Metal passes for the two GAP-002 gate cases and a green windowed battery. This review could not re-read those archived receipts. It verified the source-level implementation and the headless suites instead. |
 | Minimum and current host versions | unverified | Declared requirements are not a tested version matrix. |
 | Supported operating systems and backends | unverified | macOS Metal and Linux headless are measured. Windows and Linux windowed rendering are not measured. |
 | Installed package and first useful result | verified for the served kit | Kit `0.1.40` fully byte-verified. 883 source entries: 882 match the commit tree, one matches the reference `LICENSE`. Kit playback evidence lives in the gap register. |
@@ -59,7 +59,7 @@ Unknown values mean `not measured`, never zero.
 | Registry (ops, enums, aliases, keys) | 210 / 8 / 44+0 / 628 | all | all | 0 | 0 | Verified 2026-09-29. |
 | Expansion | 352 | 352 | 344 | 0 | 0 | 8 documented pass-define differences. Normalized graphs match. |
 | Whole-port rendered parity | 342 | 0 | 0 | 0 | 342 | unexecuted in the check containers. Rendering needs a GPU-capable display, and none is present. |
-| GAP-002 gate cases | 2 | 2 | 2 | 0 | 0 | passed on native Metal (archived job evidence). Supervisor summary pending. |
+| GAP-002 gate cases | 2 | 2 | 2 | 0 | 0 | reported passing on native Metal by the implementation job. Not independently re-checked. Supervisor summary pending. |
 
 Served compatibility inventory declares 210 effect IDs. Declaration does not establish execution or parity.
 No missing ID conclusion follows without reconciling fixture behavior and the source contract.
@@ -67,9 +67,14 @@ Missing effects remain visible toward the full-parity goal. Contract exclusions 
 
 Whole-port rendered parity is the qualification gap: `scripts/parity-summary` counts 342 expected ledger
 programs and has not executed them in a check environment. The two GAP-002 gate cases
-(`heightGrid_pointsRender_perspective`, `heightGrid_billboard_alpha`) pass on the qualified native host
-with comparator tolerance 2.001 and SSIM minimum 0.98, standalone and in ledger order.
+(`heightGrid_pointsRender_perspective`, `heightGrid_billboard_alpha`) are reported passing on the
+qualified native host by the implementation job, with comparator tolerance 2.001 and SSIM minimum
+0.98, standalone and in ledger order. This review could not re-read the archived receipts.
 Eleven other native prefix cases still fail and stay recorded in the gap register.
+The ledger derives its cases locally, so it does not by itself establish authority coverage:
+review 2026-09-29 measured fixture coverage from the programs' normalized render graphs
+(reference compiler, all 342 programs) — 183 of 210 authority effects are exercised, and 27
+have no fixture (list in the series evidence).
 No tolerance, golden, or deferral record exists in this repository.
 
 ### Effect inventory
@@ -323,7 +328,7 @@ A successful dispatch or unit-test summary does not establish a full rendered ga
 
 See [GAP-002 and the complete gap register](COMPLETION_GAPS.md#4-known-gaps) for evidence, dependencies, and acceptance criteria.
 
-1. Resolve the 11 native prefix failures and execute all 342 ledger programs. GAP-002 closure needs the supervisor-run `scripts/parity-summary` exact or strict for every case. Then close GAP-002 in a records-only commit.
+1. Route the parity entrypoint repair through the implementation job: a nonzero render exit must never classify from an earlier run's report or candidate. Resolve the 11 native prefix failures and execute all 342 ledger programs. Reconcile ledger fixture coverage to the current authority manifest: 27 of 210 authority effects still lack any fixture. GAP-002 closure needs the supervisor-run `scripts/parity-summary` exact or strict for every expected case. Then close GAP-002 in a records-only commit.
 2. Port or rule on the upstream delta past the synced reference: `external-input.js` audio capture plus docs and dependency files.
 3. Resolve GAP-004 diagnostics and GAP-008 standalone notices through the implementation job.
 4. Continue GAP-005 catalog, editor, upgrade, and platform qualification. Define GAP-006 release acceptance.
