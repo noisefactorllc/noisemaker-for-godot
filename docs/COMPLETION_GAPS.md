@@ -573,6 +573,15 @@ plus `test_cancellation_then_recovery`, which requires the windowed 1800-frame r
 running at its 5 s cancel window and so fails identically when Godot exits immediately on
 display-init failure — the same environmental class, no non-environmental failure.
 
+Audit evidence for the range rulings above is archived with the job (Worker Elves job
+`cf361d7b-0d95-472f-acad-6b2ff8a1ea55`, evidence `68273906-sync`): `ancestry-and-delta.txt` holds
+the verbatim ancestry checks, full `git log --oneline` for the range, `git diff --stat`, and the
+empty `shaders/effects` / `shaders/src/lang` diffs; `external-input.diff` holds the complete
+`shaders/src/runtime/external-input.js` delta, confirming every hunk is inside the web
+`AudioInputManager` class (`getUserMedia` capture, `AudioState` device/channel registration,
+`ChannelSplitterNode`/per-channel analysers, teardown) with no pipeline, backend, compiler, lang,
+or effect-catalog change. The upstream reference checkout is not part of this repository.
+
 Daily review date: 2026-09-29 UTC. Review ID: `review-20260929-050000`.
 No new worker audit result exists after `20260924-remaining-gap-documents-godot`.
 This review covers the published implementation range since that report and the current documents.
