@@ -89,6 +89,7 @@ Delivered-range diff (diffed directly in a local upstream checkout, not assumed)
 | `73c15be0` (2026-09-28 sync, `a912749fab5c..73c15be00d68`) | GAP-026: invoke `onInit`/`onUpdate`/`onDestroy` lifecycle hooks in the production renderer — +129 `shaders/src/runtime/pipeline.js` (hook detection, managed-effect map, per-frame `onUpdate` uniform overlay with fallback priority), +3 `shaders/src/runtime/compiler.js` (`recompile` re-runs lifecycle init) | Nothing to port: the hooks are the JS Effect object model's config/subclass callbacks; the only shipped effect defining them is `synth/media` (unchanged this range) whose `onUpdate` returns `imageSize` from web-app media state (`setMediaDimensions`), not render-graph math. The Godot port's effect surface is data (JSON definitions + GLSL) with no Effect object model — no per-effect callback exists to invoke, and `mediaInput`'s `imageSize` is resolved from the supplied input texture by the port's own uniform machinery |
 | `c28e8fdb` (2026-09-28 sync, same range) | GAP-026-adjacent WebGL2 fix: after `ensureDepthBuffer` the WebGL2 backend rebinds the framebuffer (allocating a depth renderbuffer unbinds the FBO mid-pass) — +2 `shaders/src/runtime/backends/webgl2.js` | Nothing to port: RenderingDevice has no persistent FBO binding — `nm_backend.gd` allocates the depth texture when building the framebuffer attachment list, before `draw_list_begin`, so no bind→draw window exists for an allocation to invalidate |
 | `a5059106` + `68273906` (2026-09-29 sync, `73c15be00d68..682739066d3b`) | GAP-032: multi-device audio capture — +272 `shaders/src/runtime/external-input.js` (the web `AudioInputManager` opens one extra `getUserMedia` stream per selected-device requirement from `Pipeline.getAudioInputRequirements()`, registers devices/channels on `AudioState`, splits channels via `ChannelSplitterNode` with per-channel analysers, tears down through public reset paths), +312 `shaders/tests/test_external_input.js` | Nothing to port: browser host capture integration (`getUserMedia`/`AudioContext`/device enumeration), not render-graph math. The port's mirrored audio surface is the graph-side `nm_backend.gd get_audio_input_requirements()` (gated by `parity/test_runtime_contract.py`), which upstream did not change in this range; the port consumes host-fed samples (`set_audio_samples`) and capture belongs to the Godot host application. The JS test is never-ported (upstream's harness is not a mirrored surface) |
+| `4d47b3fd` + `4f5e0d28` (2026-09-29 sync, `682739066d3b..4f5e0d28bdc1`) | GAP-032 follow-ups: audio channel-shortfall diagnostics — +38 `shaders/src/runtime/external-input.js` (new `AudioInputManager._channelShortfall()` helper plus a post-open validation loop in `_syncCaptures()` warning when an already-captured device exposes fewer channels than a selected requirement asks for, including the deviceless capture stored under the null `deviceId` key), +82 `shaders/tests/test_external_input.js`, upstream `scripts/test` header fix | Nothing to port: browser capture diagnostics inside the web `AudioInputManager` (`getUserMedia` device-inventory lookups only), not render-graph math. The port's mirrored audio surface, the graph-side `nm_backend.gd get_audio_input_requirements()` (gated by `parity/test_runtime_contract.py`), is unchanged upstream in this range; the port consumes host-fed samples (`set_audio_samples`). The JS test is never-ported (upstream's harness is not a mirrored surface) |
 
 Effect-catalog parity: no effect definition, effect shader, DSL lang, or registry file changed in the
 range (upstream `shaders/effects` and `shaders/src/lang` diffs are empty for the delivered range);
@@ -581,6 +582,46 @@ empty `shaders/effects` / `shaders/src/lang` diffs; `external-input.diff` holds 
 `AudioInputManager` class (`getUserMedia` capture, `AudioState` device/channel registration,
 `ChannelSplitterNode`/per-channel analysers, teardown) with no pipeline, backend, compiler, lang,
 or effect-catalog change. The upstream reference checkout is not part of this repository.
+
+2026-09-29 sync (`682739066d3b..4f5e0d28bdc1`; declared job range `682739066d3b..4f5e0d28bdc1`,
+forced, observed ranges `c4606d1194c5..4d47b3fd8262`, `4d47b3fd8262..4f5e0d28bdc1`). Ancestry
+observed verbatim (fresh full clone, all endpoints present): `git merge-base --is-ancestor
+682739066d3b 4f5e0d28bdc1` → exit 0; `c4606d1194c5` and `4d47b3fd8262` each an ancestor of the
+delivered end — the range is contiguous, the last-synced reference `682739066d3b` is its start, so
+the effective new delta is the linear 6-commit `682739066d3b..4f5e0d28bdc1` (`git log --oneline` →
+`4f5e0d28`, `4d47b3fd`, `c4606d11`, `42843597`, `8fec3d05`, `bff453e9`).
+
+    $ git diff --stat 682739066d3b..4f5e0d28bdc1
+        LEDGER.md                             | 181 +++++++++++++++++++++++++++++++++-
+        llms-full.txt                         |  18 ++--
+        scripts/test                          |   7 ++
+        shaders/src/runtime/external-input.js |  38 +++++++
+        shaders/tests/test_external_input.js  |  82 +++++++++++++++
+        5 files changed, 317 insertions(+), 9 deletions(-)
+    $ git diff --stat 682739066d3b..4f5e0d28bdc1 -- shaders/effects
+    (empty — 0 bytes)
+    $ git diff --stat 682739066d3b..4f5e0d28bdc1 -- shaders/src/lang
+    (empty — 0 bytes)
+    $ git diff --name-only 682739066d3b..4f5e0d28bdc1 -- shaders/src
+    shaders/src/runtime/external-input.js
+    $ git log -1 --format='%H %s' 4f5e0d28bdc1
+    4f5e0d28bdc155700393c314e9a5aafcc4da91fd fix(audio): warn for deviceless captures too; record 4d47b3f delivery evidence
+
+Rulings per commit: `4d47b3fd`/`4f5e0d28` (upstream GAP-032 follow-ups, audio channel-shortfall
+warnings) inapplicable to the Godot port — both hunks live inside the web `AudioInputManager`
+(`_channelShortfall()` helper and a post-open validation loop in `_syncCaptures()` covering the
+deviceless null-`deviceId` capture); the graph-side `nm_backend.gd get_audio_input_requirements()`
+is unchanged upstream in this range. `c4606d11`, `42843597`, `8fec3d05`, `bff453e9` docs/ledger-only.
+Per-commit reasoning in the §1 table and STATUS.md. Audit-only sync: no port file changed.
+
+Gate re-run at `NM_REFERENCE_ROOT` pinned exactly at `4f5e0d28bdc1` (Godot
+`4.7.stable.official.5b4e0cb0f`, Linux headless; numbers in STATUS.md): definitions 210/210,
+registry ops 210/210 / enums 8/8 / paramAliases 44/44 / effectAliases 0/0 / effectKeys 628/628,
+lex/parse/validate/graph 352/352 each, expand 344/352 (the same 8 documented pass-defines diffs),
+`SMOKE: ALL PASS`, unittest 121 tests / 14 failures — the same recorded Godot display-server-init
+environmental class, no non-environmental failure. Audit evidence (ancestry checks, range log,
+per-path diffs, and the verbatim `external-input.js` delta) archived with the job as
+`evidence/4f5e0d28-sync/`.
 
 Daily review date: 2026-09-29 UTC. Review ID: `review-20260929-050000`.
 No new worker audit result exists after `20260924-remaining-gap-documents-godot`.
