@@ -309,13 +309,13 @@ Existing tolerance-based acceptance remains separate. No tolerance or golden cha
 |---|---|---|---|---|---|---|
 | Tracked program files | 342 | 2 | 0 | 2 | 340 | unverified |
 
-Every unexecuted fixture remains visible in the [fixture inventory](/Users/alex/.codex/automations/noisemaker-port-completion-audit/evidence-20260924-remaining-gap-documents/godot-fixture-inventory.json).
+Every unexecuted fixture remains visible in the fixture inventory (audit evidence `evidence-20260924-remaining-gap-documents/godot-fixture-inventory.json`).
 Fixture counts do not prove coverage of every current effect, parameter, or stateful workflow.
 
 | Case | Exact result | Measurement | Evidence |
 |---|---|---|---|
-| `heightGrid_pointsRender_perspective` | failed | [FAIL] heightGrid_pointsRender_perspective: max-abs-diff=243.000 mean-abs-diff=0.7143 ssim=0.99785 (tol=0.0, ssim_min=0.98) | [Raw command](/Users/alex/.codex/automations/noisemaker-port-completion-audit/evidence-20260924-remaining-gap-documents/godot-heightGrid_pointsRender_perspective-comparison-command.json) |
-| `noise` | failed | [FAIL] noise: max-abs-diff=1.000 mean-abs-diff=0.3756 ssim=0.99996 (tol=0.0, ssim_min=0.98) | [Raw command](/Users/alex/.codex/automations/noisemaker-port-completion-audit/evidence-20260924-remaining-gap-documents/godot-noise-comparison-command.json) |
+| `heightGrid_pointsRender_perspective` | failed | [FAIL] heightGrid_pointsRender_perspective: max-abs-diff=243.000 mean-abs-diff=0.7143 ssim=0.99785 (tol=0.0, ssim_min=0.98) | Raw command (audit evidence `evidence-20260924-remaining-gap-documents/godot-heightGrid_pointsRender_perspective-comparison-command.json`) |
+| `noise` | failed | [FAIL] noise: max-abs-diff=1.000 mean-abs-diff=0.3756 ssim=0.99996 (tol=0.0, ssim_min=0.98) | Raw command (audit evidence `evidence-20260924-remaining-gap-documents/godot-noise-comparison-command.json`) |
 
 ## 4. Evidence
 
