@@ -24,10 +24,34 @@ func _init(registry) -> void:
 	reg = registry
 
 # Compile DSL source into the normalized render graph.
+# GAP-004: when the lexer/parser records a structured error or the validator collects a
+# severity="error" diagnostic, the pipeline REJECTS before expansion and returns
+# {"compileError": {stage, diagnostics: [<NM_COMPILE_DIAG lines>]}} instead of a renderable
+# graph — the unknown-effect / malformed-syntax case can no longer reach rendering and surface
+# only as a missing output surface. Structured stage contracts are unchanged: callers may still
+# drive lexer/parser/validator directly, and warning-only diagnostics (S002/S007/S008, P008-P010)
+# do not reject (the valid corpus carries them).
 func build_graph(source: String, options: Dictionary = {}) -> Dictionary:
 	var tokens := Lexer.lex(source)
-	var ast = Parser.new().parse_tokens(tokens)
-	var validated = Validator.new(reg).validate(ast)
+	if Lexer.get_last_diagnostic() != null:
+		return _compile_rejection("lexer", [Lexer.get_last_diagnostic()])
+	var parser := Parser.new()
+	var ast = parser.parse_tokens(tokens)
+	# P008-P010 are warning-severity and do not reject (the valid corpus carries them).
+	# The parser records a single fail-first diagnostic per parse (structured parser
+	# contract preserved): a program with several syntax errors surfaces them one
+	# rejection at a time — fix the reported one and resubmit to see the next.
+	var pdiag = parser.last_diagnostic
+	if pdiag != null and (pdiag is Dictionary and str(pdiag.get("severity", "error")) == "error"):
+		return _compile_rejection("parser", [pdiag])
+	var validator := Validator.new(reg)
+	var validated = validator.validate(ast)
+	var errors: Array = []
+	for d in validated.get("diagnostics", []):
+		if d is Dictionary and str(d.get("severity", "")) == "error":
+			errors.push_back(d)
+	if not errors.is_empty():
+		return _compile_rejection("validate", errors)
 	var expanded = Expander.new(reg).expand(validated, options)
 	var passes: Array = expanded["passes"]
 	var programs: Dictionary = expanded["programs"]
@@ -43,6 +67,26 @@ func build_graph(source: String, options: Dictionary = {}) -> Dictionary:
 		"renderSurface": expanded["renderSurface"],
 	}
 	return _normalize_graph(graph)
+
+# ---------------------------------------------------------------- diagnostic rejection (GAP-004)
+
+# Render an actionable NM_COMPILE_DIAG line per diagnostic and return the compileError envelope.
+func _compile_rejection(stage: String, diagnostics: Array) -> Dictionary:
+	var lines: Array = []
+	for d in diagnostics:
+		if d is Dictionary:
+			var loc = d.get("location")
+			var line = loc.get("line", "") if loc is Dictionary else ""
+			var col = loc.get("column", "") if loc is Dictionary else ""
+			var msg := ("NM_COMPILE_DIAG stage=%s code=%s severity=%s line=%s column=%s message=%s"
+				% [stage, d.get("code", ""), d.get("severity", ""), line, col, d.get("message", "")])
+			lines.push_back(msg)
+			printerr(msg)
+		else:
+			var msg := "NM_COMPILE_DIAG stage=" + stage + " message=" + str(d)
+			lines.push_back(msg)
+			printerr(msg)
+	return {"compileError": {"stage": stage, "diagnostics": lines}}
 
 # ---------------------------------------------------------------- texture specs (compiler.js)
 

@@ -119,7 +119,7 @@ var final_img: Image = frames[0]
 
 | Member | Purpose |
 |---|---|
-| `build_graph(source: String, options := {}) -> Dictionary` | Compile a DSL string to the normalized render graph (lex→parse→validate→expand→normalize), fully in-engine. |
+| `build_graph(source: String, options := {}) -> Dictionary` | Compile a DSL string to the normalized render graph (lex→parse→validate→expand→normalize), fully in-engine. On invalid input (unknown effect, malformed syntax, lexer errors, or any validator error diagnostic) it returns `{"compileError": {"stage", "diagnostics": [<NM_COMPILE_DIAG lines>]}}` instead of a renderable graph — check this before rendering and report the diagnostics to the user. Warning-only diagnostics do not reject. |
 
 `Backend` (`runtime/nm_backend.gd`):
 

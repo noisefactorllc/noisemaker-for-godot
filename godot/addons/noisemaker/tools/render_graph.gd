@@ -83,14 +83,12 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 	if (graph_path == "" and dsl_path == "") or out_path == "":
 		printerr("bad render request: graph/dsl and out are required")
 		return false
-	var rd := RenderingServer.create_local_rendering_device()
-	if rd == null:
-		printerr("RD_NULL: RenderingDevice unavailable (run non-headless, with a window)")
-		return false
 
 	var graph
 	if dsl_path != "":
-		# Self-contained path: compile the DSL to a render graph in-engine.
+		# Self-contained path: compile the DSL to a render graph in-engine. GAP-004: compile
+		# BEFORE the RenderingDevice check so an invalid program is reported as an actionable
+		# NM_COMPILE_DIAG diagnostic without rendering, even in headless runs.
 		var src := FileAccess.get_file_as_string(dsl_path)
 		if src == "":
 			printerr("cannot read dsl: ", dsl_path)
@@ -107,6 +105,16 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 		f.close()
 	if typeof(graph) != TYPE_DICTIONARY:
 		printerr("bad graph: ", graph_path if graph_path != "" else dsl_path)
+		return false
+	if graph.has("compileError"):
+		# GAP-004: the compiler rejected the DSL before expansion; the orchestrator already
+		# printed each NM_COMPILE_DIAG line to stderr. Nothing renders, and the request fails.
+		printerr("compile failed (stage=", graph["compileError"].get("stage", ""), "): no render")
+		return false
+
+	var rd := RenderingServer.create_local_rendering_device()
+	if rd == null:
+		printerr("RD_NULL: RenderingDevice unavailable (run non-headless, with a window)")
 		return false
 
 	var Backend = preload("res://addons/noisemaker/runtime/nm_backend.gd")

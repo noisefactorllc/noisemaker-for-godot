@@ -29,6 +29,7 @@ ENGINE_FREE=(
 )
 GODOT_HEADLESS=(
 	parity.test_capture_quantization
+	parity.test_compile_diagnostics
 	parity.test_compiler_automation
 	parity.test_frame_export.FrameExportTests.test_sink_manager_and_bounded_queue_contracts
 	parity.test_lifecycle.HeadlessLifecycleTests

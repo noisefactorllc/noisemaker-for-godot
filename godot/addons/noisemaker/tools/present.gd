@@ -36,16 +36,23 @@ func _run() -> void:
 	if src == "":
 		printerr("cannot read dsl: ", dsl_path); quit(1); return
 
+	# --- compile first (GAP-004): reject an invalid program before any RenderingDevice work ---
+	print("[present] compiling DSL in-engine ...")
+	var reg := EffectRegistry.new()
+	reg.load_all()
+	var compiled = Orchestrator.new(reg).build_graph(src)
+	if compiled.has("compileError"):
+		# The orchestrator already printed each NM_COMPILE_DIAG line to stderr.
+		printerr("compile failed (stage=", compiled["compileError"].get("stage", ""), "): no render")
+		quit(1); return
+
 	var rd := RenderingServer.create_local_rendering_device()
 	if rd == null:
 		printerr("RD_NULL: RenderingDevice unavailable (run non-headless, with a window)")
 		quit(1); return
 
-	# --- compile + render the sim in-engine (self-contained) ---
-	print("[present] compiling DSL in-engine ...")
-	var reg := EffectRegistry.new()
-	reg.load_all()
-	var graph = Orchestrator.new(reg).build_graph(src)
+	# --- evolve + render the sim in-engine (self-contained) ---
+	var graph: Dictionary = compiled
 	var backend = Backend.new()
 	backend.setup(rd, "res://addons/noisemaker", Vector2i(size, size))
 	var total_frames := seconds * 60

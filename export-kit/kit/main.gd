@@ -35,14 +35,22 @@ func _ready() -> void:
 	# Paint the warning before the blocking compute pass.
 	await get_tree().process_frame
 
+	# Compile first (GAP-004): an invalid program must surface an actionable
+	# NM_COMPILE_DIAG diagnostic before any RenderingDevice/render work happens.
+	var reg := EffectRegistry.new()
+	reg.load_all()
+	var graph = Orchestrator.new(reg).build_graph(dsl)
+	if graph.has("compileError"):
+		# The orchestrator already printed each NM_COMPILE_DIAG line to the engine console.
+		push_error("compile failed (stage=%s): no render" % graph["compileError"].get("stage", ""))
+		$Status.text = "Failed: the program is invalid (see the engine console for the NM_COMPILE_DIAG diagnostic)."
+		return
+
 	var rd := RenderingServer.create_local_rendering_device()
 	if rd == null:
 		push_error("RenderingDevice unavailable")
 		$Status.text = "Failed: RenderingDevice unavailable (needs a window and Forward+)."
 		return
-	var reg := EffectRegistry.new()
-	reg.load_all()
-	var graph = Orchestrator.new(reg).build_graph(dsl)
 
 	var backend := Backend.new()
 	backend.setup(rd, "res://addons/noisemaker", Vector2i(SIZE, SIZE))
