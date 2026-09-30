@@ -1072,7 +1072,7 @@ diagnostic was set or the tail truncated it. The fifth run (`3d4444e`) adds `NM_
 executed/skipped/surface_valid` on stdout AND stderr plus a missing-output structured diagnostic
 and a stderr-only DIAG block, so its tail must show how many passes executed and whether the
 render surface RID is valid before the compare fails. Working hypothesis: an environment-specific
-rendering failure on the `native-spare` runner (historical ledger PASSes are macOS; the anomalous
+rendering failure on the macOS native runner (historical ledger PASSes are macOS; the anomalous
 signature matches the pre-existing `heightGrid_billboard_alpha` batch anomaly), not the sync's
 pooling-off allocation path, which is byte-identical to the pre-sync baseline (`git diff
 fc4e6d0..59c1a6f` on `nm_backend.gd` removes only the relocated `var texs` declaration).
