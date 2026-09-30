@@ -901,17 +901,27 @@ The reviewer checked all entries on 2026-09-24, with the coverage limits in sect
 
 ### GAP-004: Public compilation loses useful error diagnostics
 
-- Status: open. Priority: P2. Category: usability.
+- Status: closed (verified at commit `2137663`). Priority: P2. Category: usability.
 - Scope: `compiler/graph/orchestrator.gd`, `tools/render_graph.gd`, and exported project startup.
 - Expected: Invalid DSL identifies the offending effect and location before rendering starts.
 - Observed: `notAnEffect()` reaches rendering and reports only a missing output surface.
 - Evidence: `invalid.log`, exit 1, no PNG. `recovery.log` records valid DSL success through the same installed renderer.
 - Review evidence: `invalid-current.log` and `recovery-current.log` reproduce both results with kit 0.1.17.
 - Cause evidence: `build_graph()` obtains validation diagnostics but does not expose or reject them before expansion.
-- Next action: Preserve the failing input. Trace diagnostic propagation through the public compiler and host entry points.
-- Dependencies: Preserve the structured lexer and validator contracts already covered by tests.
-- Acceptance: The unknown-effect input produces an actionable diagnostic without rendering. Correcting it restores output.
-- Required checks: Test unknown effects, malformed syntax, missing files, and missing devices through both public entry points.
+- Fix (commit `2137663`, base `e86c628`): `build_graph()` now rejects before expansion — returning
+  `{"compileError": {"stage", "diagnostics"}}` with actionable `NM_COMPILE_DIAG` lines
+  (stage/code/severity/line/column/message, incl. the offending identifier) to stderr — when the
+  lexer/parser recorded an error-severity diagnostic or the validator collected a
+  severity="error" diagnostic. Warning-only diagnostics (P008-P010, S002, S007, S008) do not
+  reject, matching the valid corpus. `tools/render_graph.gd` (single + batch), `tools/present.gd`,
+  and `export-kit/kit/main.gd` (exported project startup) compile before any RenderingDevice work
+  and fail without rendering on a compileError graph. The structured lexer, parser, and validator
+  contracts are unchanged and remain directly callable (the parser stays fail-first, one
+  rejection per fix). `addons/noisemaker/README.md` documents the compileError contract for
+  startup integrations.
+- Acceptance: The unknown-effect input produces an actionable diagnostic without rendering. Correcting it restores output. (Met: executed on the Godot 4.7 host, `parity/test_compile_diagnostics.py` 11/11 OK — unknown effect, malformed syntax, missing file, and missing device through both public entry points, with the invalid-request exit code 1, an `NM_COMPILE_DIAG` naming `notAnEffect` in stderr, and no PNG written; valid DSL compiles without diagnostics and reaches the render path — the missing-device baseline headless (`RD_NULL`, exit 1) and real-GPU rendering through the published renderer in the native check below. Evidence `gap004-headless-run2`, `gap004-smoke` (`SMOKE: ALL PASS`), `gap004-compiler-automation` (`parity.test_compiler_automation` 28/28 OK).)
+- Required checks: Test unknown effects, malformed syntax, missing files, and missing devices through both public entry points. (Done: all four through `render_graph.gd` single and batch paths, `present.gd`, and the export-kit startup path in a throwaway kit copy, in the executed headless suite above, registered in `scripts/test` GODOT_HEADLESS.)
+- Publication verification: exact-source CI green at `2137663` (run 36673093032 tests, run 36673093140 export-kit, both success); required native cases `adjust`, `alphaMask`, `bitwise` all passed under the `godot-parity` profile on Godot `4.7.stable.official.5b4e0cb0f` darwin/arm64 with GPU available (thresholds max_abs_diff 2, ssim_min 0.98), native review receipt `1210bfab-4ed0-4007-91ed-d9d9a26206fb`, verified 2026-09-30T05:28:39Z.
 
 ### GAP-005: Current behavior and host qualification are incomplete
 
@@ -993,8 +1003,9 @@ The reviewer checked all entries on 2026-09-24, with the coverage limits in sect
    inapplicable (browser host capture integration; the port's mirrored
    `get_audio_input_requirements()` surface is unchanged upstream in the range). The effect catalog
    is unchanged. All gates re-run at the pinned reference; rulings in STATUS.md and the §1 table.
-4. Resolve GAP-004: propagate the unknown-effect diagnostic through `compiler/graph/orchestrator.gd`
-   and both public entry points. Require a diagnostic before rendering and recovery after correction.
+4. Resolved (2026-09-30): GAP-004 closed at `2137663` — the unknown-effect diagnostic propagates
+   through `compiler/graph/orchestrator.gd` and all public entry points, with the executed
+   headless checks recorded in the GAP-004 row above.
 5. Correct GAP-008: ship the port and upstream license notices with the documented standalone addon copy.
    Require exact notice comparisons and the isolated first render.
 6. Continue GAP-005: qualify the remaining catalog, editor workflow,
