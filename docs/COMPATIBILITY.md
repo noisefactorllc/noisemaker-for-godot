@@ -61,7 +61,7 @@ Unknown values mean `not measured`, never zero.
 | Definitions versus reference `73c15be0` | 210 | 210 | 210 | 0 | 0 | Verified 2026-09-29. |
 | Compiler language gates versus reference | 352 each | 352 each | 352 each | 0 | 0 | Verified 2026-09-29. |
 | Registry (ops, enums, aliases, keys) | 210 / 8 / 44+0 / 628 | all | all | 0 | 0 | Verified 2026-09-29. |
-| Expansion | 352 | 352 | 352 | 0 | 0 | Verified 2026-10-01: 58 pass-define selector entries in 8 programs accepted by `parity/expand_acceptance.mjs` (same suffixed program selected both sides, segment-boundary encoded); any other difference fails the gate. Evidence: Worker Elves job `a5c3ef3a-e013-47f4-92c7-c110809003bd`, evidence `evidence-1790834417371.tar.gz`. |
+| Expansion | 352 | 352 | 352 | 0 | 0 | Verified 2026-10-01: 58 pass-define selector entries in 8 programs accepted by `parity/expand_acceptance.mjs` (same suffixed program selected both sides, segment-boundary encoded); any other difference fails the gate. Evidence: Worker Elves job `a5c3ef3a-e013-47f4-92c7-c110809003bd`, evidence `evidence-1790834813126.tar.gz` (raw readable gate transcript `gap005-check-expand.raw.out` with revision binding `gap005-check-expand.binding.md`). |
 | Whole-port rendered parity | 342 | 0 | 0 | 0 | 342 | unexecuted in the check containers. Rendering needs a GPU-capable display, and none is present. |
 | GAP-002 gate cases | 2 | 2 | 2 | 0 | 0 | reported passing on native Metal by the implementation job. Not independently re-checked. Supervisor summary pending. |
 
