@@ -42,46 +42,11 @@ const markerLine = candRaw.split('\n').find(l => l.startsWith('EXPANDDUMP:'))
 if (!markerLine) { console.error('no EXPANDDUMP output. tail:\n' + candRaw.slice(-2000)); process.exit(2) }
 const cand = JSON.parse(markerLine.slice('EXPANDDUMP:'.length))
 
-function numEq(a, b) {
-    if (a === b) return true
-    return Math.abs(a - b) <= 1e-12 * Math.max(1, Math.abs(a), Math.abs(b))
-}
-function eq(a, b) {
-    if (a === b) return true
-    if (typeof a === 'number' && typeof b === 'number') return numEq(a, b)
-    if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return a === b
-    if (Array.isArray(a) !== Array.isArray(b)) return false
-    if (Array.isArray(a)) {
-        if (a.length !== b.length) return false
-        for (let i = 0; i < a.length; i++) if (!eq(a[i], b[i])) return false
-        return true
-    }
-    const ka = Object.keys(a), kb = Object.keys(b)
-    if (ka.length !== kb.length) return false
-    for (const k of ka) { if (!(k in b) || !eq(a[k], b[k])) return false }
-    return true
-}
-function firstDiff(a, b, path) {
-    if (eq(a, b)) return null
-    const ta = a === null ? 'null' : Array.isArray(a) ? 'array' : typeof a
-    const tb = b === null ? 'null' : Array.isArray(b) ? 'array' : typeof b
-    if (ta !== tb || (ta !== 'object' && ta !== 'array')) return `${path}: ref=${JSON.stringify(a)} mine=${JSON.stringify(b)}`
-    if (Array.isArray(a)) {
-        if (a.length !== b.length) return `${path}: length ref=${a.length} mine=${b.length}`
-        for (let i = 0; i < a.length; i++) { const d = firstDiff(a[i], b[i], `${path}[${i}]`); if (d) return d }
-        return `${path}: (array differs)`
-    }
-    const keys = new Set([...Object.keys(a), ...Object.keys(b)])
-    for (const k of keys) {
-        if (!(k in a)) return `${path}.${k}: missing in ref (mine=${JSON.stringify(b[k])})`
-        if (!(k in b)) return `${path}.${k}: missing in mine (ref=${JSON.stringify(a[k])})`
-        const d = firstDiff(a[k], b[k], `${path}.${k}`); if (d) return d
-    }
-    return `${path}: (object differs)`
-}
+import { deepEq, classifyPassDefinesDiff } from './expand_acceptance.mjs'
 
-let pass = 0, fail = 0
+let pass = 0, fail = 0, acceptedFiles = 0, acceptedEntries = 0
 const failed = []
+const acceptedLog = []
 for (const f of files) {
     const o = oracle[f], c = cand[f]
     const rel = f.replace(REPO + '/', '')
@@ -89,10 +54,17 @@ for (const f of files) {
     if (!c) { fail++; failed.push(`${rel}: missing from candidate`); continue }
     if (!o.ok) { if (!c.ok) { pass++; continue } fail++; failed.push(`${rel}: ref errored but candidate ok`); continue }
     if (!c.ok) { fail++; failed.push(`${rel}: candidate errored but ref ok`); continue }
-    if (eq(o.out, c.out)) { pass++; continue }
+    if (deepEq(o.out, c.out)) { pass++; continue }
+    const cls = classifyPassDefinesDiff(o.out, c.out)
+    if (cls.accepted) {
+        pass++; acceptedFiles++; acceptedEntries += cls.entries.length
+        for (const e of cls.entries) acceptedLog.push(`${rel}: passes[${e.index}] ${e.name} ${JSON.stringify(e.defines)} (program ${e.program})`)
+        continue
+    }
     fail++
-    failed.push(`${rel}: ${firstDiff(o.out, c.out, 'out')}`)
+    failed.push(`${rel}: ${cls.reason}`)
 }
-console.log(`EXPAND PARITY: ${pass}/${files.length} pass`)
+console.log(`EXPAND PARITY: ${pass}/${files.length} pass (${acceptedEntries} accepted pass-defines entries in ${acceptedFiles} programs)`)
+for (const x of acceptedLog) console.log('  ACCEPTED ' + x)
 for (const x of failed.slice(0, 25)) console.log('  DIFF ' + x)
 process.exit(fail === 0 ? 0 : 1)

@@ -23,6 +23,7 @@ export PYTHONDONTWRITEBYTECODE=1
 # new suite cannot be silently left out.
 ENGINE_FREE=(
 	parity.test_artistic_matrix
+	parity.test_expand_acceptance
 	parity.test_harness_contract
 	parity.test_parity_summary
 	parity.test_shader_coverage
