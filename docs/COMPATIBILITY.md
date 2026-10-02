@@ -47,7 +47,7 @@ Historical measurements remain bound to their original revisions in [completion 
 | Invalid input and recovery | partial | Missing-device, invalid-DSL, and recovery probes pass at recorded revisions. The unknown-effect diagnostic stays open under GAP-004. |
 | Upgrade, removal, and resource cleanup | partial | The teardown ownership contract is implemented and gated (GAP-003 closed). Upgrade and removal remain unverified. |
 | Accessibility of provided controls | unverified | Keyboard, focus, labels, and diagnostics need host observations where applicable. |
-| Release readiness | blocked | Whole-port rendered parity, standalone notices (GAP-008), and release gating (GAP-006) remain open. |
+| Release readiness | blocked | Whole-port rendered parity (GAP-002), standalone notices (GAP-008) remain open. GAP-006 release acceptance is defined and measured in [COMPLETION_GAPS.md](COMPLETION_GAPS.md#gap-006-release-ci-does-not-qualify-godot-behavior); a green packaging summary is not whole-port approval. |
 
 ## 3. Parity coverage
 
