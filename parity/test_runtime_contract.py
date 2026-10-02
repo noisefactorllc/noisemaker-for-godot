@@ -868,6 +868,59 @@ class RuntimeContractTests(unittest.TestCase):
         body = source[start:source.index("func ", start + 1)]
         self.assertIn('s == "screen" or s == "auto" or s == "input" or s == "resolution"', body)
 
+    def test_fallback_diagnostics_recorded(self):
+        script = """
+            extends SceneTree
+
+            # Upstream GAP-007 (e24c844f8dad): historically-silent fallbacks
+            # surface structured records on a capped DiagnosticCollector instead
+            # of pure silence. The port's RenderingDevice analogues are the
+            # unknown-texture-format rgba16f fallback and the unknown dimension
+            # spec screen fallback; recognized forms (keywords, known formats)
+            # record nothing, and each fallback dedupes per key.
+            func _init() -> void:
+                var Backend := load("res://addons/noisemaker/runtime/nm_backend.gd")
+                var b = Backend.new()
+                var diag = b._shader_diag
+                var ok: bool = b._resolve_dim("weird-spec", 256) == 256
+                ok = ok and b._resolve_dim("resolution", 256) == 256 \\
+                    and b._resolve_dim("screen", 256) == 256 \\
+                    and diag.records.size() == 1
+                var rec: Dictionary = diag.records[0]
+                ok = ok and rec["code"] == "ERR_DIMENSION_FALLBACK" \\
+                    and rec["backend"] == "renderingdevice" \\
+                    and rec["stage"] == "dimension" \\
+                    and rec["fallback"] == "screen"
+                ok = ok and b._resolve_dim("weird-spec", 256) == 256 \\
+                    and diag.records.size() == 1
+                var fmt: int = b._data_format("banana16f")
+                ok = ok and fmt == RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT \\
+                    and diag.records.size() == 2 \\
+                    and diag.records[1]["code"] == "ERR_UNKNOWN_FORMAT_FALLBACK" \\
+                    and diag.records[1]["stage"] == "texture-create" \\
+                    and diag.records[1]["format"] == "banana16f" \\
+                    and diag.records[1]["fallback"] == "rgba16f"
+                ok = ok and b._data_format("banana16f") == fmt \\
+                    and diag.records.size() == 2
+                ok = ok and b._data_format("rgba8unorm") == RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM \\
+                    and b._data_format("rgba32float") == RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT \\
+                    and diag.records.size() == 2
+                for i in range(70):
+                    diag.add_record({"i": i})
+                ok = ok and diag.records.size() == 64 and diag.records[0]["i"] == 6
+                diag.clear_records()
+                ok = ok and diag.records.is_empty()
+                if ok:
+                    print("FALLBACK_DIAGNOSTICS_TEST: PASS")
+                    quit(0)
+                else:
+                    print("FALLBACK_DIAGNOSTICS_TEST: records=", diag.records)
+                    quit(1)
+        """
+        result = self._run_godot_script(script)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("FALLBACK_DIAGNOSTICS_TEST: PASS", result.stdout, result.stdout + result.stderr)
+
     def test_shader_diagnostics_parse_and_normalize(self):
         script = """
             extends SceneTree

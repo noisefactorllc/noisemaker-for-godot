@@ -50,6 +50,28 @@ const DIAGNOSTIC_CODES := {
 
 var last_diagnostic: Dictionary = {}
 
+# Mirror of the reference's DiagnosticCollector (upstream GAP-007,
+# backends/diagnostics.js at e24c844f8dad): a capped, queryable store for
+# structured diagnostics that are RECORDED rather than thrown — the historically
+# silent fallbacks keep their behavior (no new failure) but surface records
+# instead of silence. The port records on nm_backend.gd's single
+# ShaderDiagnostics instance; the reference caps each collector at 64.
+const RECORD_CAP := 64
+
+var records: Array = []
+
+
+# Record a structured diagnostic. Returns the record (mirrors add(record)).
+func add_record(record: Dictionary) -> Dictionary:
+	records.append(record)
+	if records.size() > RECORD_CAP:
+		records.pop_front()
+	return record
+
+
+func clear_records() -> void:
+	records.clear()
+
 const _BINDING_RE := "binding index (\\d+) not present"
 const _GLSL_LINE_RE := "^(ERROR|WARNING):\\s*\\d+:(\\d+):\\s*(.*)$"
 

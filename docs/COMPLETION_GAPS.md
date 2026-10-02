@@ -90,7 +90,9 @@ Delivered-range diff (diffed directly in a local upstream checkout, not assumed)
 | `c28e8fdb` (2026-09-28 sync, same range) | GAP-026-adjacent WebGL2 fix: after `ensureDepthBuffer` the WebGL2 backend rebinds the framebuffer (allocating a depth renderbuffer unbinds the FBO mid-pass) — +2 `shaders/src/runtime/backends/webgl2.js` | Nothing to port: RenderingDevice has no persistent FBO binding — `nm_backend.gd` allocates the depth texture when building the framebuffer attachment list, before `draw_list_begin`, so no bind→draw window exists for an allocation to invalidate |
 | `a5059106` + `68273906` (2026-09-29 sync, `73c15be00d68..682739066d3b`) | GAP-032: multi-device audio capture — +272 `shaders/src/runtime/external-input.js` (the web `AudioInputManager` opens one extra `getUserMedia` stream per selected-device requirement from `Pipeline.getAudioInputRequirements()`, registers devices/channels on `AudioState`, splits channels via `ChannelSplitterNode` with per-channel analysers, tears down through public reset paths), +312 `shaders/tests/test_external_input.js` | Nothing to port: browser host capture integration (`getUserMedia`/`AudioContext`/device enumeration), not render-graph math. The port's mirrored audio surface is the graph-side `nm_backend.gd get_audio_input_requirements()` (gated by `parity/test_runtime_contract.py`), which upstream did not change in this range; the port consumes host-fed samples (`set_audio_samples`) and capture belongs to the Godot host application. The JS test is never-ported (upstream's harness is not a mirrored surface) |
 | `4d47b3fd` + `4f5e0d28` (2026-09-29 sync, `682739066d3b..4f5e0d28bdc1`) | GAP-032 follow-ups: audio channel-shortfall diagnostics — +38 `shaders/src/runtime/external-input.js` (new `AudioInputManager._channelShortfall()` helper plus a post-open validation loop in `_syncCaptures()` warning when an already-captured device exposes fewer channels than a selected requirement asks for, including the deviceless capture stored under the null `deviceId` key), +82 `shaders/tests/test_external_input.js`, upstream `scripts/test` header fix | Nothing to port: browser capture diagnostics inside the web `AudioInputManager` (`getUserMedia` device-inventory lookups only), not render-graph math. The port's mirrored audio surface, the graph-side `nm_backend.gd get_audio_input_requirements()` (gated by `parity/test_runtime_contract.py`), is unchanged upstream in this range; the port consumes host-fed samples (`set_audio_samples`). The JS test is never-ported (upstream's harness is not a mirrored surface) |
-| `dd4606ea` + `a0e9bbff` + `e24c844f` (2026-10-02 sync, `4f5e0d28bdc155700393c314e9a5aafcc4da91fd..e24c844f8dada85551ab084f41db8944fbc176c8`) | Upstream GAP-007 final closure: backend diagnostics — +32 `shaders/src/runtime/backends/diagnostics.js` (new codes `ERR_UNIFORM_BLOCK_TOO_LARGE`/`ERR_UNKNOWN_FORMAT_FALLBACK`/`ERR_DIMENSION_FALLBACK`/`ERR_MISSING_RENDER_TARGET`/`ERR_GL_ERROR`/`ERR_DEVICE_VALIDATION`, new capped `DiagnosticCollector`), +68 `shaders/src/runtime/backends/webgl2.js` (uniform-block throw → `ShaderDiagnostic` stage `uniform-block`; structured records for missing FBO/MRT, post-draw `gl.getError`, deduplicated unknown-format rgba8 fallback), +13 `shaders/src/runtime/backends/webgpu.js` (uncapturederror records), +38 `shaders/src/runtime/pipeline.js` (`resolveDimension` recognizes `input`/`resolution`; unknown dimension forms surface `ERR_DIMENSION_FALLBACK` instead of pure silence), +279 `shaders/tests/test_backend_diagnostics.js` | Ported the shared-runtime leg: `_resolve_dim` recognizes `resolution` (behavior-identical — it previously hit the same silent screen-size fallback — so byte-neutral rendering), and `runtime/shader_diagnostics.gd`'s code table gains the six reference codes for code-table parity like `NO_SOURCE`. Inapplicable to RenderingDevice: the DiagnosticCollector recording of web-backend-only events (WebGL2 FBO/MRT/getError/format fallback, WebGPU uncapturederror) and the uniform-block throw (RenderingDevice enforces limits natively; pipeline-create failures surface under `PIPELINE`). The JS test is never-ported |
+| `dd4606ea` + `a0e9bbff` + `e24c844f` (2026-10-02 sync, `4f5e0d28bdc155700393c314e9a5aafcc4da91fd..e24c844f8dada85551ab084f41db8944fbc176c8`) | Upstream GAP-007 final closure: backend diagnostics — +32 `shaders/src/runtime/backends/diagnostics.js` (new codes `ERR_UNIFORM_BLOCK_TOO_LARGE`/`ERR_UNKNOWN_FORMAT_FALLBACK`/`ERR_DIMENSION_FALLBACK`/`ERR_MISSING_RENDER_TARGET`/`ERR_GL_ERROR`/`ERR_DEVICE_VALIDATION`, new capped `DiagnosticCollector`), +68 `shaders/src/runtime/backends/webgl2.js` (uniform-block throw → `ShaderDiagnostic` stage `uniform-block`; structured records for missing FBO/MRT, post-draw `gl.getError`, deduplicated unknown-format rgba8 fallback), +13 `shaders/src/runtime/backends/webgpu.js` (uncapturederror records), +38 `shaders/src/runtime/pipeline.js` (`resolveDimension` recognizes `input`/`resolution`; unknown dimension forms surface `ERR_DIMENSION_FALLBACK` instead of pure silence), +279 `shaders/tests/test_backend_diagnostics.js` | Ported the shared-runtime and RenderingDevice-applicable legs: `_resolve_dim` resolves `resolution` like `screen`/`auto`/`input`; `runtime/shader_diagnostics.gd` mirrors the reference's capped `DiagnosticCollector` and gains the GAP-007 codes; `nm_backend.gd _record_fallback` records the two applicable silent fallbacks — unknown texture format (rgba16f) as `ERR_UNKNOWN_FORMAT_FALLBACK` and unknown dimension spec (screen) as `ERR_DIMENSION_FALLBACK` — deduplicated per key, legacy return values unchanged. Inapplicable to RenderingDevice: the DiagnosticCollector recording of web-backend-only events (WebGL2 FBO/MRT/getError/format-fallback console path, WebGPU uncapturederror) and the uniform-block throw (RenderingDevice enforces limits natively; pipeline-create failures surface under `PIPELINE`). The JS test is never-ported |
+| `16c1997cd` + `ed478159` (2026-10-02 sync, observed ranges `e105344b..16c1997cd` and `16c1997cd..ed478159`) | Upstream GAP-010 JS test-harness only — +73 `shaders/tests/{test_uniform_status.js,uniform-status.js}` (mirror `resolveUniformGateStatus` for the `--strict-uniforms` gate; classify unrecognized outer statuses as error) | Nothing to port: upstream test-harness commits are never ported (upstream's harness is not a mirrored surface; no repo tooling imports `shaders/tests`), and no `shaders/src` file changed |
+| `cb22a05e` (2026-10-02 sync, observed range `f5ca07cda9e4..cb22a05eff9a`) | Register Portable effects through the shared canvas renderer — +93 `shaders/src/renderer/canvas.js` (new `CanvasRenderer.registerPortableEffect()`: validates a raw Portable definition object plus pre-loaded `shaders[program].glsl/wgsl` sources, prototype-pollution-guards keys, registers `user.<func>` through the existing `registerEffectWithRuntime`/enums/starter-op machinery, restores the previous bare-name registration on conflict) +146 `shaders/tests/test_portable_registration.js` | Nothing to port: this is a JS-host integration API on the web `CanvasRenderer` for runtime registration of user-supplied Portable definitions into the JavaScript realm's shared registries. The Godot addon has no such host surface — its registration machinery is the load-time mirror `compiler/lang/effect_registry.gd` of `registerEffectWithRuntime()`, populated from the bundled `res://addons/noisemaker/effects/**.json` catalog, and the addon's documented contract (README/ARCHITECTURE) defines no runtime effect-registration or Portable-definition API. The shader-source-bearing `shaders[program]` payload the API validates has no Godot equivalent either (effect JSONs carry no `shaders` key; GLSL is loaded from the addon's shader tree by path). The JS test is never-ported |
 
 Effect-catalog parity: no effect definition, effect shader, DSL lang, or registry file changed in the
 range (upstream `shaders/effects` and `shaders/src/lang` diffs are empty for the delivered range);
@@ -626,14 +628,14 @@ per-path diffs, and the verbatim `external-input.js` delta) archived with the jo
 job `842e2a10-6026-420d-aa5b-1e64a0ddb4f5`, evidence `4f5e0d28-sync`).
 
 2026-10-02 sync (`4f5e0d28bdc155700393c314e9a5aafcc4da91fd..e24c844f8dada85551ab084f41db8944fbc176c8`;
-declared job range `4f5e0d28bdc1..e24c844f8dad`, `forced`, observed ranges
-`c2a19c70eae7..dd4606eaa034`, `dd4606eaa034..a0e9bbffc038`, `a0e9bbffc038..e24c844f8dad`).
+declared job range `4f5e0d28bdc1..e24c844f8dad`, `forced`, all six observed ranges audited).
 Ancestry observed verbatim (fresh full clone, all endpoints present):
 `git merge-base --is-ancestor 4f5e0d28bdc155700393c314e9a5aafcc4da91fd
 e24c844f8dada85551ab084f41db8944fbc176c8` → exit 0 — the last-synced reference `4f5e0d28bdc1` is
 the range start, so the effective new delta is the linear 3-commit `4f5e0d28bdc1..e24c844f8dad`
 (`git log --oneline` → `e24c844f`, `a0e9bbff`, `dd4606ea`), all upstream GAP-007
-backend-diagnostics closure.
+backend-diagnostics closure. Rulings for the three observed ranges outside that delta are in the
+§1 table (two upstream test-harness-only ranges; `f5ca07c..cb22a05` `registerPortableEffect`).
 
     $ git diff --stat 4f5e0d28bdc1..e24c844f8dad -- shaders/
         shaders/src/runtime/backends/diagnostics.js | 32 +++-
@@ -647,26 +649,16 @@ backend-diagnostics closure.
     $ git diff --stat 4f5e0d28bdc1..e24c844f8dad -- shaders/src/lang
     (empty — 0 bytes)
 
-Rulings per commit: `a0e9bbff` (`resolveDimension` recognizes the validator-accepted
-`input`/`resolution` keywords) — ported: `nm_backend.gd _resolve_dim` already resolved `input`,
-now resolves `resolution` too; behavior-identical in both cases (previously the silent screen-size
-fallback, same value), so rendering is byte-neutral. `dd4606ea` + `e24c844f` (web-backend
-structured diagnostics: capped `DiagnosticCollector`, new codes, uniform-block `ShaderDiagnostic`
-throw, WebGL2 missing-FBO/MRT and post-draw `gl.getError` records, deduplicated unknown-format
-rgba8 fallback records, WebGPU uncapturederror records) — the WebGL2/WebGPU runtime surfaces have
-no RenderingDevice analogue; the port's mirrored surface, `runtime/shader_diagnostics.gd`, gains
-the six new reference codes for code-table parity like `NO_SOURCE`, while the collector itself and
-the web-backend event recording are inapplicable (RenderingDevice enforces uniform-block limits
-natively — pipeline-create failures already surface under the port-side `ERR_PIPELINE_CREATE`).
-The JS test is never-ported (upstream's harness is not a mirrored surface).
-Not audit-only: two port files changed (`nm_backend.gd`, `shader_diagnostics.gd`), rendering
-byte-neutral. Gate re-run at `NM_REFERENCE_ROOT` pinned exactly at `e24c844f8dad` (Godot
-`4.7.stable.official.5b4e0cb0f`, Linux headless): definitions 210/210, registry ops 210/210 /
-enums 8/8 / paramAliases 44/44 / effectAliases 0/0 / effectKeys 628/628,
-lex/parse/validate/graph 352/352 each, expand clean (only ACCEPTED pass-defines entries),
-`SMOKE: ALL PASS`, `scripts/test` 69/69, `--godot-headless` 61/61 (incl. the two new
-`parity.test_runtime_contract` regression tests), full unittest 144 tests / 14 failures — the same
-recorded Godot display-server-init environmental class, no non-environmental failure.
+Ported (`a0e9bbff`, shared-runtime leg): `nm_backend.gd _resolve_dim` resolves `resolution` like
+`screen`/`auto`/`input`. Ported (`dd4606ea` + `e24c844f`, RenderingDevice-applicable legs):
+`runtime/shader_diagnostics.gd` mirrors the capped `DiagnosticCollector` and gains the reference's
+GAP-007 codes; `nm_backend.gd _record_fallback` records the two applicable silent fallbacks —
+unknown texture format (rgba16f) as `ERR_UNKNOWN_FORMAT_FALLBACK` and unknown dimension spec
+(screen) as `ERR_DIMENSION_FALLBACK` — deduplicated per key, legacy return values and console
+warnings unchanged. Inapplicable: the WebGL2/WebGPU-only event recording (missing FBO/MRT,
+post-draw `gl.getError`, WebGPU uncapturederror) and the uniform-block `ShaderDiagnostic` throw
+(RenderingDevice enforces block limits natively; pipeline-create failures surface under
+`ERR_PIPELINE_CREATE`). The JS test is never-ported (upstream's harness is not a mirrored surface).
 
 Daily review date: 2026-09-29 UTC. Review ID: `review-20260929-050000`.
 No new worker audit result exists after `20260924-remaining-gap-documents-godot`.

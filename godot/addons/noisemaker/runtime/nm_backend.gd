@@ -196,6 +196,7 @@ var _texture_aliases := {}  # virtualId -> storageId for pooled textures (rebuil
 # Last failure normalized to the one diagnostic union; empty until a failure.
 var last_shader_diagnostic: Dictionary = {}
 var _shader_diag = ShaderDiagnostics.new()
+var _warned_fallback_keys := {}   # dedupe keys for recorded fallback diagnostics
 var _passes_executed := 0
 var _passes_skipped := 0
 
@@ -411,13 +412,47 @@ func _ensure_audio_storage() -> void:
 
 # --- textures -------------------------------------------------------------
 
+# Record a historically-silent fallback as a structured diagnostic (mirror of
+# the reference's GAP-007 recording: backends/diagnostics.js DiagnosticCollector,
+# upstream e24c844f8dad). The push_warning is new, rendering-neutral surfacing
+# (the silent fallback paths previously printed nothing); it is deduplicated per
+# key so per-frame rendering cannot grow it unboundedly, matching the reference's
+# deduplicated console path. The structured record is recorded once per key on
+# the ShaderDiagnostics collector.
+func _record_fallback(code: String, dedupe_key: String, warning: String, record: Dictionary) -> void:
+	if _warned_fallback_keys.has(dedupe_key):
+		return
+	_warned_fallback_keys[dedupe_key] = true
+	push_warning(warning)
+	var full: Dictionary = {
+		"code": code,
+		"backend": "renderingdevice",
+	}
+	for key in record:
+		full[key] = record[key]
+	_shader_diag.add_record(full)
+
 func _data_format(fmt: String) -> int:
 	match fmt:
 		"rgba32f", "rgba32float":
 			return RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT
+		"rgba16f":
+			# The port's canonical default format (compiler/graph/orchestrator.gd
+			# default, authored in many effect JSONs, passed explicitly throughout
+			# this file) is a resolved format: it records nothing, like the
+			# reference's resolved early-return before the record path.
+			return RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT
 		"rgba8", "rgba8unorm":
 			return RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM
 		_:
+			# Unknown formats keep the historical silent rgba16f fallback (no
+			# new rejection of previously accepted input), but surface it as a
+			# structured diagnostic instead of pure silence.
+			_record_fallback(
+				ShaderDiagnostics.DIAGNOSTIC_CODES["UNKNOWN_FORMAT_FALLBACK"],
+				"format|" + fmt,
+				"[nm_backend] Unknown texture format '" + fmt + "'; falling back to rgba16f",
+				{"stage": "texture-create", "format": fmt, "fallback": "rgba16f"})
 			return RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT
 
 func _probe_color_bytes_per_sample() -> int:
@@ -645,6 +680,17 @@ func _resolve_dim(d, screen_size: int, uniforms: Dictionary = {}) -> int:
 			if has_transform and not has_param and d.has("default"):
 				val = d["default"]
 			return max(1, int(floor(float(val))))
+	# Unknown dimension forms keep the historical screen-size fallback (no new
+	# rejection of previously accepted input), but surface it as a structured
+	# diagnostic instead of pure silence. An absent spec is a default, not an
+	# unknown form (the callers default to "screen" before this runs).
+	if d != null:
+		var key: String = var_to_str(d)
+		_record_fallback(
+			ShaderDiagnostics.DIAGNOSTIC_CODES["DIMENSION_FALLBACK"],
+			"dimension|" + key,
+			"[nm_backend] Unknown dimension spec %s; falling back to screen size" % key,
+			{"stage": "dimension", "spec": key, "fallback": "screen"})
 	return screen_size
 
 func allocate_textures(graph: Dictionary) -> void:
