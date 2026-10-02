@@ -572,6 +572,31 @@ against the reference and rendered the Godot candidate for each (all standalone,
   had. Flagging as a real, reproducible bug: automated sweep-based CI may currently report a false
   failure here (or mask a real one) depending on batch composition/order.
 
+*Incrementally synced 2026-10-02 to reference `e24c844f` (`4f5e0d28bdc1..e24c844f8dad`; declared
+job range `4f5e0d28bdc155700393c314e9a5aafcc4da91fd..e24c844f8dada85551ab084f41db8944fbc176c8`,
+`forced`, observed ranges `c2a19c70eae7..dd4606eaa034`, `dd4606eaa034..a0e9bbffc038`,
+`a0e9bbffc038..e24c844f8dad` - the last-synced reference `4f5e0d28bdc1` verified a direct ancestor
+of the delivered end, so the effective new delta is the linear 3-commit
+`4f5e0d28bdc1..e24c844f8dad`: `dd4606ea`, `a0e9bbff`, `e24c844f`, all upstream GAP-007
+backend-diagnostics closure). Ported: `_resolve_dim` now recognizes the validator-accepted
+`resolution` dimension keyword alongside `screen`/`auto`/`input` (behavior-identical - it
+previously fell through to the same silent screen-size fallback - so rendering is byte-neutral),
+and `runtime/shader_diagnostics.gd`'s code table gains the reference's GAP-007 codes
+(`ERR_UNIFORM_BLOCK_TOO_LARGE`, `ERR_UNKNOWN_FORMAT_FALLBACK`, `ERR_DIMENSION_FALLBACK`,
+`ERR_MISSING_RENDER_TARGET`, `ERR_GL_ERROR`, `ERR_DEVICE_VALIDATION`) for code-table parity like
+`NO_SOURCE`. Audited inapplicable to RenderingDevice: the WebGL2/WebGPU-only structured recording
+(DiagnosticCollector for format-fallback/gl.getError/missing-FBO-MRT/uncapturederror) and the
+uniform-block ShaderDiagnostic throw (RenderingDevice enforces block limits natively; the port
+surfaces pipeline-create failures under `PIPELINE`). Regression tests added in
+`parity/test_runtime_contract.py` (`resolution` keyword resolution and reference code-table
+completeness). Effect catalog unchanged (`shaders/effects` diff empty). Gates at the pinned
+reference (Linux headless, Godot `4.7.stable.official.5b4e0cb0f`): definitions 210/210, registry
+(ops 210/210, enums 8/8, paramAliases 44/44, effectAliases 0/0, effectKeys 628/628),
+lex/parse/validate/graph 352/352 each, expand clean (only ACCEPTED entries), `SMOKE: ALL PASS`,
+`scripts/test` 69/69, `--godot-headless` 61/61, full unittest 144/14 - the same recorded Godot
+display-server-init environmental class. Canonical per-commit rulings, verbatim delta, and gate
+numbers: `docs/COMPLETION_GAPS.md` §1.
+
 This file holds the detailed coverage and parity numbers. For what the project is and how to use it,
 see the [README](README.md).
 

@@ -599,16 +599,19 @@ func _ensure_default_mesh_texture(tex_id: String) -> bool:
 	return true
 
 func _resolve_dim(d, screen_size: int, uniforms: Dictionary = {}) -> int:
-	# Subset of reference/04 §9 resolveDimension. number | "screen"/"auto"/"input" |
-	# "N%" | {screenDivide,default} | {scale,clamp} | {param,paramDefault}. True per-pass
-	# "input" sizing is staged; at top level the input is screen-sized so "input" == screen.
+	# Subset of reference/04 §9 resolveDimension. number | "screen"/"auto"/
+	# "input"/"resolution" | "N%" | {screenDivide,default} | {scale,clamp} |
+	# {param,paramDefault}. True per-pass "input" sizing is staged; at top level
+	# the input is screen-sized so "input" == screen. "resolution" is a
+	# validator-accepted keyword (reference DIM_KEYWORDS) whose historical
+	# resolution is the screen dimension (upstream e24c844f8dad / a0e9bbff).
 	# PARITY: screenDivide uses ROUND; param/scale use FLOOR (§9). Divisor/param values come
 	# from the merged pass uniforms (e.g. zoom_chain_0).
 	if typeof(d) == TYPE_FLOAT or typeof(d) == TYPE_INT:
 		return max(1, int(d))
 	if typeof(d) == TYPE_STRING:
 		var s := str(d)
-		if s == "screen" or s == "auto" or s == "input":
+		if s == "screen" or s == "auto" or s == "input" or s == "resolution":
 			return screen_size
 		if s.ends_with("%"):
 			return max(1, int(floor(screen_size * s.substr(0, s.length() - 1).to_float() / 100.0)))

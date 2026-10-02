@@ -27,6 +27,20 @@ const DIAGNOSTIC_CODES := {
 	"LINK": "ERR_SHADER_LINK",
 	"MISSING_SOURCE": "ERR_SHADER_MISSING",
 	"NO_SOURCE": "ERR_NO_WGSL_SOURCE",
+	# Reference codes from upstream GAP-007 (backends/diagnostics.js at
+	# e24c844f8dad). UNIFORM_BLOCK mirrors the reference's uniform-block throw
+	# (RenderingDevice enforces block limits natively, so the port surfaces
+	# pipeline-create failures under PIPELINE instead); the remaining codes
+	# record web-backend-only silent fallbacks and validation events
+	# (WebGL2 format fallback / gl.getError draining / missing FBO-MRT, WebGPU
+	# uncapturederror) with no RenderingDevice analogue — kept for code-table
+	# parity like NO_SOURCE.
+	"UNIFORM_BLOCK": "ERR_UNIFORM_BLOCK_TOO_LARGE",
+	"UNKNOWN_FORMAT_FALLBACK": "ERR_UNKNOWN_FORMAT_FALLBACK",
+	"DIMENSION_FALLBACK": "ERR_DIMENSION_FALLBACK",
+	"MISSING_RENDER_TARGET": "ERR_MISSING_RENDER_TARGET",
+	"GL_ERROR": "ERR_GL_ERROR",
+	"DEVICE_VALIDATION": "ERR_DEVICE_VALIDATION",
 	# Port-side codes: RenderingDevice pipeline creation and draw-list
 	# acquisition have no reference analogue (the WebGL2 backend throws from
 	# the WebGL calls instead); they surface silent all-black renders.

@@ -856,6 +856,18 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("POOLING_RUNTIME_TEST: PASS", result.stdout, result.stdout + result.stderr)
 
+    def test_resolve_dim_resolution_keyword(self):
+        # Upstream a0e9bbff (GAP-007 follow-up): resolveDimension must recognize
+        # the validator-accepted 'resolution' keyword (DIM_KEYWORDS) like
+        # 'screen'/'auto'/'input'. The port's _resolve_dim resolves all four to
+        # the screen dimension, so the value is not observable; the guard is
+        # source-level: the recognized-keyword condition must name every
+        # reference DIM_KEYWORDS entry. Removing 'resolution' makes this red.
+        source = open("godot/addons/noisemaker/runtime/nm_backend.gd").read()
+        start = source.index("func _resolve_dim(")
+        body = source[start:source.index("func ", start + 1)]
+        self.assertIn('s == "screen" or s == "auto" or s == "input" or s == "resolution"', body)
+
     def test_shader_diagnostics_parse_and_normalize(self):
         script = """
             extends SceneTree
@@ -884,14 +896,25 @@ class RuntimeContractTests(unittest.TestCase):
                     "messages": messages,
                     "source": "#version 450\\nbad",
                 })
-                ok = ok and made["code"] == "ERR_SHADER_COMPILE" \\
-                    and made["backend"] == "renderingdevice" \\
-                    and made["stage"] == "compile" \\
-                    and made["detail"] == log \\
-                    and made["messages"].size() == 3 \\
-                    and made["program"] == "noise_prog" \\
-                    and made["source"].begins_with("#version 450") \\
+                ok = ok and made["code"] == "ERR_SHADER_COMPILE" \
+                    and made["backend"] == "renderingdevice" \
+                    and made["stage"] == "compile" \
+                    and made["detail"] == log \
+                    and made["messages"].size() == 3 \
+                    and made["program"] == "noise_prog" \
+                    and made["source"].begins_with("#version 450") \
                     and diag.last_diagnostic["code"] == "ERR_SHADER_COMPILE"
+                # Reference code-table parity (upstream GAP-007, e24c844f8dad):
+                # every reference diagnostics.js code must exist in the port's
+                # table, plus the port-side pipeline/draw-list codes.
+                var codes: Dictionary = Diag.get_script_constant_map()["DIAGNOSTIC_CODES"]
+                for ref_code in ["ERR_SHADER_COMPILE", "ERR_SHADER_LINK",
+                        "ERR_SHADER_MISSING", "ERR_NO_WGSL_SOURCE",
+                        "ERR_UNIFORM_BLOCK_TOO_LARGE", "ERR_UNKNOWN_FORMAT_FALLBACK",
+                        "ERR_DIMENSION_FALLBACK", "ERR_MISSING_RENDER_TARGET",
+                        "ERR_GL_ERROR", "ERR_DEVICE_VALIDATION"]:
+                    ok = ok and codes.values().has(ref_code)
+                ok = ok and codes.has("PIPELINE") and codes.has("DRAW_LIST")
                 if ok:
                     print("SHADER_DIAGNOSTICS_TEST: PASS")
                     quit(0)
