@@ -588,6 +588,40 @@ Audited inapplicable to RenderingDevice: the WebGL2/WebGPU-only events (missing 
 `PIPELINE`). Per-commit rulings and the audited sibling observed ranges:
 `docs/COMPLETION_GAPS.md` §1.
 
+*Incrementally synced 2026-10-03 to reference `e30f09e6` (`e24c844f8dad..e30f09e62704`; declared
+job range `e24c844f8dada85551ab084f41db8944fbc176c8..e30f09e62704bcce0abaf07a42ab1111ddadbb84`,
+`forced`, with four observed ranges `1fd893483c83..41d1ead14b0e`, `41d1ead14b0e..109c00acb709`,
+`109c00acb709..058ca32ef7a9`, `058ca32ef7a9..e30f09e62704` — audited rather than assumed:
+`git merge-base --is-ancestor e24c844f8dad e30f09e62704` → exit 0 and every observed range
+endpoint is an ancestor of the delivered end, so the range is contiguous and the effective new
+delta is the linear 34-commit `e24c844f8dad..e30f09e62704`; the three commits the 2026-10-02
+sibling wave already audited — `16c1997cd`, `ed478159`, `cb22a05e` — carry their §1 rulings
+forward). Ported: `compiler/lang/validator.gd` mirrors the reference `isOwnChoice()` as
+`_is_own_choice()` (a parameter's own inline choice or enum member named like a state value —
+`geometry: seed`, `channel: a` — now wins over the `{fn:(state)=>state[key]}` binding in the
+member- and numeric-arg branches), gated by a new compiler corpus case
+`parity/corpus/reservedChoiceNames.dsl`; `compiler/graph/expander.gd` records the reference's new
+`uniformAliases` pass field (`{shaderUniform: globalName}` for renamed pass uniforms) — a pure
+compile-time parity-contract field the port's uniforms-baked-at-compile backend never reads
+(`normalizePass()` drops it from the backend schema). Audited nothing-to-port: the web
+live-parameter alias writes (`uniform-aliases.js`, `canvas.js` `_isEffectPass`/alias-write legs —
+the port has no runtime parameter surface), the `resetOnChange` UI key (converter drops `ui`;
+effect-validator consumed live from the reference at conversion), the pointsEmit/cellularAutomata3d
+definition edits (ui-only, committed JSONs byte-identical — definitions 210/210), the particle
+parity-attestation sourceHash re-attestation (caseHashes unchanged), the upstream JS test-harness
+guards (never ported), and the docs/ledger/shade-mcp-pin/favicon/npm-dep commits. Gate evidence
+(Linux Godot `4.7.stable.official.5b4e0cb0f`, `NM_REFERENCE_ROOT` at a fresh full clone pinned
+exactly at `e30f09e62704`): definitions 210/210 PASS; registry PASS (ops 210/210, enums 8/8,
+paramAliases 44/44, effectAliases 0/0, effectKeys 628/628); lex / parse / validate / expand / graph
+**353/353** each (new corpus case, was 352; expand's 8 documented pass-defines diffs unchanged);
+smoke `SMOKE: ALL PASS`; unittest 145 tests / 14 failures, all Godot display-server-init
+environmental (same class as the recorded baseline; live rendering is owned by the job's native
+parity cases). Red-verified mirrors: removing the `_is_own_choice` guards fails
+`check_validate` (`args.geometry: ref=4 mine={}`); disabling the `uniformAliases` recording fails
+`check_expand` on 19 programs (`uniformAliases: missing in mine`). Per-commit rulings and the
+verbatim `git diff --stat`: `docs/COMPLETION_GAPS.md` §1. Audit evidence archived with the job:
+`evidence/e30f09e6-sync/`.
+
 This file holds the detailed coverage and parity numbers. For what the project is and how to use it,
 see the [README](README.md).
 

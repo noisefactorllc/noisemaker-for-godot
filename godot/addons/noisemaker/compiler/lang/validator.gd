@@ -905,6 +905,22 @@ func _resolve_vecn_arg(node, def: Dictionary, dname, call: Dictionary, ctor: Str
 		_push_diag("S002", node, "Argument out of range for '%s' in %s()" % [dname, call.get("name")])
 	return (def.get("default").duplicate() if def.get("default") is Array else zero.duplicate())
 
+# Mirror of reference lang/validator.js isOwnChoice(): a bare name the
+# parameter defines itself, as an inline choice or a member of its enum, means
+# that value even where it shadows a state value such as `seed` or `a`. The
+# unparser writes choices by bare name, so `geometry: seed` and `channel: a`
+# must read back as written.
+func _is_own_choice(def: Dictionary, name) -> bool:
+	if def.get("choices") is Dictionary:
+		var choice_val = def["choices"].get(name)
+		if choice_val is float or choice_val is int:
+			return true
+	var enum_path = def.get("enumPath") if def.get("enumPath") != null else def.get("enum")
+	if enum_path == null:
+		return false
+	var resolved = _resolve_enum(EnumPaths.apply_enum_prefix([name], EnumPaths.normalize_member_path(enum_path)))
+	return (resolved is float or resolved is int)
+
 func _resolve_boolean_arg(node, def: Dictionary, dname):
 	if node is Dictionary and node.get("type") == "String":
 		_push_diag("S001", node, "String literal not allowed for boolean parameter '%s'" % [dname])
@@ -933,7 +949,7 @@ func _resolve_member_arg(node, def: Dictionary, call: Dictionary):
 		path = EnumPaths.normalize_member_path(node.get("path"))
 	elif node is Dictionary and (node.get("type") == "Number" or node.get("type") == "Boolean"):
 		return (1 if node.get("value") else 0) if node.get("type") == "Boolean" else node.get("value")
-	elif node is Dictionary and node.get("type") == "Ident" and STATE_VALUES.has(node.get("name")):
+	elif node is Dictionary and node.get("type") == "Ident" and STATE_VALUES.has(node.get("name")) and not _is_own_choice(def, node.get("name")):
 		return {}  # {fn:(state)=>state[key]} -> {} after JSON
 	elif node is Dictionary and node.get("type") == "Ident":
 		path = [node.get("name")]
@@ -1052,7 +1068,7 @@ func _resolve_numeric_arg(node, def: Dictionary, dname, call: Dictionary, spec: 
 			return value
 		_push_diag("S001", node, "Cannot resolve enum value for '%s': '%s'" % [dname, (".".join(node["path"]) if node.get("path") is Array else (node.get("name") if node.get("name") else "unknown"))])
 		return def.get("default")
-	if node is Dictionary and node.get("type") == "Ident" and STATE_VALUES.has(node.get("name")):
+	if node is Dictionary and node.get("type") == "Ident" and STATE_VALUES.has(node.get("name")) and not _is_own_choice(def, node.get("name")):
 		var v := {}
 		if def.get("min") != null:
 			v["min"] = def.get("min")

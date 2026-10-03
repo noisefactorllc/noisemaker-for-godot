@@ -524,6 +524,16 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 						if global_ref is int or global_ref is float:
 							pass_obj["uniforms"][uniform_name] = global_ref
 							continue
+						# globalRef is the name of the global parameter.
+						# Record a renamed mapping so runtime parameter
+						# updates reach this shader uniform too
+						# (reference runtime/uniform-aliases.js; the port's
+						# uniforms are baked at compile time and the field is
+						# part of the expand/graph parity contract).
+						if global_ref != uniform_name:
+							if not (pass_obj.get("uniformAliases") is Dictionary):
+								pass_obj["uniformAliases"] = {}
+							pass_obj["uniformAliases"][uniform_name] = global_ref
 						if pipeline_uniforms.get(uniform_name) != null:
 							pass_obj["uniforms"][uniform_name] = pipeline_uniforms[uniform_name]
 						elif pipeline_uniforms.get(global_ref) != null:
