@@ -5,21 +5,21 @@
 // (progName "degauss").
 //
 // The reference WGSL is a @compute shader writing a storage buffer; the validated render
-// form is a fragment shader (same situation as filter/snow). We port the compute BODY into
-// a fragment shader: the per-pixel global_invocation_id maps to the integer fragment id
-// (floor(gl_FragCoord.xy)), textureLoad → texelFetch, and we write `frag` instead of the
-// storage buffer. Per the porting guide we do NOT reproduce the reference GLSL's
-// tileOffset/fullResolution/renderScale remaps or its clampedDisplacement clamp — the WGSL
-// compute body has none, and at full resolution the GLSL reduces to exactly this form
-// (renderScale=1 → clamp inactive, fullResolution=resolution).
+// form is a fragment shader (same situation as filter/snow). The per-pixel
+// global_invocation_id maps to floor(gl_FragCoord.xy), textureLoad to texelFetch,
+// and the storage-buffer write to `frag`.
 //
-// No-layout effect (degauss.json has no uniformLayout): the backend SYNTHESIZES the Params
-// UBO and injects `#define <name> data[slot].comp` for params displacement/direction/seed/
-// speed and engine resolution/time. RESERVED-NAME NOTE: the WGSL helpers take parameters
-// literally named `time`/`speed`/`displacement`, which collide with the injected macros —
-// renamed to timeArg/speedArg/dispArg (pure symbol renames). `seed`/`direction` are read
-// via the bare macros at their use sites; width/height are passed as args (= resolution),
-// matching the WGSL.
+// degauss.json declares the reference's three-slot uniformLayout. Helper
+// arguments named time/speed/displacement are renamed to avoid macro collisions.
+layout(set = 0, binding = 0, std140) uniform Params { vec4 data[3]; };
+#define resolution data[0].xy
+#define displacement data[0].z
+#define time data[0].w
+#define speed data[1].x
+#define seed data[1].y
+#define direction data[1].z
+#define tileOffset data[2].xy
+#define fullResolution data[2].zw
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 frag;
@@ -297,6 +297,8 @@ float warped_channel_value(
 	vec2 base_pos,
 	float width,
 	float height,
+	float tile_width,
+	float tile_height,
 	vec2 freq,
 	float dispArg,
 	float mask,
@@ -313,7 +315,7 @@ float warped_channel_value(
 	float dc = cos(dirRad);
 	float ds = sin(dirRad);
 	offset = vec2(offset.x * dc - offset.y * ds, offset.x * ds + offset.y * dc);
-	vec4 sampled = sample_bilinear(base_pos + offset, width, height);
+	vec4 sampled = sample_bilinear(base_pos + offset, tile_width, tile_height);
 
 	if (channel == 0u) {
 		return clamp01(sampled.x);
@@ -336,26 +338,37 @@ void main() {
 		return;
 	}
 
-	float width_f = resolution.x;
-	float height_f = resolution.y;
-	vec2 uv = (fragId + vec2(0.5, 0.5))
-		/ vec2(max(width_f, 1.0), max(height_f, 1.0));
-	float mask = singularity_mask(uv, width_f, height_f);
+	float tile_w_f = resolution.x;
+	float tile_h_f = resolution.y;
+	vec2 full_res = fullResolution.x > 0.0 ? fullResolution : vec2(tile_w_f, tile_h_f);
+	vec2 global_px = fragId + tileOffset;
+	vec2 uv = (global_px + vec2(0.5, 0.5))
+		/ max(full_res, vec2(1.0));
+	float mask = singularity_mask(uv, full_res.x, full_res.y);
 	if (mask <= 0.0) {
 		frag = original;
 		return;
 	}
 
-	vec2 freq = freq_for_shape(2.0, width_f, height_f);
+	bool is_tiling = full_res.x / max(tile_w_f, 1.0) > 1.01;
+	float max_offset_pixels = is_tiling ? 256.0 : max(tile_w_f, tile_h_f);
+	float max_allowed_displacement = is_tiling
+		? max_offset_pixels / max(full_res.x, full_res.y)
+		: max_offset_pixels / max(tile_w_f, 1.0);
+	float clamped_displacement = min(displacement, max_allowed_displacement);
+	vec2 freq = freq_for_shape(2.0, full_res.x, full_res.y);
 	vec2 base_pos = fragId;
-	uvec2 coord = gid;
+	uvec2 coord = uvec2(global_px);
 
 	float red = warped_channel_value(
-		0u, coord, base_pos, width_f, height_f, freq, displacement, mask, time, speed);
+		0u, coord, base_pos, full_res.x, full_res.y, tile_w_f, tile_h_f, freq,
+		clamped_displacement, mask, time, speed);
 	float green = warped_channel_value(
-		1u, coord, base_pos, width_f, height_f, freq, displacement, mask, time, speed);
+		1u, coord, base_pos, full_res.x, full_res.y, tile_w_f, tile_h_f, freq,
+		clamped_displacement, mask, time, speed);
 	float blue = warped_channel_value(
-		2u, coord, base_pos, width_f, height_f, freq, displacement, mask, time, speed);
+		2u, coord, base_pos, full_res.x, full_res.y, tile_w_f, tile_h_f, freq,
+		clamped_displacement, mask, time, speed);
 	float alpha = clamp01(original.w);
 
 	frag = vec4(red, green, blue, alpha);
