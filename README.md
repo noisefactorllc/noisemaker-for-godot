@@ -129,6 +129,9 @@ GDScript (so it runs in-engine) and executes the graph on Godot's `RenderingDevi
 
 ## Contributing
 
+Contributions follow the Noise Factor [contributing policy](https://github.com/noisefactorllc/.github/blob/main/CONTRIBUTING.md) and
+[Code of Conduct](https://github.com/noisefactorllc/.github/blob/main/CODE_OF_CONDUCT.md). The notes below cover this repository's own tooling.
+
 The addon needs nothing external. The **dev/parity tooling**, however, compares Godot's output
 against the reference engine. The steps that generate goldens need a checkout of it via `NM_REFERENCE_ROOT`.
 The resulting `parity/out/` goldens are gitignored. Generate them before you compare:
