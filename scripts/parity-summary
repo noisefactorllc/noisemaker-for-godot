@@ -136,6 +136,8 @@ else
   CASES=()
   while IFS= read -r line; do CASES+=("$line"); done < <("$PY" - "$ROOT/parity/ledger.json" <<'PYEOF'
 import json, sys
+# LF line ends on every host: a Windows Python would print CRLF into the case names.
+sys.stdout.reconfigure(newline="\n")
 try:
     ledger = json.load(open(sys.argv[1]))
 except Exception as e:

@@ -18,6 +18,8 @@ SSIM="${3:-0.98}"
 SIZE="${4:-256}"
 GODOT="${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}"
 PY="$ROOT/parity/.venv/bin/python"
+# A Windows venv keeps its interpreter under Scripts/.
+[ -x "$PY" ] || [ ! -x "$ROOT/parity/.venv/Scripts/python.exe" ] || PY="$ROOT/parity/.venv/Scripts/python.exe"
 GRAPH="$ROOT/parity/out/$NAME.graph.json"
 GOLD="$ROOT/parity/out/$NAME.golden.png"
 CAND="$ROOT/parity/out/$NAME.candidate.png"

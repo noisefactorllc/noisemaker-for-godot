@@ -22,6 +22,8 @@ EVERY="${5:-5}"
 SIZE="${6:-256}"
 GODOT="${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}"
 PY="$ROOT/parity/.venv/bin/python"
+# A Windows venv keeps its interpreter under Scripts/.
+[ -x "$PY" ] || [ ! -x "$ROOT/parity/.venv/Scripts/python.exe" ] || PY="$ROOT/parity/.venv/Scripts/python.exe"
 GRAPH="$ROOT/parity/out/$NAME.graph.json"
 [ -f "$GRAPH" ] || { echo "missing graph: $GRAPH (run export-and-render.mjs first)"; exit 2; }
 [ "$EVERY" -gt 0 ] 2>/dev/null || { echo "sample_every must be a positive integer"; exit 2; }
