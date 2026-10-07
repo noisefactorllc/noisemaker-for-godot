@@ -54,6 +54,11 @@ var _texture_map: Dictionary
 # can enumerate media texture ids without reproducing the numbering.
 var _media_steps: Array
 var _media_step_ids: Dictionary
+# Volume handoffs: exported volume -> {param, value} of its producer's sizing uniform;
+# reader sizing scope -> {surface, writer}; exported atlas -> source texture.
+var _written_volumes: Dictionary
+var _read_volumes: Dictionary
+var _exported_textures: Dictionary
 var _last_written_surface
 var _enums_std: Dictionary
 # per-plan scope context (read by the scope helpers)
@@ -158,6 +163,9 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 	_texture_map = {}
 	_media_steps = []
 	_media_step_ids = {}
+	_written_volumes = {}
+	_read_volumes = {}
+	_exported_textures = {}
 	_last_written_surface = null
 	_enums_std = reg.enums.std()
 
@@ -174,6 +182,7 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 		_cur_particle_pipeline_id = null
 		var pipeline_uniforms := {}
 		_chain_scope_id = "chain_%d" % plan_index
+		var volume_size_param := "volumeSize_%s" % _chain_scope_id
 
 		for step in plan.get("chain", []):
 			var step_args = step.get("args", {})
@@ -200,6 +209,15 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 						current_input_geo = "global_" + geo["name"]
 					else:
 						current_input_geo = geo.get("name") if geo.get("name") else geo
+				# Resolve the producer scope after all plans have been expanded:
+				# readers may precede writers to consume the previous frame.
+				var volume = _written_volumes.get(current_input3d)
+				if current_input3d != null and str(current_input3d) != "":
+					# Preserve the writer visible at this read. A later filter
+					# may rewrite the same surface without becoming its size owner.
+					_read_volumes[volume_size_param] = {"surface": current_input3d, "writer": volume}
+					pipeline_uniforms["volumeSize"] = volume["value"] if volume != null else 64
+					pipeline_uniforms[volume_size_param] = pipeline_uniforms["volumeSize"]
 				var node_id := "node_%s" % step["temp"]
 				if current_input3d != null:
 					_texture_map[node_id + "_out3d"] = current_input3d
@@ -230,6 +248,11 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 				var node_id := "node_%s" % step["temp"]
 				if tex3d is Dictionary and tex3d.get("name") != "none" and current_input3d != null:
 					var target_vol = "global_" + tex3d["name"]
+					_exported_textures[target_vol] = current_input3d
+					if _texture_specs.has(current_input3d):
+						_texture_specs[target_vol] = _texture_specs[current_input3d].duplicate()
+					if pipeline_uniforms.get("volumeSize") != null:
+						_written_volumes[target_vol] = {"param": volume_size_param, "value": pipeline_uniforms["volumeSize"]}
 					if current_input3d != target_vol:
 						_passes.push_back({
 							"id": node_id + "_write3d_vol_blit", "program": "blit", "type": "render",
@@ -239,6 +262,9 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 						_ensure_blit_program()
 				if geo is Dictionary and geo.get("name") != "none" and current_input_geo != null:
 					var target_geo = "global_" + geo["name"]
+					_exported_textures[target_geo] = current_input_geo
+					if _texture_specs.has(current_input_geo):
+						_texture_specs[target_geo] = _texture_specs[current_input_geo].duplicate()
 					if current_input_geo != target_geo:
 						_passes.push_back({
 							"id": node_id + "_write3d_geo_blit", "program": "blit", "type": "render",
@@ -673,6 +699,8 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 						"inputs": {"src": current_input}, "outputs": {"color": target_surface}, "uniforms": {},
 					})
 
+	_resolve_volume_handoffs()
+
 	var render_surface
 	if compilation_result.get("render") != null:
 		render_surface = compilation_result["render"]
@@ -683,6 +711,67 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 		render_surface = null
 
 	return {"passes": _passes, "errors": _errors, "programs": _programs, "textureSpecs": _texture_specs, "renderSurface": render_surface, "mediaSteps": _media_steps}
+
+# Follow volume handoffs after expansion so ordering and re-export do not change atlas
+# dimensions (reference expander). Cycles without a producer retain their defaults.
+func _resolve_volume_handoffs() -> void:
+	var resolved := {}
+	for param in _read_volumes.keys():
+		var source = _resolve_volume(param, {})
+		if source != null:
+			resolved[param] = source
+	for id in _exported_textures.keys():
+		_resolve_export(id, {})
+	for spec in _texture_specs.values():
+		if not (spec is Dictionary):
+			continue
+		for axis in ["width", "height", "depth"]:
+			var dim = spec.get(axis)
+			if dim is Dictionary and resolved.has(dim.get("param")):
+				var scoped: Dictionary = dim.duplicate()
+				scoped["param"] = resolved[dim["param"]]["param"]
+				spec[axis] = scoped
+	for pass_obj in _passes:
+		var uniforms = pass_obj.get("uniforms")
+		if not (uniforms is Dictionary):
+			continue
+		for param in resolved:
+			if not uniforms.has(param):
+				continue
+			var source: Dictionary = resolved[param]
+			uniforms.erase(param)
+			uniforms[source["param"]] = source["value"]
+			uniforms["volumeSize"] = source["value"]
+			var scoped_params = pass_obj.get("scopedParams")
+			if scoped_params is Dictionary and scoped_params.get("volumeSize") == param:
+				scoped_params["volumeSize"] = source["param"]
+
+func _resolve_volume(param, visited: Dictionary):
+	if visited.has(param):
+		return null
+	visited[param] = true
+	var read = _read_volumes.get(param)
+	var writer = null
+	if read != null:
+		writer = read.get("writer")
+		if writer == null:
+			writer = _written_volumes.get(read.get("surface"))
+	if writer == null or writer["param"] == param:
+		return null
+	var deeper = _resolve_volume(writer["param"], visited)
+	return deeper if deeper != null else writer
+
+func _resolve_export(id, visited: Dictionary):
+	if visited.has(id):
+		return _texture_specs.get(id)
+	visited[id] = true
+	var source = _exported_textures.get(id)
+	if source == null or source == id:
+		return _texture_specs.get(id)
+	var spec = _resolve_export(source, visited)
+	if spec != null:
+		_texture_specs[id] = spec.duplicate()
+	return _texture_specs.get(id)
 
 # Scope a dimension spec's param reference to this pipeline/chain (tracks the mapping).
 func _scope_dim_spec(dim_spec, scope_suffix: String, scoped_param_map: Dictionary, tex_name: String = ""):

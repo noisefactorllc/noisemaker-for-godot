@@ -68,10 +68,16 @@ static func allocate_resources(passes: Array) -> Dictionary:
 					allocations[tex_id] = "phys_%d" % physical_count
 					physical_count += 1
 
-		# 2. release inputs (last uses)
+		# 2. release inputs (last uses). A pass may read one texture under several
+		# names (lighting's inputTex and heightMap); release it once, or its slot is
+		# handed to two textures that are live together.
 		var inputs = p.get("inputs")
 		if inputs != null:
+			var released := {}
 			for tex_id in inputs.values():
+				if released.has(tex_id):
+					continue
+				released[tex_id] = true
 				if tex_id == null:
 					continue
 				if (tex_id as String).begins_with("global_"):

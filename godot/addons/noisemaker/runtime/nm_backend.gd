@@ -436,7 +436,7 @@ func _data_format(fmt: String) -> int:
 	match fmt:
 		"rgba32f", "rgba32float":
 			return RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT
-		"rgba16f":
+		"rgba16f", "rgba16float":
 			# The port's canonical default format (compiler/graph/orchestrator.gd
 			# default, authored in many effect JSONs, passed explicitly throughout
 			# this file) is a resolved format: it records nothing, like the
@@ -1318,9 +1318,19 @@ func _ensure_tex(tex_id: String) -> void:
 		return
 	if not _textures.has(tex_id):
 		var f16 := _data_format("rgba16f")
-		_textures[tex_id] = _make_tex(screen.x, screen.y, f16)
-		_tex_dims[tex_id] = screen
+		var dims := default_surface_dims(tex_id, screen)
+		_textures[tex_id] = _make_tex(dims.x, dims.y, f16)
+		_tex_dims[tex_id] = dims
 		_tex_fmt[tex_id] = f16
+
+# Size of a surface the graph does not declare. Unwritten volume surfaces keep the
+# reference's native 64x4096 atlas (Pipeline.createSurfaces); write3d declares the
+# written ones. Everything else is screen-sized.
+static func default_surface_dims(tex_id: String, screen_size: Vector2i) -> Vector2i:
+	var name := tex_id.trim_prefix("global_")
+	if name.length() == 4 and name.begins_with("vol") and name[3] >= "0" and name[3] <= "7":
+		return Vector2i(64, 4096)
+	return screen_size
 
 # --- shader assembly ------------------------------------------------------
 

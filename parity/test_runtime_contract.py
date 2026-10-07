@@ -309,6 +309,29 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("NESTED_AUTOMATION_TEST: PASS", result.stdout, result.stdout + result.stderr)
 
+    def test_unwritten_volume_surfaces_default_to_the_native_atlas(self):
+        # Reference Pipeline.createSurfaces: an undeclared vol0..vol7 surface is a
+        # 64x4096 atlas, every other undeclared surface is screen-sized.
+        script = """
+            extends SceneTree
+
+            func _init() -> void:
+                var Backend = load("res://addons/noisemaker/runtime/nm_backend.gd")
+                var screen := Vector2i(192, 128)
+                var ok: bool = Backend.default_surface_dims("global_vol0", screen) == Vector2i(64, 4096) \\
+                    and Backend.default_surface_dims("global_vol7", screen) == Vector2i(64, 4096) \\
+                    and Backend.default_surface_dims("global_vol8", screen) == screen \\
+                    and Backend.default_surface_dims("global_geo0", screen) == screen \\
+                    and Backend.default_surface_dims("global_o0", screen) == screen \\
+                    and Backend.default_surface_dims("global_volume", screen) == screen
+                print("VOLUME_DEFAULT_TEST: PASS" if ok else "VOLUME_DEFAULT_TEST: FAIL")
+                quit(0 if ok else 1)
+        """
+        result = self._run_godot_script(script)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("VOLUME_DEFAULT_TEST: PASS", result.stdout, result.stdout + result.stderr)
+
     def test_noise2d_oscillator_matches_reference_values(self):
         # [seed, speed, offset, normalized time, value] from the reference
         # Pipeline.resolveUniformValue with oscType 6, min 0.2, max 0.8.
@@ -944,6 +967,7 @@ class RuntimeContractTests(unittest.TestCase):
                     and diag.records.size() == 2
                 ok = ok and b._data_format("rgba8unorm") == RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM \\
                     and b._data_format("rgba32float") == RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT \\
+                    and b._data_format("rgba16float") == RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT \\
                     and diag.records.size() == 2
                 for i in range(70):
                     diag.add_record({"i": i})

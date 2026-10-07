@@ -34,8 +34,8 @@ void main() {
 	// WGSL: var st = position.xy / resolution;
 	vec2 st = gl_FragCoord.xy / texSize;
 
-	// WGSL: let center = vec2<f32>(-centerX, centerY); st -= center;
-	vec2 center = vec2(-centerX, centerY);
+	// Pivot on (centerX, centerY) on both axes, as the reference GLSL.
+	vec2 center = vec2(centerX, centerY);
 	st -= center;
 
 	// WGSL: st.x *= aspect;
