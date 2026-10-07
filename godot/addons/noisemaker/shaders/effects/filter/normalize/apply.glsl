@@ -1,45 +1,27 @@
 #version 450
-// filter/normalize program "apply" — ported PIXEL-IDENTICALLY from wgsl/apply.wgsl.
-// GPGPU pass 4: apply normalization using the computed 1x1 min/max stats. Reads the stats
-// texel at (0,0); remaps RGB to [0,1] over the global range, preserving alpha.
-//
-// No-layout effect (normalize.json globals == {}): backend synthesizes the Params UBO
-// (engine globals only; none referenced here). Two inputs in pass.inputs order:
-// inputTex = original image (binding 1), statsTex = 1x1 min/max (binding 2).
-//
-// COORDINATE NOTE: ported from WGSL (top-left). coord = ivec2(gl_FragCoord.xy). NO Y-flip;
-// NO globalCoord/tileOffset remap (the WGSL has none — the reference GLSL computes an
-// unused globalCoord; we drop it). textureLoad -> texelFetch.
+// filter/normalize program apply — ported from glsl/apply.glsl. No-layout effect: params
+// and engine globals are injected as #defines; bool params arrive as floats, int params via int().
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(set = 0, binding = 2) uniform sampler2D statsTex;
 layout(location = 0) in vec2 v_uv;
-layout(location = 0) out vec4 frag;
+layout(location = 0) out vec4 fragColor;
 
 void main() {
-	ivec2 coord = ivec2(gl_FragCoord.xy);
-
-	// Read global min/max from 1x1 stats texture
-	vec4 stats = texelFetch(statsTex, ivec2(0, 0), 0);
-	float global_min = stats.r;
-	float global_max = stats.g;
-	float range = global_max - global_min;
-
-	// Read input pixel
-	vec4 texel = texelFetch(inputTex, coord, 0);
-
-	// Normalize RGB channels, preserve alpha
-	vec4 normalized;
-	if (range > 0.0001) {
-		normalized = vec4(
-			(texel.r - global_min) / range,
-			(texel.g - global_min) / range,
-			(texel.b - global_min) / range,
-			texel.a
-		);
-	} else {
-		// Avoid division by zero
-		normalized = texel;
-	}
-
-	frag = normalized;
+    vec2 globalCoord = gl_FragCoord.xy + tileOffset;
+    ivec2 coord = ivec2(gl_FragCoord.xy);
+    vec4 color = texelFetch(inputTex, coord, 0);
+    
+    // Read stats from the 1x1 texture
+    vec4 stats = texelFetch(statsTex, ivec2(0, 0), 0);
+    float minVal = stats.r;
+    float maxVal = stats.g;
+    
+    // Avoid divide by zero
+    if (maxVal - minVal < 0.00001) {
+        fragColor = color;
+        return;
+    }
+    
+    vec3 normalized = (color.rgb - minVal) / (maxVal - minVal);
+    fragColor = vec4(normalized, color.a);
 }

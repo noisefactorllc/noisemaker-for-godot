@@ -1,35 +1,41 @@
 #version 450
-// filter/blurH — ported from wgsl/blurH.wgsl. Horizontal separable Gaussian blur.
-// No-layout effect: backend injects Params UBO + `#define radiusX …`/`radiusY …`
-// and engine globals. Input texture bound at set 0, binding 1 (pass.inputs order).
+// filter/blur program blurH — ported from glsl/blurH.glsl. No-layout effect: params
+// and engine globals are injected as #defines; bool params arrive as floats, int params via int().
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(location = 0) in vec2 v_uv;
-layout(location = 0) out vec4 frag;
+layout(location = 0) out vec4 fragColor;
+
+/*
+ * Horizontal Gaussian blur pass
+ */
+const float PI = 3.14159265359;
 
 void main() {
-	vec2 texSize = vec2(textureSize(inputTex, 0));
-	vec2 uv = gl_FragCoord.xy / texSize;
-	vec2 texelSize = 1.0 / texSize;
+    vec2 globalCoord = gl_FragCoord.xy + tileOffset;
+    ivec2 texSize = textureSize(inputTex, 0);
+    vec2 uv = gl_FragCoord.xy / vec2(texSize);
+    vec2 texelSize = 1.0 / vec2(texSize);
 
-	int radius = int(radiusX);
-	if (radius <= 0) {
-		frag = texture(inputTex, uv);
-		return;
-	}
-
-	float sigma = float(radius) / 3.0;
-	float sigma2 = sigma * sigma;
-
-	vec4 sum = vec4(0.0);
-	float weightSum = 0.0;
-
-	for (int i = -radius; i <= radius; i = i + 1) {
-		float x = float(i);
-		float weight = exp(-(x * x) / (2.0 * sigma2));
-		vec2 offset = vec2(float(i) * texelSize.x, 0.0);
-		sum = sum + texture(inputTex, uv + offset) * weight;
-		weightSum = weightSum + weight;
-	}
-
-	frag = sum / weightSum;
+    int radius = int(radiusX * renderScale);
+    if (radius <= 0) {
+        fragColor = texture(inputTex, uv);
+        return;
+    }
+    
+    // Compute sigma for Gaussian (radius ~= 3*sigma)
+    float sigma = float(radius) / 3.0;
+    float sigma2 = sigma * sigma;
+    
+    vec4 sum = vec4(0.0);
+    float weightSum = 0.0;
+    
+    for (int i = -radius; i <= radius; i++) {
+        float x = float(i);
+        float weight = exp(-(x * x) / (2.0 * sigma2));
+        vec2 offset = vec2(float(i) * texelSize.x, 0.0);
+        sum += texture(inputTex, uv + offset) * weight;
+        weightSum += weight;
+    }
+    
+    fragColor = sum / weightSum;
 }

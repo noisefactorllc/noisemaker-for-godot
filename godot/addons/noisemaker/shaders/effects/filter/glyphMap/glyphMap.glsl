@@ -1,194 +1,337 @@
 #version 450
-// filter/glyphMap (program "glyphMap") — ported PIXEL-IDENTICALLY from wgsl/glyphMap.wgsl.
-// Converts the input to ASCII/glyph art: each cellSize×cellSize cell samples its center
-// brightness, picks one of 16 hardcoded 5x7 glyph bitmaps (ordered by density, seed-shuffled),
-// and renders that glyph (mono or input-colored). Single render pass.
-//
-// No-layout effect (glyphMap.json has NO uniformLayout): the backend SYNTHESIZES the Params
-// UBO + `#define <name> data[slot].comp` for the params (cellSize, seed, colorMode) and the
-// engine globals used here (tileOffset, fullResolution, renderScale). Use bare names. The
-// int params arrive as float UBO components → narrow with int() at the use sites (matching the
-// WGSL's i32()). The WGSL's `Uniforms` struct is just the reference packing.
-//
-// WGSL→GLSL: textureDimensions→textureSize; textureSample→texture; `select(a,b,c)`→`c?b:a`
-// (operands reversed); `v >> u32(n)`→`v >> uint(n)`; bit `&`/`>>` on ints kept. gl_FragCoord
-// is top-left/+0.5 like @position — NO Y-flip. At the parity harness tileOffset=(0,0) so the
-// non-tiling path runs (byte-identical to a plain grid); the tiling branch is ported verbatim.
+// filter/glyphMap program glyphMap — ported from glsl/glyphMap.glsl. No-layout effect: params
+// and engine globals are injected as #defines; bool params arrive as floats, int params via int().
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(location = 0) in vec2 v_uv;
-layout(location = 0) out vec4 frag;
+layout(location = 0) out vec4 fragColor;
 
-const int GLYPH_COUNT = 16;
-
+/*
+ * Glyph Map effect
+ * Converts image to ASCII/glyph art using hardcoded 5x7 glyph bitmaps
+ * ordered by density. Each cell maps input brightness to a glyph.
+ */
 // PCG PRNG
-uvec3 pcg(uvec3 seedv) {
-	uvec3 v = seedv * 1664525u + 1013904223u;
-	v.x = v.x + v.y * v.z;
-	v.y = v.y + v.z * v.x;
-	v.z = v.z + v.x * v.y;
-	v = v ^ (v >> uvec3(16u));
-	v.x = v.x + v.y * v.z;
-	v.y = v.y + v.z * v.x;
-	v.z = v.z + v.x * v.y;
-	return v;
+uvec3 pcg(uvec3 v) {
+    v = v * 1664525u + 1013904223u;
+    v.x += v.y * v.z;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v ^= v >> 16u;
+    v.x += v.y * v.z;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    return v;
 }
 
 // Hash for glyph variant selection per cell
 float hash(vec2 p) {
-	uvec3 v = pcg(uvec3(
-		uint(p.x >= 0.0 ? p.x * 2.0 : -p.x * 2.0 + 1.0),
-		uint(p.y >= 0.0 ? p.y * 2.0 : -p.y * 2.0 + 1.0),
-		0u
-	));
-	return float(v.x) / float(0xffffffffu);
+    uvec3 v = pcg(uvec3(
+        uint(p.x >= 0.0 ? p.x * 2.0 : -p.x * 2.0 + 1.0),
+        uint(p.y >= 0.0 ? p.y * 2.0 : -p.y * 2.0 + 1.0),
+        0u
+    ));
+    return float(v.x) / float(0xffffffffu);
 }
 
-// Get one row (5 bits) of a glyph bitmap. g: glyph index (0-15), y: row (0-6).
-int glyphRow(int g, int y) {
-	if (g == 0) { return 0; }
-	if (g == 1) {
-		if (y == 5) { return 4; }
-		return 0;
-	}
-	if (g == 2) {
-		if (y == 1 || y == 5) { return 4; }
-		return 0;
-	}
-	if (g == 3) {
-		if (y == 3) { return 14; }
-		return 0;
-	}
-	if (g == 4) {
-		if (y == 1 || y == 2 || y == 4 || y == 5) { return 4; }
-		if (y == 3) { return 14; }
-		return 0;
-	}
-	if (g == 5) {
-		if (y == 2 || y == 4) { return 14; }
-		return 0;
-	}
-	if (g == 6) {
-		if (y == 1 || y == 5) { return 10; }
-		if (y == 2 || y == 4) { return 4; }
-		if (y == 3) { return 14; }
-		return 0;
-	}
-	if (g == 7) {
-		if (y == 2 || y == 5) { return 14; }
-		if (y == 3 || y == 4) { return 10; }
-		return 0;
-	}
-	if (g == 8) {
-		if (y == 1 || y == 2 || y == 4 || y == 5) { return 10; }
-		if (y == 3) { return 4; }
-		return 0;
-	}
-	if (g == 9) {
-		if (y == 1 || y == 3 || y == 5) { return 10; }
-		if (y == 2 || y == 4) { return 31; }
-		return 0;
-	}
-	if (g == 10) {
-		if (y == 0) { return 25; }
-		if (y == 1) { return 26; }
-		if (y == 2) { return 4; }
-		if (y == 3) { return 9; }
-		if (y == 4) { return 11; }
-		if (y == 5) { return 19; }
-		return 0;
-	}
-	if (g == 11) {
-		if (y == 0) { return 4; }
-		if (y == 1) { return 10; }
-		if (y == 2) { return 17; }
-		if (y == 3) { return 31; }
-		if (y == 4 || y == 5) { return 17; }
-		return 0;
-	}
-	if (g == 12) {
-		if (y == 0 || y == 1) { return 17; }
-		if (y == 2 || y == 3) { return 21; }
-		if (y == 4) { return 27; }
-		if (y == 5) { return 10; }
-		return 0;
-	}
-	if (g == 13) {
-		if (y == 0) { return 17; }
-		if (y == 1) { return 27; }
-		if (y == 2 || y == 3) { return 21; }
-		if (y == 4 || y == 5) { return 17; }
-		return 0;
-	}
-	if (g == 14) {
-		if (y == 0 || y == 6) { return 14; }
-		if (y == 1) { return 17; }
-		if (y == 2) { return 23; }
-		if (y == 3) { return 21; }
-		if (y == 4) { return 22; }
-		if (y == 5) { return 16; }
-		return 0;
-	}
-	return 31;
-}
+// 16 glyphs encoded as 5x7 bitmaps (35 bits packed into int array)
+// Ordered from empty (lowest density) to full (highest density)
+// Each glyph: 7 rows of 5 bits, row 0 is top. Bit 4 is leftmost.
+// Encoding: row[i] = 5-bit value, glyph = row0..row6
+
+// Glyph 0: space (density ~0.00)
+//  .....
+//  .....
+//  .....
+//  .....
+//  .....
+//  .....
+//  .....
+
+// Glyph 1: period (density ~0.06)
+//  .....
+//  .....
+//  .....
+//  .....
+//  .....
+//  ..#..
+//  .....
+
+// Glyph 2: colon (density ~0.11)
+//  .....
+//  ..#..
+//  .....
+//  .....
+//  .....
+//  ..#..
+//  .....
+
+// Glyph 3: dash - (density ~0.14)
+//  .....
+//  .....
+//  .....
+//  .###.
+//  .....
+//  .....
+//  .....
+
+// Glyph 4: + (density ~0.20)
+//  .....
+//  ..#..
+//  ..#..
+//  .###.
+//  ..#..
+//  ..#..
+//  .....
+
+// Glyph 5: = (density ~0.17)
+//  .....
+//  .....
+//  .###.
+//  .....
+//  .###.
+//  .....
+//  .....
+
+// Glyph 6: * (density ~0.26)
+//  .....
+//  .#.#.
+//  ..#..
+//  .###.
+//  ..#..
+//  .#.#.
+//  .....
+
+// Glyph 7: o (density ~0.34)
+//  .....
+//  .....
+//  .###.
+//  .#.#.
+//  .#.#.
+//  .###.
+//  .....
+
+// Glyph 8: X (density ~0.34)
+//  .....
+//  .#.#.
+//  .#.#.
+//  ..#..
+//  .#.#.
+//  .#.#.
+//  .....
+
+// Glyph 9: # (density ~0.46)
+//  .....
+//  .#.#.
+//  #####
+//  .#.#.
+//  #####
+//  .#.#.
+//  .....
+
+// Glyph 10: % (density ~0.37)
+//  ##..#
+//  ##.#.
+//  ..#..
+//  .#..#
+//  .#.##
+//  #..##
+//  .....
+
+// Glyph 11: A (density ~0.40)
+//  ..#..
+//  .#.#.
+//  #...#
+//  #####
+//  #...#
+//  #...#
+//  .....
+
+// Glyph 12: W (density ~0.46)
+//  #...#
+//  #...#
+//  #.#.#
+//  #.#.#
+//  ##.##
+//  .#.#.
+//  .....
+
+// Glyph 13: M (density ~0.46)
+//  #...#
+//  ##.##
+//  #.#.#
+//  #.#.#
+//  #...#
+//  #...#
+//  .....
+
+// Glyph 14: @ (density ~0.63)
+//  .###.
+//  #...#
+//  #.###
+//  #.#.#
+//  #.##.
+//  #....
+//  .###.
+
+// Glyph 15: full block (density 1.00)
+//  #####
+//  #####
+//  #####
+//  #####
+//  #####
+//  #####
+//  #####
+
+const int GLYPH_COUNT = 16;
 
 // Return 1.0 if pixel (x, y) is set in glyph g, else 0.0
+// x: 0-4 (left to right), y: 0-6 (top to bottom)
 float glyphPixel(int g, int x, int y) {
-	int row = glyphRow(g, y);
-	int bit = (row >> uint(4 - x)) & 1;
-	return float(bit);
+    // Encode each glyph as 7 row values (5 bits each)
+    // Bit layout per row: bit4=col0(left), bit0=col4(right)
+
+    int row = 0;
+
+    if (g == 0) {
+        // space - all zero
+        return 0.0;
+    } else if (g == 1) {
+        // period
+        if (y == 5) row = 4; // ..#..
+        else return 0.0;
+    } else if (g == 2) {
+        // colon
+        if (y == 1 || y == 5) row = 4; // ..#..
+        else return 0.0;
+    } else if (g == 3) {
+        // dash
+        if (y == 3) row = 14; // .###.
+        else return 0.0;
+    } else if (g == 4) {
+        // plus
+        if (y == 1 || y == 2 || y == 4 || y == 5) row = 4; // ..#..
+        else if (y == 3) row = 14; // .###.
+        else return 0.0;
+    } else if (g == 5) {
+        // equals
+        if (y == 2 || y == 4) row = 14; // .###.
+        else return 0.0;
+    } else if (g == 6) {
+        // asterisk
+        if (y == 1 || y == 5) row = 10; // .#.#.
+        else if (y == 2 || y == 4) row = 4; // ..#..
+        else if (y == 3) row = 14; // .###.
+        else return 0.0;
+    } else if (g == 7) {
+        // o
+        if (y == 2 || y == 5) row = 14; // .###.
+        else if (y == 3 || y == 4) row = 10; // .#.#.
+        else return 0.0;
+    } else if (g == 8) {
+        // X
+        if (y == 1 || y == 2 || y == 4 || y == 5) row = 10; // .#.#.
+        else if (y == 3) row = 4; // ..#..
+        else return 0.0;
+    } else if (g == 9) {
+        // hash #
+        if (y == 1 || y == 3 || y == 5) row = 10; // .#.#.
+        else if (y == 2 || y == 4) row = 31; // #####
+        else return 0.0;
+    } else if (g == 10) {
+        // percent %
+        if (y == 0) row = 25; // ##..#
+        else if (y == 1) row = 26; // ##.#.
+        else if (y == 2) row = 4;  // ..#..
+        else if (y == 3) row = 9;  // .#..#
+        else if (y == 4) row = 11; // .#.##
+        else if (y == 5) row = 19; // #..##
+        else return 0.0;
+    } else if (g == 11) {
+        // A
+        if (y == 0) row = 4;  // ..#..
+        else if (y == 1) row = 10; // .#.#.
+        else if (y == 2) row = 17; // #...#
+        else if (y == 3) row = 31; // #####
+        else if (y == 4 || y == 5) row = 17; // #...#
+        else return 0.0;
+    } else if (g == 12) {
+        // W
+        if (y == 0 || y == 1) row = 17; // #...#
+        else if (y == 2 || y == 3) row = 21; // #.#.#
+        else if (y == 4) row = 27; // ##.##
+        else if (y == 5) row = 10; // .#.#.
+        else return 0.0;
+    } else if (g == 13) {
+        // M
+        if (y == 0) row = 17; // #...#
+        else if (y == 1) row = 27; // ##.##
+        else if (y == 2 || y == 3) row = 21; // #.#.#
+        else if (y == 4 || y == 5) row = 17; // #...#
+        else return 0.0;
+    } else if (g == 14) {
+        // @
+        if (y == 0 || y == 6) row = 14; // .###.
+        else if (y == 1) row = 17; // #...#
+        else if (y == 2) row = 23; // #.###
+        else if (y == 3) row = 21; // #.#.#
+        else if (y == 4) row = 22; // #.##.
+        else if (y == 5) row = 16; // #....
+        else return 0.0;
+    } else {
+        // full block
+        return 1.0;
+    }
+
+    // Extract bit: bit (4 - x) from row
+    int bit = (row >> (4 - x)) & 1;
+    return float(bit);
 }
 
 void main() {
-	vec2 texSize = vec2(textureSize(inputTex, 0));
-	vec2 tOffset = tileOffset;
-	bool isTile = length(tOffset) > 0.0;
-	vec2 pixelCoord = gl_FragCoord.xy;
-	int cs = max(int(cellSize), 1);
-	if (isTile) {
-		pixelCoord = gl_FragCoord.xy + tOffset;
-		cs = clamp(int(float(cellSize) * renderScale), 1, 512);
-	}
-	float csf = float(cs);
+    ivec2 texSize = textureSize(inputTex, 0);
+    vec2 res = vec2(texSize);
+    vec2 pixelCoord = gl_FragCoord.xy + tileOffset;
 
-	// Which cell are we in?
-	vec2 cellIndex = floor(pixelCoord / csf);
+    int cs = max(int(float(int(cellSize)) * renderScale), 1);
+    // Cell-size cap and the edge clamp below apply only when tiling, so
+    // normal-size output is byte-identical to the pre-tile-aware shader
+    // (zero baseline regression for all parameters).
+    bool isTileRendering = length(tileOffset) > 0.0;
+    if (isTileRendering) { cs = min(cs, 512); }
+    float csf = float(cs);
 
-	// Local position within the cell, mapped to 5x7 glyph grid
-	vec2 localPos = fract(pixelCoord / csf);
-	int gx = int(floor(localPos.x * 5.0));
-	int gy = int(floor(localPos.y * 7.0));
-	gx = clamp(gx, 0, 4);
-	gy = clamp(gy, 0, 6);
+    vec2 cellIndex = floor(pixelCoord / csf);
 
-	// Sample the center of the cell for brightness
-	vec2 cellCenter = (cellIndex + 0.5) * csf;
-	vec2 sampleUV = cellCenter / texSize;
-	if (isTile) {
-		sampleUV = clamp((cellCenter - tOffset) / texSize, vec2(0.0), vec2(1.0));
-	}
-	vec4 srcColor = texture(inputTex, sampleUV);
+    vec2 localPos = fract(pixelCoord / csf);
+    int gx = int(floor(localPos.x * 5.0));
+    int gy = int(floor(localPos.y * 7.0));
+    gx = clamp(gx, 0, 4);
+    gy = clamp(gy, 0, 6);
 
-	// Compute luminance
-	float luma = dot(srcColor.rgb, vec3(0.299, 0.587, 0.114));
+    vec2 cellCenter = (cellIndex + 0.5) * csf;
+    vec2 sampleUV = (cellCenter - tileOffset) / res;
+    if (isTileRendering) { sampleUV = clamp(sampleUV, 0.0, 1.0); }
+    vec4 srcColor = texture(inputTex, sampleUV);
 
-	// Map luminance to glyph index (0 to GLYPH_COUNT-1)
-	int glyphIdx = int(floor(luma * float(GLYPH_COUNT)));
-	glyphIdx = clamp(glyphIdx, 0, GLYPH_COUNT - 1);
+    float luma = dot(srcColor.rgb, vec3(0.299, 0.587, 0.114));
 
-	// Use seed to rotate/shift glyph selection for variety
-	float cellHash = hash(cellIndex + float(seed) * 0.37);
-	int variant = int(floor(cellHash * 3.0));
+    int glyphIdx = int(floor(luma * float(GLYPH_COUNT)));
+    glyphIdx = clamp(glyphIdx, 0, GLYPH_COUNT - 1);
 
-	if (variant == 2 && glyphIdx > 1) {
-		glyphIdx = glyphIdx - 1;
-	}
+    float cellHash = hash(cellIndex + float(int(seed)) * 0.37);
+    int variant = int(floor(cellHash * 3.0));
 
-	// Get the glyph pixel value
-	float glyphVal = glyphPixel(glyphIdx, gx, gy);
+    if (variant == 1 && glyphIdx > 0 && glyphIdx < GLYPH_COUNT - 1) {
+        glyphIdx = glyphIdx;
+    } else if (variant == 2 && glyphIdx > 1) {
+        glyphIdx = glyphIdx - 1;
+    }
 
-	if (int(colorMode) > 0) {
-		frag = vec4(srcColor.rgb * glyphVal, 1.0);
-	} else {
-		frag = vec4(vec3(glyphVal), 1.0);
-	}
+    float glyphVal = glyphPixel(glyphIdx, gx, gy);
+
+    if (int(colorMode) > 0) {
+        fragColor = vec4(srcColor.rgb * glyphVal, 1.0);
+    } else {
+        fragColor = vec4(vec3(glyphVal), 1.0);
+    }
 }

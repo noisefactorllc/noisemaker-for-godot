@@ -1,10 +1,11 @@
 #version 450
-// synth/solid — ported from wgsl/solid.wgsl. Constant color, premultiplied alpha.
-// No-layout effect: the backend injects the Params UBO + `#define color …`/`#define
-// alpha …` (synthesized layout), so we use the bare reference names directly.
+// synth/solid program solid — ported from glsl/solid.glsl. No-layout effect: params
+// and engine globals are injected as #defines; bool params arrive as floats, int params via int().
 layout(location = 0) in vec2 v_uv;
-layout(location = 0) out vec4 frag;
+layout(location = 0) out vec4 fragColor;
 
+/* Produces a constant color with premultiplied alpha. */
 void main() {
-	frag = vec4(color * alpha, alpha);
+  // Premultiply RGB by alpha for correct compositing
+  fragColor = vec4(color * alpha, alpha);
 }

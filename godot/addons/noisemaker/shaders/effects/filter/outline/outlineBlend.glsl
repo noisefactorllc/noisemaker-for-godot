@@ -1,33 +1,33 @@
 #version 450
-// filter/outline program "outlineBlend" — ported from wgsl/outlineBlend.wgsl.
-// Pass 3 of 3: composite the edge stroke onto the base. Edge strength comes from
-// the edges texture's red channel; the stroke is black (default) or white
-// (invert). out = mix(base, outlineColor, strength).
-// No-layout effect: backend injects the Params UBO + engine globals. Two inputs
-// (pass.inputs order): inputTex = original scene (binding 1), edgesTexture =
-// outlineEdges (binding 2). Backend sampler is NEAREST + clamp, so sampling at
-// gl_FragCoord.xy/texSize reads the exact texel — matching the WGSL
-// textureSample(texCoord) pass-through.
+// filter/outline program outlineBlend — ported from glsl/outlineBlend.glsl. No-layout effect: params
+// and engine globals are injected as #defines; bool params arrive as floats, int params via int().
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(set = 0, binding = 2) uniform sampler2D edgesTexture;
 layout(location = 0) in vec2 v_uv;
-layout(location = 0) out vec4 frag;
+layout(location = 0) out vec4 fragColor;
 
+// Outline blend pass - darken base where edges are detected
 void main() {
-	vec2 texSize = vec2(textureSize(inputTex, 0));
-	vec2 uv = gl_FragCoord.xy / texSize;
+    vec2 globalCoord = gl_FragCoord.xy + tileOffset;
+    ivec2 dimensions = textureSize(inputTex, 0);
+    if (dimensions.x == 0 || dimensions.y == 0) {
+        fragColor = vec4(0.0);
+        return;
+    }
 
-	vec4 base = texture(inputTex, uv);
-	vec4 edges = texture(edgesTexture, uv);
+    vec2 uv = gl_FragCoord.xy / vec2(dimensions);
+    
+    vec4 base = texture(inputTex, uv);
+    vec4 edges = texture(edgesTexture, uv);
 
-	// Edge strength from luminance
-	float strength = clamp(edges.r, 0.0, 1.0);
-
-	// Outline color: black by default, white if inverted
-	vec3 outlineColor = invert > 0.5 ? vec3(1.0) : vec3(0.0);
-
-	// Apply outline where edges are present
-	vec3 out_rgb = mix(base.rgb, outlineColor, strength);
-
-	frag = vec4(out_rgb, base.a);
+    // Edge strength from luminance
+    float strength = clamp(edges.r, 0.0, 1.0);
+    
+    // Outline color: black by default, white if inverted
+    vec3 outlineColor = invert > 0.5 ? vec3(1.0) : vec3(0.0);
+    
+    // Apply outline where edges are present
+    vec3 out_rgb = mix(base.rgb, outlineColor, strength);
+    
+    fragColor = vec4(out_rgb, base.a);
 }
