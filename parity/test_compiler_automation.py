@@ -253,6 +253,17 @@ class CompilerAutomationTests(unittest.TestCase):
             self.assertEqual(carrier[field]["type"], "Audio")
             self.assertEqual(carrier[field]["_varRef"], "rate")
 
+    def test_noise2d_oscillator_kind_validates_without_fallback(self):
+        programs = {
+            "member.dsl": "search synth\nnoise(scaleX: osc(type: oscKind.noise2d, seed: 42)).write(o0)\nrender(o0)\n",
+            "literal.dsl": "search synth\nnoise(scaleX: osc(type: 6)).write(o0)\nrender(o0)\n",
+        }
+        for name, output in self._dump("_validate_dump.gd", programs).items():
+            with self.subTest(name=name):
+                self.assertTrue(output["ok"])
+                self.assertEqual(output["out"]["diagnostics"], [])
+                self.assertEqual(output["out"]["plans"][0]["chain"][0]["args"]["scaleX"]["oscType"], 6)
+
     def test_automation_cycles_and_excess_depth_are_reported(self):
         programs = {
             "cycle.dsl": """

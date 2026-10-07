@@ -1796,6 +1796,17 @@ func _osc_noise(t: float, seed: float) -> float:
 	var second := _automation_noise2d(loop_x + seed * 2.0, loop_y + seed * 2.0, seed)
 	return (first + second) * 0.5
 
+# Two-stage periodic noise (oscKind.noise2d, kind 6), mirroring the osc2d effect:
+# speed is applied once, after the first periodic wrap. osc() has no spatial
+# position, so both stages sample a fixed seed-derived position.
+func _osc_noise2d(time: float, speed: float, seed: float) -> float:
+	var px := (absf(fmod(seed, 16.0)) + 0.5) / 16.0
+	var py := (absf(fmod(floor(seed / 16.0), 16.0)) + 0.5) / 16.0
+	var time_noise := _automation_noise2d(px, py, seed + 12345.0)
+	var value_noise := _automation_noise2d(px, py, seed)
+	var scaled_time := (sin((time - time_noise) * TAU) + 1.0) * 0.5 * speed
+	return (sin((scaled_time - value_noise) * TAU) + 1.0) * 0.5
+
 func _osc_primitive(kind: int, x: float):
 	var whole := floor(x)
 	var fraction: float = x - whole
@@ -2085,6 +2096,10 @@ func _evaluate_oscillator(config: Dictionary, normalized_time: float, depth: int
 			raw_value = _osc_square(t)
 		5:
 			raw_value = _osc_noise(t, seed)
+		6:
+			var rate := _resolve_automation_field(speed, normalized_time,
+				AUTOMATION_FIELD_RANGES["oscillatorSpeed"], depth, 1.0, wall_time, stack)
+			raw_value = _osc_noise2d(normalized_time + offset, rate if is_finite(rate) else 1.0, seed)
 	return minimum + raw_value * (maximum - minimum)
 
 func _automation_stack_has(stack: Array, config: Dictionary) -> bool:

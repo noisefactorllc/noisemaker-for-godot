@@ -2,7 +2,8 @@
 # the REFERENCE shaders/src/runtime/expander.js (cross-checked vs noisemaker-for-unity Expander.cs).
 # Sources: upstream noisemaker + noisemaker-for-unity ONLY.
 #
-# expand(compilation_result, options) -> {passes, errors, programs, textureSpecs, renderSurface}.
+# expand(compilation_result, options) -> {passes, errors, programs, textureSpecs, renderSurface,
+# mediaSteps}.
 # Threads the current 2D/3D/geo/agent input texture through each chain, expands each effect def's
 # passes/textures/globals into concrete passes with resolved inputs/outputs/uniforms, scopes shared
 # textures to the chain or particle pipeline, and expands classicNoisedeck palette indices.
@@ -49,6 +50,10 @@ var _errors: Array
 var _programs: Dictionary
 var _texture_specs: Dictionary
 var _texture_map: Dictionary
+# Per-step external texture bindings (e.g. imageTex_step_0), one entry per texture id, so hosts
+# can enumerate media texture ids without reproducing the numbering.
+var _media_steps: Array
+var _media_step_ids: Dictionary
 var _last_written_surface
 var _enums_std: Dictionary
 # per-plan scope context (read by the scope helpers)
@@ -151,6 +156,8 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 	_programs = {}
 	_texture_specs = {}
 	_texture_map = {}
+	_media_steps = []
+	_media_step_ids = {}
 	_last_written_surface = null
 	_enums_std = reg.enums.std()
 
@@ -675,7 +682,7 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 		_errors.push_back({"message": "No render surface specified and no write() found - add render(oN) or write(oN)"})
 		render_surface = null
 
-	return {"passes": _passes, "errors": _errors, "programs": _programs, "textureSpecs": _texture_specs, "renderSurface": render_surface}
+	return {"passes": _passes, "errors": _errors, "programs": _programs, "textureSpecs": _texture_specs, "renderSurface": render_surface, "mediaSteps": _media_steps}
 
 # Scope a dimension spec's param reference to this pipeline/chain (tracks the mapping).
 func _scope_dim_spec(dim_spec, scope_suffix: String, scoped_param_map: Dictionary, tex_name: String = ""):
@@ -733,7 +740,12 @@ func _map_input(pass_obj: Dictionary, uniform_name, tex_ref, current_input, curr
 		else:
 			pass_obj["inputs"][uniform_name] = current_input if current_input != null else "global_inputTex"
 	elif effect_def.get("externalTexture") and tex_ref == effect_def.get("externalTexture"):
-		pass_obj["inputs"][uniform_name] = "%s_step_%s" % [tex_ref, step["temp"]]
+		var tex_id := "%s_step_%s" % [tex_ref, step["temp"]]
+		pass_obj["inputs"][uniform_name] = tex_id
+		if not _media_step_ids.has(tex_id):
+			_media_step_ids[tex_id] = true
+			_media_steps.push_back({"textureId": tex_id, "uniform": uniform_name,
+				"stepIndex": step["temp"], "effect": step.get("op")})
 	elif step_args is Dictionary and step_args.has(tex_ref):
 		var arg = step_args[tex_ref]
 		if arg == null:

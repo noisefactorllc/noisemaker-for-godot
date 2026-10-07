@@ -25,9 +25,9 @@ const float OCTAVEWARP_TAU = 6.28318530717959;
 // select(a, b, cond) -> cond ? b : a (operands reversed). float->uint is truncation.
 float hash21(vec2 p) {
 	uvec3 v = pcg(uvec3(
-		uint(p.x >= 0.0 ? p.x * 2.0 : -p.x * 2.0 + 1.0),
-		uint(p.y >= 0.0 ? p.y * 2.0 : -p.y * 2.0 + 1.0),
-		uint(seed)
+		uint(abs(p.x) * 2.0) + uint(p.x < 0.0),
+		uint(abs(p.y) * 2.0) + uint(p.y < 0.0),
+		uint(abs(seed))
 	));
 	return float(v.x) / float(0xffffffffu);
 }

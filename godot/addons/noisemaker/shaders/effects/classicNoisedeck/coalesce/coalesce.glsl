@@ -77,7 +77,8 @@ vec4 cloak(vec2 st) {
 		right = rightReflected;
 	} else {
 		left = leftReflected;
-		right = mix(rightReflected, rightRefracted, map_range(mixAmt, 0.0, 100.0, 0.0, 1.0));
+		// As the reference GLSL: right stays the refracted right input.
+		right = mix(rightRefracted, rightRefracted, map_range(mixAmt, 0.0, 100.0, 0.0, 1.0));
 	}
 
 	return mix(left, right, m);
@@ -303,8 +304,9 @@ void main() {
 		rightUV.x = rightUV.x + cos(leftLen * CO_TAU) * rb;
 		rightUV.y = rightUV.y + sin(leftLen * CO_TAU) * rb;
 
-		vec4 color1 = texture(inputTex, leftUV);
-		vec4 color2 = texture(tex, rightUV);
+		// Wrap the refracted coordinates as the reference GLSL does; the samplers clamp.
+		vec4 color1 = texture(inputTex, fract(leftUV));
+		vec4 color2 = texture(tex, fract(rightUV));
 
 		// blendMode is an int param but arrives as a float UBO component (synth #define) —
 		// narrow at the call site for the int `mode` parameter.

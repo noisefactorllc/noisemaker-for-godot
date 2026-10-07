@@ -309,6 +309,46 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("NESTED_AUTOMATION_TEST: PASS", result.stdout, result.stdout + result.stderr)
 
+    def test_noise2d_oscillator_matches_reference_values(self):
+        # [seed, speed, offset, normalized time, value] from the reference
+        # Pipeline.resolveUniformValue with oscType 6, min 0.2, max 0.8.
+        script = """
+            extends SceneTree
+
+            const CASES := [
+                [42, 2, 0.25, 0.0, 0.37153569520483143], [42, 2, 0.25, 0.3, 0.31638284142277284],
+                [42, 2, 0.25, 0.5, 0.4834248291826898], [42, 2, 0.25, 0.77, 0.2441733454840882],
+                [42, 2, 0.25, 1.0, 0.37153569520483143], [7, 3.5, 0.25, 0.0, 0.5021116825577986],
+                [7, 3.5, 0.25, 0.3, 0.7944889412958036], [7, 3.5, 0.25, 0.5, 0.4980402094216433],
+                [7, 3.5, 0.25, 0.77, 0.41896092436175547], [123, 1, 0.0, 0.0, 0.20384239895850184],
+                [123, 1, 0.0, 0.3, 0.7744775704767435], [123, 1, 0.0, 0.77, 0.7842602836739287],
+                [-5, 2, 0.0, 0.0, 0.4238210856688446], [-5, 2, 0.0, 0.3, 0.417655658636201],
+                [-5, 2, 0.0, 0.5, 0.5555454405731577], [-5, 2, 0.0, 0.77, 0.49712068751569827],
+            ]
+
+            func _init() -> void:
+                var backend = load("res://addons/noisemaker/runtime/nm_backend.gd").new()
+                var failures := []
+                for case in CASES:
+                    var config := {
+                        "type": "Oscillator", "oscType": 6, "min": 0.2, "max": 0.8,
+                        "speed": float(case[1]), "offset": float(case[2]), "seed": float(case[0]),
+                    }
+                    var actual = backend.call("resolve_uniform_value", config, float(case[3]), null)
+                    if abs(actual - float(case[4])) > 1e-9:
+                        failures.append([case, actual])
+                if failures.is_empty():
+                    print("NOISE2D_OSC_TEST: PASS")
+                    quit(0)
+                else:
+                    print("NOISE2D_OSC_TEST: ", failures)
+                    quit(1)
+        """
+        result = self._run_godot_script(script)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("NOISE2D_OSC_TEST: PASS", result.stdout, result.stdout + result.stderr)
+
     def test_external_inputs_drive_nested_rate_and_capture_requirements_recurse(self):
         script = """
             extends SceneTree

@@ -1190,7 +1190,7 @@ func _compile_automation_descriptor(node: Dictionary, depth: int = 0):
 		var value := {
 			"type": "Oscillator",
 			"oscType": _resolve_automation_enum(node.get("oscType"), "oscKind", 0,
-				[0, 1, 2, 3, 4, 5], "osc", "type"),
+				[0, 1, 2, 3, 4, 5, 6], "osc", "type"),
 			"min": _resolve_automation_number(node.get("min"), "osc", "min", 0,
 				{"allowBoolean": true, "allowAutomation": true, "clamp01": true}, depth),
 			"max": _resolve_automation_number(node.get("max"), "osc", "max", 1,

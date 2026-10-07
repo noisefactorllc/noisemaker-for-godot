@@ -307,7 +307,8 @@ vec2 rotate2D(vec2 st_in, float rot) {
 	st -= vec2(0.5 * aspectRatioFn(), 0.5);
 	float c = cos(angle);
 	float s = sin(angle);
-	st = vec2(c * st.x - s * st.y, s * st.x + c * st.y);
+	// The reference GLSL's mat2(cos, -sin, sin, cos) * st (column-major).
+	st = vec2(c * st.x + s * st.y, -s * st.x + c * st.y);
 	st += vec2(0.5 * aspectRatioFn(), 0.5);
 	st.x /= aspectRatioFn();
 	return st;
