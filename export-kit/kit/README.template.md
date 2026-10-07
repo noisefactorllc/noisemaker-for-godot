@@ -123,9 +123,9 @@ so it never appears over your work.
 
 ## What this port cannot render
 
-External texture/camera/video/audio input is not supported. Shader sources ship for the
-3D effects (`synth3d`, `filter3d`, and the 3D render stages). Shader presence does not establish
-pixel parity. Use the port's parity harness to verify the program on the target platform.
+This project feeds no external input: no images, camera, video, audio or MIDI. Effects whose content
+the reference draws on the CPU render without it: `text` glyphs, the `fibers`, `scratches` and
+`strayHair` overlays, and `meshLoader` meshes (a built-in triangle stands in).
 
 No machine-readable copy of the supported set ships in this export. To check an edited `program.dsl`
 against a different build of this port, put it back into Noisedeck and open the export dialog with

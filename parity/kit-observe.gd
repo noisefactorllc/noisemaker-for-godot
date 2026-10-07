@@ -1,4 +1,4 @@
-# Committed kit observer for the GAP-001 executable check.
+# Kit observer for the exported-kit playback check (parity/test_kit_playback.py).
 #
 # Mirrors the worker kit-observe.gd contract: run against an installed kit
 # project, it loads the kit's main.tscn, records the displayed texture hash

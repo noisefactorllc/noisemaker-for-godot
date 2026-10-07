@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GAP-004: public entry points reject invalid DSL with actionable diagnostics.
+"""Public entry points reject invalid DSL with actionable diagnostics.
 
 The unknown-effect input must produce an actionable NM_COMPILE_DIAG diagnostic without
 rendering; correcting it must restore the render path (verified against the missing-device

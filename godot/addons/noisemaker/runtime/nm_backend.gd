@@ -151,7 +151,7 @@ var _closed := false
 # and _depth_texture). Only these are released by teardown or by allocation-replacement
 # frees: a consumer may inject its own texture into the backend's maps (e.g. an
 # externally-owned render surface for sink/export submission — see the frame-export
-# probe's "probe" texture) and remains its owner (GAP-003 ownership contract).
+# probe's "probe" texture) and remains its owner (ownership contract).
 var _owned_textures := {}
 
 # Double-buffered "ping-pong" surfaces (reference/04 §6/§8/§10). A `global_<name>`
@@ -175,7 +175,7 @@ var _midi_state = null
 var _audio_state = null
 var _max_texture_size_2d := 0
 var _max_color_bytes_per_sample := 0
-# Texture allocation policies (reference GAP-004, compiler.js extractTextureSpecs):
+# Texture allocation policies (reference compiler.js extractTextureSpecs):
 # `mipmaps: true` allocates a full mip chain regenerated after each frame's passes;
 # `persistent: true` preserves contents when a texture is recreated at a new size.
 var _mip_sampler: RID     # linear + linear mipmap filtering for mipmapped inputs
@@ -185,7 +185,7 @@ var _mip_shader: RID
 var _mip_pipelines := {}  # fb format -> render pipeline
 var _mip_scratch := {}    # Vector2i -> RID temp textures for mip-level renders
 
-# Texture pooling (reference GAP-006, pipeline.js consumeResourceAllocationPlan).
+# Texture pooling (reference pipeline.js consumeResourceAllocationPlan).
 # Opt-in via set_texture_pooling(true): virtual (non-global) textures the
 # analyzer grouped onto one physical id (graph.allocations) share a single
 # backend texture. Default off preserves the historical one-texture-per-virtual
@@ -305,7 +305,7 @@ func create_frame_export_queue(options := {}):
 	return queue
 
 
-# Backend/device ownership contract (GAP-003):
+# Backend/device ownership contract:
 #   - The CONSUMER owns the RenderingDevice: it creates the device, passes it to
 #     setup(), and destroys it only after close() returns.
 #   - The BACKEND owns every RID it derived from that device: samplers, textures
@@ -413,7 +413,7 @@ func _ensure_audio_storage() -> void:
 # --- textures -------------------------------------------------------------
 
 # Record a historically-silent fallback as a structured diagnostic (mirror of
-# the reference's GAP-007 recording: backends/diagnostics.js DiagnosticCollector,
+# the reference's recording in backends/diagnostics.js DiagnosticCollector,
 # upstream e24c844f8dad). The push_warning is new, rendering-neutral surfacing
 # (the silent fallback paths previously printed nothing); it is deduplicated per
 # key so per-frame rendering cannot grow it unboundedly, matching the reference's
@@ -769,7 +769,7 @@ func allocate_textures(graph: Dictionary) -> void:
 					_resample_tex(existing, new_rid, prior_dims, Vector2i(w, h), fmt)
 				_textures[tex_id] = new_rid
 				# Replaced allocation: release the old backend texture so repeated
-				# renders and resizes do not accumulate stale RIDs (GAP-003).
+				# renders and resizes do not accumulate stale RIDs.
 				# Pooled members are exempt: their shared storage RID is released
 				# exactly once through _apply_texture_aliases below (or
 				# release_regrouped_textures above for a dissolved group); freeing
@@ -800,7 +800,7 @@ func allocate_textures(graph: Dictionary) -> void:
 				_ensure_tex(t)
 	_refresh_mip_targets(graph)
 
-# ---- Texture pooling (reference GAP-006, pipeline.js) ----
+# ---- Texture pooling (reference pipeline.js) ----
 
 # Build the pooling plan consumed from the analyzer's physical allocation map
 # (graph.allocations). Returns a Dictionary of virtualId -> storageId for every
@@ -971,7 +971,7 @@ func _release_regrouped_textures(previous_aliases: Dictionary, next_aliases: Dic
 # Free every unique valid RID value in a map exactly once (pooling aliases and
 # ping-pong bookkeeping can point several ids at one storage texture) and
 # clear the map. Static over an injected map + free callable so the dedupe is
-# testable headless (GAP-003 lifecycle contract).
+# testable headless.
 static func release_unique_rids(records: Dictionary, free_rid: Callable) -> void:
 	var freed := {}
 	var keys := records.keys()
@@ -987,7 +987,7 @@ static func release_unique_rids(records: Dictionary, free_rid: Callable) -> void
 # texture into the backend's maps (externally-owned render surface for sink or
 # export submission — e.g. the frame-export probe's "probe" texture) and stays
 # its owner; teardown and allocation-replacement frees must not release it
-# (GAP-003 ownership contract). Safe on already-released owned RIDs — the
+# (ownership contract). Safe on already-released owned RIDs — the
 # ownership record is erased at release.
 func _free_owned(rid: RID) -> void:
 	if rid.is_valid() and _owned_textures.has(rid):
@@ -995,7 +995,7 @@ func _free_owned(rid: RID) -> void:
 		rd.free_rid(rid)
 
 
-# Probe-facing accounting (GAP-003 lifecycle): number of live backend-owned
+# Probe-facing accounting: number of live backend-owned
 # RIDs tracked in the cache maps plus the singleton handles. Per-pass
 # transients are released by the render call that created them and never
 # accumulate here. Lifecycle probes assert this is flat across repeated
@@ -1140,7 +1140,7 @@ func _alloc_pingpong(tex_id: String, w: int, h: int, fmt: int, mip_levels: int =
 		_resample_tex(prior_write, _textures[write_key], prior_dims, Vector2i(w, h), fmt)
 	# Replaced halves release their old RIDs once the (optional) resample has
 	# consumed them — repeated frames/resizes must not accumulate stale
-	# textures (GAP-003). Ping-pong halves are never pooled.
+	# textures. Ping-pong halves are never pooled.
 	if old_read.is_valid():
 		_free_owned(old_read)
 	if old_write.is_valid():
@@ -1242,7 +1242,7 @@ func _draw_resample(src: RID, dst: RID, src_dims: Vector2i, dst_dims: Vector2i,
 	rd.draw_list_bind_vertex_array(dl, _varr)
 	rd.draw_list_draw(dl, false, 1)
 	rd.draw_list_end()
-	# Transients released per draw (GAP-003, see execute_pass).
+	# Transients released per draw (see execute_pass).
 	rd.free_rid(fb)
 	rd.free_rid(set0)
 	rd.free_rid(ubo)
@@ -2422,7 +2422,7 @@ func execute_pass(p: Dictionary) -> bool:
 		# detail now carries the actual per-attachment texture formats) so the
 		# harness side-car quotes the enriched failure. Then bail instead of
 		# binding a dead pipeline into a doomed draw list. The transient
-		# framebuffer is released before bailing (GAP-003).
+		# framebuffer is released before bailing.
 		var fmts := PackedStringArray()
 		for rid in out_rids:
 			# texture_get_format returns an RDTextureFormat struct, not a
@@ -2510,7 +2510,7 @@ func execute_pass(p: Dictionary) -> bool:
 			"program": cache_key,
 			"detail": dlmsg,
 		})
-		# Release the transients created for this pass before bailing (GAP-003).
+		# Release the transients created for this pass before bailing.
 		rd.free_rid(fb)
 		rd.free_rid(set0)
 		if ubo.is_valid():
@@ -2532,7 +2532,7 @@ func execute_pass(p: Dictionary) -> bool:
 	# Per-pass transients (framebuffer, uniform set, param UBO) are released
 	# immediately: RenderingDevice defers the actual destruction until the
 	# recorded commands complete, so this leaks nothing while keeping the
-	# retained handle count flat across repeated frames and resizes (GAP-003).
+	# retained handle count flat across repeated frames and resizes.
 	rd.free_rid(fb)
 	rd.free_rid(set0)
 	if ubo.is_valid():
@@ -2857,7 +2857,7 @@ func _snapshot_surface() -> Image:
 	# Reference capture quantizes the float readback with Math.round(v*255) (JS,
 	# half-up). Godot's Image.set_pixel on RGBA8 TRUNCATES (v*255.0 -> uint8, e.g.
 	# 0.5 -> 127, 0.253 -> 64), which biased every candidate PNG 1 LSB low on ~half
-	# the pixels (GAP-002: the bias amplified through the height grid + perspective
+	# the pixels (the bias amplified through the height grid + perspective
 	# projection into 243 max-abs-diff point flips). Quantize by hand with
 	# round(v*255 + 0.5) in float64 (GDScript floats), matching the reference's
 	# Math.round on the half-precision readback exactly.

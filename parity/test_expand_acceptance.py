@@ -1,7 +1,7 @@
 """Pins the accepted expansion-difference class for the expand parity gate.
 
 The rule lives in parity/expand_acceptance.mjs and is consumed by
-parity/check_expand.mjs (GAP-005, "define accepted expansion differences"):
+parity/check_expand.mjs:
 a candidate pass may carry `defines` that the reference pass omits exactly
 when both passes name the byte-identical program and every define entry is
 encoded in that program name as `__<KEY>_<value>`; after stripping those
@@ -60,7 +60,7 @@ def ref_deposit(i):
 
 class ExpandAcceptanceTests(unittest.TestCase):
     def test_accepted_pass_defines_variant(self):
-        """The observed GAP-005 shape: candidate pass defines, suffixed program, no ref defines."""
+        """The observed shape: candidate pass defines, suffixed program, no ref defines."""
         [r] = run_cases([{
             "name": "accepted",
             "ref": graph(ref_deposit(0), {"name": "blend", "program": "n_blend"}),

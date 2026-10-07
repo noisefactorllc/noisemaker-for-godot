@@ -1,89 +1,99 @@
 # Parity harness
 
-How Noisemaker for Godot is verified against the JS/WebGL2 reference engine. Two independent layers:
+How Noisemaker for Godot is checked against the reference engine (the JS engine's WebGL2 backend).
+There are two layers:
 
-1. **Pixel parity** — render the Godot candidate and diff it against a reference GPU golden.
-2. **Compiler parity** — diff the in-engine GDScript compiler's output against the reference compiler,
-   stage by stage (the "the DSL builds the same graph" test).
+1. **Pixel parity:** render each program with Godot and compare it with a golden rendered by the
+   reference.
+2. **Compiler parity:** compare the in-engine GDScript compiler's output with the reference compiler,
+   stage by stage.
 
-> The reference engine is needed here (and only here). Point the tooling at a checkout with
-> `NM_REFERENCE_ROOT=/path/to/noisemaker`. This repo assumes no sibling checkout. `GODOT` is the
-> Godot 4.7 binary. The **addon itself needs none of this** — see `../godot/addons/noisemaker/README.md`.
+The addon itself needs none of this; see `../godot/addons/noisemaker/README.md`.
+
+Tooling requirements: Node, Python 3.11 or newer, a Godot 4.7 binary in `GODOT`, and a virtualenv at
+`parity/.venv` with `numpy` and `pillow` for `compare.py` (`python3 -m venv parity/.venv`, then install
+both). The scripts find the venv's interpreter under `bin/` or, on Windows, `Scripts/`. On Windows run
+everything from Git Bash.
 
 ## 1. Pixel parity
 
-The candidate must render **non-headless** (RenderingDevice is null under `--headless`). The harness
-runs Godot with an off-screen window (`--position 5000,5000`).
-
 ```bash
-# one program: render the Godot candidate + compare to the golden
-NM_REFERENCE_ROOT=/path/to/noisemaker GODOT=/path/to/Godot bash parity/run.sh noise
-#   -> [PASS] noise: max-abs-diff=1.000 ... ssim=0.99996
-
-# the whole catalog (per-program tolerance map inside; last recorded 200/200, 3 skips -- 2 chaos-gated, navierStokes tested separately)
-NM_REFERENCE_ROOT=... GODOT=... bash parity/sweep.sh
-
-# stateful sims (navierStokes, feedback): sample a 30 s / 5 s evolution, not a frozen frame
-NM_REFERENCE_ROOT=... GODOT=... bash parity/run_samples.sh navierStokes
-
-# temporalAberration is a temporal delay-line (8-stage shift register). Its single-frame golden
-# is NON-DETERMINISTIC (the persistent _h* history is primed by the demo's pre-pin RAF warmup —
-# re-minting varies by max-abs-diff ~229). Drive it as 30 s / 10 s samples instead: both renderers
-# flush the warmup out of the 8-deep line and reach a deterministic steady state (t>=10), where the
-# candidate matches byte-for-byte (3/3 samples, max-abs-diff=2). sweep.sh routes it here automatically.
-# Mint its goldens in timed mode (NOT the single-frame command below):
-NM_REFERENCE_ROOT=... SHADE_HEADLESS=1 node parity/export-and-render.mjs \
-    parity/programs/temporalAberration.dsl parity/out --size 256 --backend webgl2 \
-    --run-seconds 30 --sample-every 10
-NM_REFERENCE_ROOT=... GODOT=... bash parity/run_samples.sh temporalAberration 2.001 0.98 30 10 256
+GODOT=/path/to/godot scripts/parity-summary              # every program in parity/ledger.json
+GODOT=/path/to/godot scripts/parity-summary noise blur   # selected cases
 ```
 
-Pieces:
-- `export-and-render.mjs` — renders the reference GPU **golden** PNG (WebGL2, headless Chromium via
-  Playwright + system Chrome) at a fixed size/seed/time; also writes the golden graph JSON.
-- `../tools/export-graph.mjs` — the reference `compileGraph` serialized to graph JSON (the `--graph`
-  input to the candidate renderer).
-- `../godot/addons/noisemaker/tools/render_graph.gd --graph <json>` — the Godot **candidate** PNG.
-- `compare.py` — max-abs-diff + SSIM with a per-program tolerance (`sweep.sh` holds the map).
+`scripts/parity-summary` is the entry point. Without `NM_REFERENCE_ROOT` it clones the reference at
+the revision pinned in the script into `$TMPDIR/noisemaker-reference`, with Playwright 1.63.0, and
+reuses that clone while it is clean and at the pin. For each case it mints a missing golden
+(`export-and-render.mjs`: WebGL2 in Chromium, 256×256, normalized time 0.25), renders the candidate
+with `run.sh`, and compares the two at tolerance 2.001 and SSIM 0.98. It prints one
+`PARITY-SUMMARY {...}` line and exits 0 only when every case passes that contract. A case listed in
+`parity/parity-deferrals.json` counts as `near` or `defer`, never as a pass.
 
-To add a golden:
+Goldens and candidates live in `parity/out/`, which is not committed. After moving the pin, delete
+`parity/out/*.golden.png` so every golden is minted from the new revision.
 
-1. Write `parity/programs/<name>.dsl`.
-2. Run `node ../tools/export-graph.mjs --file parity/programs/<name>.dsl parity/out/<name>.graph.json`.
-3. Run `SHADE_HEADLESS=1 node parity/export-and-render.mjs parity/programs/<name>.dsl parity/out --size 256 --time 0.25 --backend webgl2`.
+**Mint goldens on the GPU.** The goldens must come from a GPU, like the candidates. Headless Chromium
+on Windows renders WebGL2 with SwiftShader, a CPU rasterizer, so set `SHADE_HEADLESS=0` there; the
+browser then opens a window for each golden and renders on the GPU (ANGLE over Direct3D 11).
+SwiftShader goldens push isolated rounding differences across whole images (on `chrome` the mean
+difference was 1.42 against 0.007 with a GPU golden).
 
-## 2. Compiler parity (in-engine DSL → graph)
-
-Six gates verify the GDScript compiler stage by stage against the reference. Each runs a reference
-**oracle** (Node) and a Godot **candidate** dump (headless — these are pure logic, no RenderingDevice),
-then deep-compares the two (key-order-insensitive, with a tight numeric epsilon for float
-serialization). Only the oracle needs `NM_REFERENCE_ROOT`.
-
-A seventh gate, `check_definitions.mjs`, checks the **inputs** the other six share. All six feed the
-committed effect JSONs to both oracle and candidate, so a JSON that has fallen behind the reference
-is equally stale on both sides and every gate stays green — that is exactly how 31 effects drifted
-unnoticed. `check_definitions.mjs` compares those JSONs against what `tools/convert-definitions.mjs`
-emits from the reference, and needs no Godot.
+Other scripts:
 
 ```bash
-NM_REFERENCE_ROOT=/path/to/noisemaker GODOT=/path/to/Godot node parity/check_lex.mjs       # tokens
-NM_REFERENCE_ROOT=... GODOT=... node parity/check_parse.mjs                                 # AST
-NM_REFERENCE_ROOT=... GODOT=... node parity/check_validate.mjs                              # validated plan
-NM_REFERENCE_ROOT=... GODOT=... node parity/check_expand.mjs                                # render passes
-NM_REFERENCE_ROOT=... GODOT=... node parity/check_graph.mjs                                 # normalized graph
-NM_REFERENCE_ROOT=... GODOT=... node parity/check_registry.mjs                              # effect registry
-NM_REFERENCE_ROOT=... node parity/check_definitions.mjs                                     # effect JSONs vs reference
-#   -> e.g. "GRAPH PARITY: 214/214 pass"
+GODOT=... bash parity/run.sh noise            # one case against an existing golden
+GODOT=... bash parity/sweep.sh                # every program in one Godot process; rewrites parity/ledger.json
+GODOT=... bash parity/run_samples.sh navierStokes   # stateful programs as a timed series
 ```
 
-Corpus: **214 DSL programs** (`parity/programs/` 204 + `parity/corpus/` 10). All six gates pass
-214/214 (registry: ops 204/204, enums, aliases, 610 effect keys — 5/5 surfaces). The candidate dumps
-are the `_*_dump.gd` scripts under `../godot/addons/noisemaker/compiler/`. The oracles are
-`../tools/dump-*.mjs`.
+`sweep.sh` applies the per-program tolerances in its `tol_for` table and records the verdict and
+policy of each program in `parity/ledger.json`. Those tolerances are wider than the
+`scripts/parity-summary` contract for some programs, so a sweep `NEAR` is not a pass.
 
-Because the in-engine graph is byte-identical to the reference's, rendering the candidate via
-`render_graph.gd --dsl <file>` (the self-contained path) produces the **same PNG** as rendering the
-reference's `--graph <json>`.
+`temporalAberration` is an eight-stage delay line whose single-frame golden depends on how many
+frames the browser ran before the capture. It is compared as 30 s of samples every 10 s instead, after
+which both renderers reach the same steady state. Mint its goldens in timed mode:
 
-See also `../docs/GRAPH-JSON-SCHEMA.md` (the graph contract) and `../docs/CHAOS-GATE.md` (the one
-documented cross-backend parity limit).
+```bash
+node parity/export-and-render.mjs parity/programs/temporalAberration.dsl parity/out \
+    --size 256 --backend webgl2 --run-seconds 30 --sample-every 10
+GODOT=... bash parity/run_samples.sh temporalAberration 2.001 0.98 30 10 256
+```
+
+The pieces:
+
+- `export-and-render.mjs` renders the reference golden through the reference's Playwright harness and
+  writes the graph JSON next to it.
+- `../tools/export-graph.mjs` serializes the reference `compileGraph` result, the candidate renderer's
+  `--graph` input.
+- `../godot/addons/noisemaker/tools/render_graph.gd` renders the Godot candidate.
+- `compare.py` computes max-abs-diff and SSIM.
+
+To add a program, write `parity/programs/<name>.dsl` and add it to `parity/ledger.json` (a sweep does
+this), then run `scripts/parity-summary <name>`.
+
+## 2. Compiler parity
+
+Seven gates compare the GDScript compiler with the reference. Six run a reference oracle in Node
+(`../tools/dump-*.mjs`) and a headless Godot dump (`../godot/addons/noisemaker/compiler/_*_dump.gd`)
+over every program in `parity/programs/` and `parity/corpus/programs/`, then deep-compare them with a
+tight numeric epsilon. The seventh, `check_definitions.mjs`, regenerates the effect JSONs from the
+reference with `tools/convert-definitions.mjs` and diffs them with the committed ones; the other six
+read those JSONs on both sides, so they cannot see a stale definition.
+
+```bash
+NM_REFERENCE_ROOT=/path/to/noisemaker GODOT=/path/to/godot node parity/check_lex.mjs        # tokens
+NM_REFERENCE_ROOT=... GODOT=... node parity/check_parse.mjs                                  # AST
+NM_REFERENCE_ROOT=... GODOT=... node parity/check_validate.mjs                               # validated plans
+NM_REFERENCE_ROOT=... GODOT=... node parity/check_expand.mjs                                 # render passes
+NM_REFERENCE_ROOT=... GODOT=... node parity/check_graph.mjs                                  # normalized graphs
+NM_REFERENCE_ROOT=... GODOT=... node parity/check_registry.mjs                               # effect registry
+NM_REFERENCE_ROOT=... node parity/check_definitions.mjs                                      # effect JSONs
+```
+
+`check_expand.mjs` accepts one difference, defined in `expand_acceptance.mjs`: the candidate copies a
+pass's `defines` onto the expanded pass, where the reference keeps them only in the program name.
+
+See also `../docs/GRAPH-JSON-SCHEMA.md` (the graph contract) and `../docs/CHAOS-GATE.md` (why chaotic
+agent flows are not pixel matches).

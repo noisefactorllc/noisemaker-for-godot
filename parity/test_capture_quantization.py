@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 """Capture quantization conforms to the reference capture spec.
 
-GAP-002 round 2026-09-27: Image.set_pixel truncated on RGBA8 (0.5 -> 127),
-biasing every float-surface candidate PNG 1 LSB low on ~half the pixels.
-This suite runs the real nm_backend._capture_byte used by _snapshot_surface
-and judges its bytes against a Python transliteration of the reference
-capture spec (JS Math.round(v*255): half-up on exact f64, clamped to
-[0,255]) — a cross-language conformance check of the same spec; end-to-end
-PNG capture equivalence is evidenced separately by the job's archived
-comparator receipts (evidence gap002-in-tree-receipts/ and
-gap002-native-metal/ of Worker Elves job e5d3fe6f). It also asserts the defect
-discriminators: truncation (0.5 -> 127, 0.253 -> 64) must NOT occur. Per
-the repo standard (test_kit_playback.py), the suite FAILS LOUDLY when no
-Godot binary is available instead of passing as a vacuous 0-test run.
+Image.set_pixel truncates on RGBA8 (0.5 -> 127), which would bias every
+float-surface candidate PNG 1 LSB low on about half the pixels. This suite
+runs the real nm_backend._capture_byte used by _snapshot_surface and judges
+its bytes against a Python transliteration of the reference capture spec
+(JS Math.round(v*255): half-up on exact f64, clamped to [0,255]). It also
+asserts the truncation discriminators (0.5 -> 127, 0.253 -> 64) do not occur.
+Like test_kit_playback.py, the suite fails loudly when no Godot binary is
+available instead of passing as a vacuous 0-test run.
 """
 
 import math
@@ -52,7 +48,7 @@ class CaptureQuantizationTests(unittest.TestCase):
     def setUpClass(cls):
         cls.godot = _godot()
         if cls.godot is None:
-            # Repo standard (GAP-001 round, test_kit_playback.py): fail loudly,
+            # As test_kit_playback.py: fail loudly,
             # never pass as a vacuous 0-test run.
             raise RuntimeError(
                 "capture quantization gate requires a Godot binary "

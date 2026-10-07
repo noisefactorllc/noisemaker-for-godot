@@ -36,7 +36,7 @@ func _run() -> void:
 	if src == "":
 		printerr("cannot read dsl: ", dsl_path); quit(1); return
 
-	# --- compile first (GAP-004): reject an invalid program before any RenderingDevice work ---
+	# --- compile first: reject an invalid program before any RenderingDevice work ---
 	print("[present] compiling DSL in-engine ...")
 	var reg := EffectRegistry.new()
 	reg.load_all()

@@ -5,10 +5,6 @@
 
 # Noisemaker for Godot
 
-Current measured support: [compatibility report](docs/COMPATIBILITY.md).
-
-Current audit findings and acceptance criteria: [Completion gaps](docs/COMPLETION_GAPS.md).
-
 > Run **Noisemaker**'s procedural visuals inside **Godot 4**.
 
 > This package supports the "Export Shader Pipeline" feature in Noisedeck.app. The
@@ -17,8 +13,8 @@ Current audit findings and acceptance criteria: [Completion gaps](docs/COMPLETIO
 
 ## What is this?
 
-**Noisemaker** is a procedural visual engine. You write tiny text programs — chains of
-effects — and it renders live, animated GPU textures:
+**Noisemaker** is a procedural visual engine. You write short text programs, chains of effects, and
+it renders live, animated GPU textures:
 
 ```
 search synth, filter
@@ -26,39 +22,42 @@ noise(scaleX: 60).bloom().write(o0)
 render(o0)
 ```
 
-That little language is Noisemaker's **DSL** (a domain-specific language for visuals). The original
-engine runs in the browser at [noisedeck.app](https://noisedeck.app).
+That language is Noisemaker's **DSL**. The original engine runs in the browser at
+[noisedeck.app](https://noisedeck.app).
 
-**Noisemaker for Godot** runs that same engine *inside Godot 4* — the same programs and the same ~180
-effects, rendered on Godot's own GPU pipeline. Use it to make textures, materials, and animated
+**Noisemaker for Godot** runs the same programs inside Godot 4, with the 210 effects of Noisemaker
+1.0.262 rendered on Godot's own GPU pipeline. Use it to make textures, materials and animated
 backgrounds from code, with no image files.
 
-It is **self-contained**: the addon compiles the DSL and renders it entirely in Godot — no internet,
-no Node.js, no separate engine to install.
+It is self-contained: the addon compiles the DSL and renders it entirely in Godot, with no internet,
+no Node.js and no separate engine to install.
 
 ## What you can do with it
 
-- **Generate animated textures** from a short program — noise, gradients, patterns, color grades,
-  blurs, warps.
-- **Run simulations on the GPU** — particle/agent systems (flocking, slime/physarum, diffusion) and
-  fluid (navier–stokes).
-- **Use the result anywhere a texture goes** — materials, `TextureRect`, shaders, backgrounds.
+- **Generate animated textures** from a short program: noise, gradients, patterns, color grades,
+  blurs, warps, 3D volumes and raymarched scenes.
+- **Run simulations on the GPU**: particle and agent systems (flocking, physarum, attractors),
+  reaction-diffusion, cellular automata and fluids.
+- **Drive parameters** with oscillators, MIDI and audio input.
+- **Use the result anywhere a texture goes**: materials, `TextureRect`, shaders, backgrounds.
 - **Render a `.dsl` file straight to a PNG** from the command line.
 
 ## Requirements
 
-- **Godot 4.7**, **Forward+** renderer.
-- A **window** (a real GPU). Rendering uses Godot's low-level `RenderingDevice`, which is `null`
-  under `--headless` — so there is no dedicated-server / CI rendering.
-- Verified on **Apple Silicon / Metal**.
+- **Godot 4.7** with the **Forward+** renderer.
+- **A window** on a real GPU. Rendering uses Godot's low-level `RenderingDevice`, which is null under
+  `--headless`, so there is no dedicated-server or CI rendering. Compiling works headless.
+- Parity is qualified on macOS (Apple Silicon, Metal). Windows (NVIDIA, Vulkan) renders but is not
+  qualified: its goldens come from ANGLE over Direct3D 11, and parity there is still being measured.
 
 ## Install
 
-1. Copy `godot/addons/noisemaker/` into your project's `res://addons/`.
-2. **Project Settings ▸ Plugins** ▸ enable **Noisemaker**.
+1. Copy `godot/addons/noisemaker/` into your project's `res://addons/`. The folder carries the license
+   notices it needs.
+2. Enable **Noisemaker** under **Project Settings ▸ Plugins**.
 
-That is everything needed to render. Full integration docs (host API, troubleshooting) live in the
-**[addon README](godot/addons/noisemaker/README.md)**.
+The [addon README](godot/addons/noisemaker/README.md) documents the host API, inputs and
+troubleshooting.
 
 ## Your first render
 
@@ -75,88 +74,78 @@ var graph = Orchestrator.new(reg).build_graph(
 var backend := Backend.new()
 backend.setup(rd, "res://addons/noisemaker", Vector2i(512, 512))
 var img: Image = backend.render_samples(graph, 1, 1)[0]   # one frame
-var tex := ImageTexture.create_from_image(img)
-$TextureRect.texture = tex                                # show it (or material.albedo_texture = tex, etc.)
+$TextureRect.texture = ImageTexture.create_from_image(img)
 ```
 
-**Every DSL program** has the same shape:
+Every DSL program has the same shape:
 
 - Name the namespaces it uses (`search synth, filter`).
 - Chain the effects.
 - Write the result to an output surface (`.write(o0)`).
 - Select a surface to show (`render(o0)`).
 
-Render a `.dsl` file to a PNG from the command line:
+Render a `.dsl` file to a PNG from the command line (pass an absolute path to `--dsl`):
 
 ```bash
-GODOT=/Applications/Godot.app/Contents/MacOS/Godot
-$GODOT --path godot --script res://addons/noisemaker/tools/render_graph.gd \
-       --position 5000,5000 -- --dsl "$PWD/parity/programs/noise.dsl" --out /tmp/noise.png --size 256
+"$GODOT" --path godot --script res://addons/noisemaker/tools/render_graph.gd \
+    --position 5000,5000 -- --dsl "$PWD/parity/programs/noise.dsl" --out "$PWD/noise.png" --size 256
 ```
 
-`render_graph.gd` resolves `--dsl` relative to `res://` (the `godot/` project dir). Pass an absolute path.
+## What works and what does not
 
-## What works today
-
-- The **whole 2D effect catalog** (`synth` / `filter` / `mixer` / `classicNoisedeck`, ~180 effects,
-  including 26 Photoshop-parity filters: parallax, unsharp mask, high pass, median, morphology,
-  directional/spin blur, scatter, wind, pond ripples, extrude, halftone, stipple, oil paint,
-  watercolor, plastic wrap, relief, photocopy, stamp, chrome, hatch, strokes, craquelure, mosaic
-  tiles, patchwork, and lens flare — plus low poly extended with stained-glass borders/light), plus
-  the agent sims, **renders**. The committed parity ledger (`parity/ledger.json`, 342 programs) holds
-  291 PASS, 49 NEAR, and 2 FAIL verdicts from sweep runs. Most PASS cases land within 1-2/255
-  (SSIM ≈ 1.0). The NEAR cases are accepted only under widened per-case tolerances and SSIM gates
-  defined inline in `parity/sweep.sh` (`tol_for`). They are not strict parity passes, and no separate
-  tolerance record is published. See **[STATUS.md](STATUS.md)**.
-- **Particle/agent sims and fluid (navier–stokes)** render and match the reference.
-- **Chaotic** particle-and-fluid programs render correctly, but as a *different instance* of the same
-  chaos — they match in look and behavior, not pixel-for-pixel (tiny GPU rounding differences get
-  amplified by feedback).
-- **3D shader sources ship** with the effect definitions. Shader presence does not establish pixel parity.
-  Use the parity harness to verify the program on the target platform.
-
-Coverage table, parity numbers, and the full "chaos" explanation: **[STATUS.md](STATUS.md)** and
-**[docs/CHAOS-GATE.md](docs/CHAOS-GATE.md)**.
+- Every effect in the reference catalog has a definition generated from the reference and a GPU
+  program for each of its passes, and the in-engine compiler matches the reference compiler stage by
+  stage.
+- Pixel parity is measured per program against goldens rendered by the reference at a pinned revision
+  (see *How it is checked*). Most programs land within 1–2/255. Programs whose effects threshold or
+  amplify noise (edge-following brushes, Kuwahara sector picks, error-diffusion dithering, specular
+  `pow`) differ on isolated pixels across GPUs; open cases are tracked in the repository's issues.
+- Chaotic feedback programs, such as agent flows feeding a fluid, render as a different instance of the
+  same chaos: they match in look and behavior, not pixel for pixel. See
+  [docs/CHAOS-GATE.md](docs/CHAOS-GATE.md).
+- Not implemented: content the reference draws on the CPU or receives from the host. `text` glyphs,
+  `media` images and video, the `fibers`, `scratches` and `strayHair` overlays, and `meshLoader`
+  meshes render without that content. There is no editor node.
 
 ## How it works
 
-Noisemaker turns a DSL program into a **render graph** — a normalized list of GPU passes. That graph
-is the shared seam every Noisemaker port targets. Noisemaker for Godot ports the whole compiler to
-GDScript (so it runs in-engine) and executes the graph on Godot's `RenderingDevice`.
+Noisemaker turns a DSL program into a **render graph**, a normalized list of GPU passes. That graph is
+the seam every Noisemaker port targets. Noisemaker for Godot ports the whole compiler to GDScript, so
+it runs in-engine, and executes the graph on Godot's `RenderingDevice`.
 
 → **[ARCHITECTURE.md](ARCHITECTURE.md)** (how it maps onto Godot) ·
 **[PORTING-GUIDE.md](PORTING-GUIDE.md)** (porting a shader).
 
+## How it is checked
+
+- `scripts/test` runs the engine-free suites and `scripts/test --godot-headless` the suites that need
+  a Godot binary but no GPU. CI runs both on every push, the second against a pinned, checksum-verified
+  Godot 4.7 build.
+- Seven compiler gates (`parity/check_*.mjs`) compare each compiler stage and the effect definitions
+  with the reference.
+- `scripts/parity-summary` renders every program in `parity/ledger.json` and compares it with a golden
+  minted from the reference at the pinned revision, at tolerance 2.001 and SSIM 0.98. It needs a GPU.
+
+The goldens are not committed; the harness mints them from the reference. See
+**[parity/README.md](parity/README.md)**. `reference/01`–`10` are the engine specs shared across all
+Noisemaker ports.
+
 ## Contributing
 
-Contributions follow the Noise Factor [contributing policy](https://github.com/noisefactorllc/.github/blob/main/CONTRIBUTING.md) and
-[Code of Conduct](https://github.com/noisefactorllc/.github/blob/main/CODE_OF_CONDUCT.md). The notes below cover this repository's own tooling.
-
-The addon needs nothing external. The **dev/parity tooling**, however, compares Godot's output
-against the reference engine. The steps that generate goldens need a checkout of it via `NM_REFERENCE_ROOT`.
-The resulting `parity/out/` goldens are gitignored. Generate them before you compare:
-
-```bash
-NM_REFERENCE_ROOT=/path/to/noisemaker node tools/export-graph.mjs --file parity/programs/noise.dsl parity/out/noise.graph.json
-NM_REFERENCE_ROOT=/path/to/noisemaker SHADE_HEADLESS=1 node parity/export-and-render.mjs parity/programs/noise.dsl parity/out --size 256 --backend webgl2
-GODOT=/path/to/Godot bash parity/run.sh noise   # -> [PASS] noise: max-abs-diff=1.000 ... ssim=0.99996
-```
-
-`run.sh` itself does not read `NM_REFERENCE_ROOT`. It renders the Godot candidate and compares it
-against the existing golden.
-
-→ **[parity/README.md](parity/README.md)** (test harness) · **[STATUS.md](STATUS.md)** (coverage +
-gate results) · `reference/01–10` (engine specs shared across all Noisemaker ports).
+Contributions follow the Noise Factor
+[contributing policy](https://github.com/noisefactorllc/.github/blob/main/CONTRIBUTING.md) and
+[Code of Conduct](https://github.com/noisefactorllc/.github/blob/main/CODE_OF_CONDUCT.md).
 
 ## Repo layout
 
 ```
-godot/addons/noisemaker/   the addon — copy this into res://addons/ (compiler + runtime + shaders + effects)
-parity/                    golden-image test harness + DSL programs
-tools/                     Node dev tooling (reference graph export, codegen)
+godot/addons/noisemaker/   the addon: compiler, runtime, shaders, effect definitions
+parity/                    parity harness, DSL programs, compiler gates, test suites
+scripts/                   test and parity-summary entry points
+tools/                     Node tooling: reference graph export, definition conversion, gate oracles
+export-kit/                the exported-kit template served at kits.noisedeck.app
 reference/                 engine specs shared across all Noisemaker ports
-ARCHITECTURE.md  PORTING-GUIDE.md  docs/   design, porting rules, platform notes
-STATUS.md                  coverage table, parity results, known limits
+docs/                      graph schema and the chaos-gate explanation
 ```
 
 ## License

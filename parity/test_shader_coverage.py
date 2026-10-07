@@ -85,7 +85,7 @@ class ShaderCoverageTests(unittest.TestCase):
                         msg=f"Effect {eff_name} alias '{alias}' -> '{target}' not found in globals",
                     )
 
-    def test_registered_effect_definitions_gap004_gap005_contract(self):
+    def test_registered_effect_definitions_texture_and_pass_contract(self):
         definitions = sorted(DEFINITIONS.glob("*/*.json"))
         self.assertEqual(len(definitions), 210)
         viewport_effects = set()

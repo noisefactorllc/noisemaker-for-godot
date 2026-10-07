@@ -1,6 +1,6 @@
 // expand_acceptance.mjs — the single definition of the accepted expansion
 // difference class between the Godot candidate expander and the reference
-// expander (GAP-005, "define accepted expansion differences").
+// expander.
 //
 // Observed and accepted difference: the candidate copies each pass
 // definition's `defines` onto the expanded pass object, while the reference

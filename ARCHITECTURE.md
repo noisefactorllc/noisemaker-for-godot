@@ -1,115 +1,109 @@
 # Noisemaker for Godot — Architecture
 
-A parallel port of the Noisemaker shader engine to Godot 4.7 / `RenderingDevice` GLSL.
-Goal: **live procedural texture from the Polymorphic DSL, pixel-identical to the JS
-reference engine.** ProgramState and UI bindings are out of scope. It mirrors the
-Unity/HLSL Noisemaker port structurally and reuses its engine-agnostic assets.
+A port of the Noisemaker shader engine to Godot 4.7 `RenderingDevice` GLSL. The goal is live
+procedural textures from the Noisemaker DSL that match the reference engine (the JS engine's WebGL2
+backend) pixel for pixel. Program state and UI bindings are out of scope.
 
-## The seam: the Render Graph
+## The seam: the render graph
 
-The JS engine compiles DSL in stages: `lex → parse → validate → expand →
-allocateResources → Pipeline`. The clean architectural seam is the **Render Graph** —
-the normalized graph JSON produced by `compileGraph(dsl)` (`reference/03`, `reference/04`,
+The reference compiles a DSL program in stages: `lex → parse → validate → expand →
+allocateResources → Pipeline`. The seam between data logic and GPU work is the **render graph**, the
+normalized JSON that `compileGraph(dsl)` produces (`reference/03`, `reference/04`,
 `docs/GRAPH-JSON-SCHEMA.md`):
 
 ```
 graph = { passes[], programs{}, textures{}, allocations{}, renderSurface, ... }
 ```
 
-Everything downstream of the graph (texture pooling, double-buffering, pass execution,
-presentation) is backend work; everything upstream is pure data logic. Noisemaker for Godot
-gives the graph **two producers**:
+Everything upstream of the graph is pure data logic. Everything downstream (texture allocation,
+double-buffering, pass execution, presentation) is backend work. The graph has two producers:
 
-- **(a) Live / in-engine (production)** — the GDScript compiler under
-  `addons/noisemaker/compiler/` (`lang/`: lexer→parser→validator→effect-registry; `graph/`:
-  expander→orchestrator). `Orchestrator.new(EffectRegistry.new()).build_graph(source)` emits the
-  normalized graph with no reference/Node/network. Gated stage-by-stage against the reference
-  (`parity/check_*.mjs`, **214/214**) and byte-identical to (b) — rendering either graph yields the
-  same PNG.
-- **(b) Golden / offline (parity only)** — `tools/export-graph.mjs` runs the *unchanged reference*
-  `compileGraph` and serialises the graph to JSON. Used only to verify (a); it imports the reference
-  engine from `NM_REFERENCE_ROOT` (a checkout of the Noisemaker reference repo) — no sibling assumed.
+- **In-engine (production).** The GDScript compiler under `addons/noisemaker/compiler/`: `lang/`
+  (lexer → parser → validator, effect registry, enums) and `graph/` (expander → orchestrator, resource
+  allocation, dimensions, palette expansion). `Orchestrator.new(reg).build_graph(source)` returns the
+  normalized graph with no Node.js, reference engine or network. Invalid programs return a
+  `compileError` with structured diagnostics instead of a graph.
+- **Reference (parity only).** `tools/export-graph.mjs` runs the unchanged reference `compileGraph`
+  from a checkout named by `NM_REFERENCE_ROOT` and writes the graph JSON. It exists to check the
+  in-engine compiler; the seven `parity/check_*.mjs` gates compare the two stage by stage.
 
-Both feed the same `nm_backend.gd` executor and the same Godot-GLSL shaders.
+Both producers feed the same executor and the same shaders.
 
-## Runtime — `addons/noisemaker/runtime/nm_backend.gd`
+## Runtime — `addons/noisemaker/runtime/`
 
-A `RenderingDevice`-based executor. **All reference effects are render-pass based**
-(`reference/10`: no `type:compute` in any definition; agents/GPGPU use MRT + points
-scatter + repeat loops), so we mirror the **WebGL2 GPGPU model** with fullscreen fragment
-draws rather than compute dispatches.
+`nm_backend.gd` executes the graph on a `RenderingDevice`. It mirrors the WebGL2 backend's GPGPU
+model: every pass, including the definitions' `compute` passes, is a draw into color attachments.
 
 | Reference | Noisemaker for Godot |
 |---|---|
-| `resources.js` liveness + linear-scan pool | `compiler/graph/resources.gd` (`allocate_resources`, runs inside `Orchestrator.build_graph`) + `compiler/graph/dim.gd`. Surfaces are then allocated per-texId in `nm_backend.gd::allocate_textures`. (No `texture_pool.gd`.) |
-| `pipeline.js` surfaces (`o0..o7`, geo, vol) | `nm_backend.gd` allocates `global_*` surfaces as `RDTexture`s, with **ping-pong double-buffering** for state/feedback surfaces (`_pingpong`). |
-| `backend.executePass` (render/MRT/points/repeat/blend) | `nm_backend.gd` — `RenderingDevice` draw lists: render, **MRT** (N-attachment), **points/billboards** (`RENDER_PRIMITIVE_POINTS`, `ONE,ONE` additive), **repeat** loops, **feedback** — all implemented. |
-| fullscreen triangle VS + default present blit | `FULLSCREEN_VS` (vertex-buffer triangle) + `BLIT_FS` constants in `nm_backend.gd`. |
-| per-frame uniform flow | packed `vec4 data[N]` UBO per pass (see "Uniform model"). |
-| `Pipeline.render(time)` control flow | `nm_backend.gd::render(graph, normalized_time := 0.25)` — passes in order; stateful sims via `render_samples(graph, total_frames, sample_every)`. |
-| host API (`getOutput`, resize) | scripting-only: `Backend.setup` / `render` / `render_samples` / `save_surface_png` + `tools/render_graph.gd` / `present.gd`. A drop-in editor `NMRenderer` node is not yet shipped. |
+| `resources.js` liveness and linear-scan pool | `compiler/graph/resources.gd` (`allocate_resources`, run inside `build_graph`) and `compiler/graph/dim.gd`. `nm_backend.gd::allocate_textures` creates the textures; `set_texture_pooling(true)` reuses virtual textures from the allocation plan. |
+| `pipeline.js` surfaces (`o0..o7`, geometry, volumes) | `global_*` surfaces as `RDTexture`s, with ping-pong double-buffering for state and feedback surfaces. |
+| `backend.executePass` | Draw lists for fullscreen passes, MRT, points, billboards, mesh triangles, repeat loops, blending and feedback. |
+| `Pipeline.render(time)` | `render(graph, normalized_time)`; stateful programs step through `render_samples(graph, total_frames, sample_every)`. |
+| automation (`osc`, `midi`, `audio`) | `resolve_uniform_value`, fed by `set_midi_state`, `set_audio_state` and `set_audio_samples`. |
+| frame export | `frame_export.gd` and `rendering_device_frame_export.gd` (`create_frame_export_queue`). |
+| backend diagnostics | `shader_diagnostics.gd`: shader compile failures and silent fallbacks become structured records. |
+
+The host API is scripting-only: `setup`, `render`, `render_samples`, `save_surface_png`, `close`. The
+command-line tools `tools/render_graph.gd` and `tools/present.gd` build on it. There is no editor
+node.
 
 ## Shaders — `addons/noisemaker/shaders/`
 
-- `include/nm_core.glsl` — bit-exact shared primitives (`pcg`/`prng`/`random`/`map`/
-  `periodicFunction`/`positiveModulo`, `PI`/`TAU`). Nothing per-effect-variable.
-- `effects/<ns>/<prog>.glsl` — per-effect fragment ports (see PORTING-GUIDE). Shaders are
-  keyed by **progName** (an effect may have several programs, e.g. `blur → blurH/blurV`).
-- The fullscreen vertex stage and the present blit are built into `nm_backend.gd`.
+- `include/nm_core.glsl` holds the primitives that are bit-identical across effects (`pcg`, `prng`,
+  `random`, `map`, `periodicFunction`, `positiveModulo`, `PI`, `TAU`).
+- `effects/<ns>/<effect>/<program>.glsl` holds one fragment shader per reference program (an effect may
+  have several, for example `blur → blurH, blurV`). Every program named by the 210 effect definitions
+  has a shader.
+- The fullscreen vertex stage, the present blit and the mip generator are built into `nm_backend.gd`.
 
-Shaders are authored as fragment-only GLSL; the backend resolves `#include`s textually
-(glslang from-source compilation does not run the resource importer), prepends the shared
-vertex stage, and compiles via `rd.shader_compile_spirv_from_source`.
+The backend resolves `#include`s textually, prepends the vertex stage and compiles with
+`rd.shader_compile_spirv_from_source`. Shaders are cached per program and define set. The raw GLSL
+files carry Keep File import metadata so the editor does not import them as standalone shaders.
 
 ## Uniform model — one packed `vec4 data[N]` UBO per pass (set 0, binding 0)
 
-Godot/Vulkan has no loose named uniforms, so every pass binds a single packed UBO.
+Vulkan has no loose named uniforms, so every pass binds one packed UBO.
 
-- **Effects WITH a reference `uniformLayout`** (noise/cell/gradient/shape): the shader
-  declares `Params { vec4 data[N]; }` and reads `data[i].comp` **verbatim from the WGSL**.
-  The backend packs engine globals + params into the slots that layout names.
-- **Effects WITHOUT one** (solid/osc2d/blur/blendMode and most filters): the backend
-  **synthesizes** a layout — a fixed engine header in slots 0–2 (`resolution`, `time`,
-  `aspectRatio`, `tileOffset`, `fullResolution`, `renderScale`) then each `uniform` global
-  from slot 3 — and **injects** the `Params` UBO declaration plus a `#define <name>
-  data[slot].comp` for every name after `#version`. The shader then uses **bare reference
-  names** and ports near-verbatim from the GLSL. Same packer either way.
+- **Effects with a reference `uniformLayout`** declare `Params { vec4 data[N]; }` and read
+  `data[i].comp` at the slots the layout names. Four points effects (`flow`, `pointsEmit`,
+  `pointsRender`, `pointsBillboardRender`) carry layouts written for this port, because the reference
+  binds several programs per effect with loose WebGL2 uniforms; `tools/convert-definitions.mjs`
+  preserves them on regeneration.
+- **Effects without one** get a synthesized layout: an engine header in slots 0–2 (`resolution`,
+  `time`, `aspectRatio`, `tileOffset`, `fullResolution`, `renderScale`, `deltaTime`, `frame`), then
+  each `uniform` global from slot 3. The backend injects the `Params` declaration and a
+  `#define <name> data[slot].comp` for every name, so the shader uses the reference's bare names.
 
-Compile-time defines (`NOISE_TYPE`, `LOOP_OFFSET`) are injected as integer `#define`s and
-the shader is cached per (program, define-set). Input textures bind as combined
-`sampler2D` at set 0, binding 1.. in `pass.inputs` order.
+Compile-time defines (`NOISE_TYPE`, `LOOP_OFFSET`, …) are injected as `#define`s. Input textures bind
+as combined `sampler2D`s at set 0, bindings 1.. in `pass.inputs` order.
 
-## Coordinates & color (parity)
+## Coordinates and color
 
-- `RenderingDevice` is **top-left origin, Vulkan Y-down clip**, same as WGSL — so shaders
-  port from WGSL with **no per-effect Y-flip**, and `texture_get_data` rows are top-down.
-- A **single global Y-flip at present** (`nm_backend.gd::save_surface_png`) reconciles our
-  uniformly-top-left pipeline to the webgl2/GLSL golden (which is bottom-left flipped to a
-  top-down PNG). Because RenderingDevice keeps orientation consistent across passes
-  (unlike Unity's per-render flip), this is depth-independent — the two-surface mixer
-  `blendMode` needs no special handling.
-- Render targets are `R16G16B16A16_SFLOAT` (rgba16f), **linear, never sRGB**. The PNG is
-  quantized `round(v*255)` in GDScript (Godot's half-float `save_png` clobbers alpha, and
-  we want the reference's exact quantization).
+- `RenderingDevice` has a top-left origin with Vulkan's Y-down clip space, so `texture_get_data` rows
+  are top-down. One global Y-flip at readback reconciles the pipeline with the reference's
+  bottom-left WebGL2 output. Orientation is consistent across passes, so no effect needs its own flip.
+- Render targets are linear `rgba16f` by default (`rgba32f` and `rgba8` where a definition asks),
+  never sRGB. Definition formats may use either the WebGL2 or the WebGPU spelling.
+- Readback quantizes with `floor(v*255 + 0.5)` clamped to 0–255, the reference capture's
+  `Math.round`.
 
 ## Validation — `parity/`
 
-- `parity/run.sh <name>` — renders the Godot candidate (`tools/render_graph.gd`,
-  non-headless offscreen) and compares to the golden via `compare.py`.
-- Golden images are produced by the reference GPU (webgl2, headless Chromium) via
-  `parity/export-and-render.mjs` (reused from the Unity port; needs Playwright + Chrome).
-- `parity/compare.py` — max-abs-diff + SSIM with per-program tolerance (reused verbatim).
+- `scripts/test` runs the engine-free suites; `scripts/test --godot-headless` runs the suites that need
+  a Godot binary but no GPU. CI runs both.
+- The seven compiler gates (`parity/check_*.mjs`) compare tokens, ASTs, validated plans, expanded
+  passes, normalized graphs, the effect registry and the effect definitions with the reference.
+- `scripts/parity-summary` renders every program in `parity/ledger.json` with Godot and compares it
+  with a golden minted from the reference at the revision pinned in that script (WebGL2 in headless
+  Chromium, 256×256, normalized time 0.25), under tolerance 2.001 and SSIM 0.98.
+- `parity/sweep.sh` renders every program in one Godot process and rewrites `parity/ledger.json`.
 
-**Status (2026-07-10, Apple M4/Metal, synced to reference `36e7f3f5`):** the in-engine compiler passes
-all six gates (`parity/check_{lex,parse,validate,expand,graph,registry}.mjs`) at **230/230**; the 2D +
-agent catalog passes `parity/sweep.sh` (last recorded **216/216, 3 skips** — 2 chaos-gated,
-navierStokes tested separately via timed sampling), most within 1-2/255 (SSIM ≈ 1.0). The harness is
-how each further port gets verified — see `parity/README.md`.
+## Not implemented
 
-## Still staged
-
-3D volumes + raymarch + meshes (`synth3d`/`filter3d` ship definitions but **no shaders**);
-same-pass read+write ping-pong for `cellularAutomata`; a drop-in editor `NMRenderer` node;
-oscillator/MIDI/audio automation; tiled hi-res export. The graph model carries the fields so these
-slot in without reshaping the executor. *(Done since the first cut: the live GDScript compiler, the
-liveness pool, ping-pong double-buffering, and MRT/points/repeat/blend passes.)*
+- Content the reference draws on the CPU or receives from the host: `filter/text` glyphs, `synth/media`
+  images and video, the `filter/fibers`, `filter/scratches` and `filter/strayHair` overlays, and mesh
+  files for `render/meshLoader` (a built-in triangle stands in). Those effects run their GPU passes
+  over an empty texture.
+- An editor node; integration is from GDScript.
+- Rendering under `--headless`, where `RenderingDevice` is null. Compilation works headless.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GAP-001 executable check: the installed kit plays sampled animation.
+"""The installed kit plays sampled animation.
 
 Assembles the exported-kit layout (kit template + addon + program.dsl), runs the
 committed kit-observer (parity/kit-observe.gd) against it with the documented
@@ -11,8 +11,7 @@ surfaces as SCRIPT ERROR + "render pipeline creation failed" lines, which this
 suite treats as failure.
 
 A missing Godot binary is a hard setup failure, not a skip: a runner without
-the engine must fail loudly rather than report a silent 0-test pass — this
-suite is the machine gate for the GAP-001 playback acceptance.
+the engine must fail loudly rather than report a silent 0-test pass.
 """
 
 import os

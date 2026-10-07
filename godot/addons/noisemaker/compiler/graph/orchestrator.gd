@@ -24,7 +24,7 @@ func _init(registry) -> void:
 	reg = registry
 
 # Compile DSL source into the normalized render graph.
-# GAP-004: when the lexer/parser records a structured error or the validator collects a
+# When the lexer/parser records a structured error or the validator collects a
 # severity="error" diagnostic, the pipeline REJECTS before expansion and returns
 # {"compileError": {stage, diagnostics: [<NM_COMPILE_DIAG lines>]}} instead of a renderable
 # graph — the unknown-effect / malformed-syntax case can no longer reach rendering and surface
@@ -68,7 +68,7 @@ func build_graph(source: String, options: Dictionary = {}) -> Dictionary:
 	}
 	return _normalize_graph(graph)
 
-# ---------------------------------------------------------------- diagnostic rejection (GAP-004)
+# ---------------------------------------------------------------- diagnostic rejection
 
 # Render an actionable NM_COMPILE_DIAG line per diagnostic and return the compileError envelope.
 func _compile_rejection(stage: String, diagnostics: Array) -> Dictionary:
@@ -109,7 +109,7 @@ func _extract_texture_specs(passes: Array, texture_specs: Dictionary) -> Diction
 			spec["usage"] = ["storage", "sample", "copySrc", "copyDst"]
 			# Definition-level filtering policy for 3D textures ('nearest' or
 			# 'linear'), copied verbatim like the reference (compiler.js
-			# extractTextureSpecs, GAP-004). Upstream backends read this when
+			# extractTextureSpecs). Upstream backends read this when
 			# selecting the 3D sampling mode; this port's nm_backend does not
 			# consume it yet (3D staging is inert until a definition authors it).
 			if effect_spec.get("filter"):

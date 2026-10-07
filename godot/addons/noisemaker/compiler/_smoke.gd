@@ -237,7 +237,7 @@ func _init() -> void:
 		and p19.last_diagnostic["location"] == {"line": 2, "column": 9}
 		and p19.last_diagnostic["span"] == source_position.call("search synth\nlet x = [1] + 1", 2, 9), "parser.diag-p001-to-number-array-span")
 
-	# Subchain argument diagnostics GAP-027
+	# Subchain argument diagnostics
 	var p_subchain_permissive = Parser.new()
 	var ast_p = p_subchain_permissive.parse_tokens(Lexer.lex("search synth\nnoise().subchain(bad: \"x\", name: \"a\" name: \"b\") { .noise() }.write(o0)"))
 	_expect(not p_subchain_permissive._err, "parser.subchain-permissive-ok")
@@ -326,7 +326,7 @@ func _init() -> void:
 	]
 	_expect(Resources.allocate_resources(passes2) == {"t_c": "phys_0"}, "resources.global-excluded")
 
-	# Orchestrator texture-spec policies (reference compiler.js extractTextureSpecs, GAP-004):
+	# Orchestrator texture-spec policies (reference compiler.js extractTextureSpecs):
 	# 3D specs carry an authorable `filter`; 2D specs carry `mipmaps`/`persistent` when authored.
 	var Orchestrator = preload("res://addons/noisemaker/compiler/graph/orchestrator.gd")
 	var o = Orchestrator.new(EffectRegistry.new())

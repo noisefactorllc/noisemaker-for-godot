@@ -1,50 +1,34 @@
 # Noisemaker for Godot
 
-Live procedural textures from the Noisemaker **Polymorphic DSL**, compiled to a render graph and
-executed on Godot's low-level `RenderingDevice` — aiming to be pixel-identical to the JS/WebGL2
-reference engine. The addon is **self-contained**: it compiles the DSL **and** renders it with no
-Node.js, no reference engine, and no network.
+Live procedural textures from the Noisemaker DSL, compiled to a render graph and executed on Godot's
+low-level `RenderingDevice`, built to match the reference engine (the JS engine's WebGL2 backend)
+pixel for pixel. The addon is self-contained: it compiles the DSL and renders it with no Node.js, no
+reference engine and no network.
 
-> **🚧 WIP — early development.** Verified on Apple Silicon (Metal) only. Treat output as
-> provisional. **Read "Requirements" before integrating — the defaults will not "just work"**
-> (you need a real `RenderingDevice`, i.e. a window — see below).
-
-> This README is for **integrators** (using the addon). Contributors porting shaders or engine code
-> should read the repo's `ARCHITECTURE.md`, `PORTING-GUIDE.md`, and `parity/` — none of which you
-> need to *use* the addon.
+This README is for integrators. Contributors porting shaders or engine code should read the
+repository's `ARCHITECTURE.md`, `PORTING-GUIDE.md` and `parity/README.md`.
 
 ## Requirements
 
-- **Godot 4.7**, renderer **Forward+** (the project sets `renderer/rendering_method="forward_plus"`).
-- **A real `RenderingDevice`.** The executor renders through a local `RenderingDevice`, which is
-  **`null` under `--headless`**. So: **rendering needs a window** — there is no dedicated-server /
-  headless / CI rendering. For offscreen rendering, run with a window positioned off-screen
-  (e.g. `--position 5000,5000`), the way the bundled `tools/render_graph.gd` does.
-- **GPU:** Vulkan-class device with `rgba16f` / `rgba32f` render targets and compute. Render targets
-  are **linear, non-sRGB**. Output is quantized to 8-bit RGBA with no sRGB curve (matching the
-  reference's `round(v*255)`). It is top-down (a single global Y-flip is already applied at readback).
-- **Platform:** verified on **Apple Silicon / Metal** only. Other platforms/drivers are expected to
-  work (it is pipeline-agnostic) but are **not yet verified**.
-- **No external input.** The addon is output-only — there is no texture/camera/video/audio input
-  (the `media`-style effects are definition-only stubs). The **3D** namespaces (`synth3d`,
-  `filter3d`) now ship shader sources with their effect definitions. Shader presence does not establish
-  pixel parity. Use the repo's parity harness to verify the program on the target platform.
+- **Godot 4.7** with the **Forward+** renderer.
+- **A real `RenderingDevice`.** The backend renders through a local `RenderingDevice`, which is null
+  under `--headless`, so rendering needs a window. For offscreen work, position the window off screen
+  (`--position 5000,5000`), as `tools/render_graph.gd` does. Compiling a program works headless.
+- **A Vulkan-class GPU** with `rgba16f` and `rgba32f` render targets. Parity is qualified on macOS (Apple
+  Silicon, Metal). Windows (NVIDIA, Vulkan) renders but is not qualified.
 
 ## Installation
 
-1. Copy the `addons/noisemaker/` folder into your project's `res://addons/`.
-2. *Project Settings ▸ Plugins ▸* enable **Noisemaker**.
+1. Copy the `addons/noisemaker/` folder into your project's `res://addons/`. It carries its own
+   `LICENSE` and the upstream engine's `LICENSE-noisemaker.txt`.
+2. Enable **Noisemaker** under *Project Settings ▸ Plugins*.
 
-Enabling the plugin currently registers **no editor nodes** — it exists so the addon is a
-well-formed, enableable plugin. **Integration is scripting-only today**: you instantiate the
-compiler + backend from your own GDScript (below). A drop-in `NMRenderer` node is not yet shipped.
+The plugin registers no editor nodes. Integration is from GDScript, as below.
 
 ## Getting started
 
-The pieces are:
-
 - An `EffectRegistry` loads the bundled effect definitions.
-- The `Orchestrator` compiles a DSL string to a normalized render graph, fully in-engine.
+- The `Orchestrator` compiles a DSL string to a normalized render graph.
 - The `Backend` executes the graph on a `RenderingDevice`.
 
 ```gdscript
@@ -53,7 +37,7 @@ const Orchestrator   := preload("res://addons/noisemaker/compiler/graph/orchestr
 const Backend        := preload("res://addons/noisemaker/runtime/nm_backend.gd")
 
 func render_dsl_to_texture(dsl: String, size := 512) -> ImageTexture:
-    # RenderingDevice is null under --headless → this must run with a window.
+    # RenderingDevice is null under --headless, so this must run with a window.
     var rd := RenderingServer.create_local_rendering_device()
     if rd == null:
         push_error("RenderingDevice unavailable (run non-headless, with a window)")
@@ -61,50 +45,61 @@ func render_dsl_to_texture(dsl: String, size := 512) -> ImageTexture:
 
     var reg := EffectRegistry.new()
     reg.load_all()                                  # load the bundled effect definitions (once)
-    var graph = Orchestrator.new(reg).build_graph(dsl)   # DSL → normalized render graph, in-engine
+    var graph = Orchestrator.new(reg).build_graph(dsl)
+    if graph.has("compileError"):
+        push_error(str(graph["compileError"]["diagnostics"]))
+        rd.free()
+        return null
 
     var backend := Backend.new()
     backend.setup(rd, "res://addons/noisemaker", Vector2i(size, size))
-    var img: Image = backend.render_samples(graph, 1, 1)[0]   # render one frame, return the Image
-    backend.close()                                 # release ALL backend-owned GPU handles
+    var img: Image = backend.render_samples(graph, 1, 1)[0]   # render one frame
+    backend.close()                                 # release every backend-owned GPU handle
     backend.free()
-    rd.free()                                       # the device is YOURS: free it only after close()
+    rd.free()                                       # the device is yours: free it after close()
     return ImageTexture.create_from_image(img)
 ```
 
-**Ownership order.** The backend owns every GPU handle it derives from the
-device you hand it; you keep the device. Teardown order is: `backend.close()`
-(frees backend-owned RIDs, cancels active frame exports, and leaves any
-texture you injected into it alone), then free your `RenderingDevice`. Freeing
-the device first leaks backend-owned handles; closing twice is a no-op.
+**Ownership.** The backend owns every GPU handle it derives from the device you pass in; you keep the
+device. Call `backend.close()` (frees backend-owned handles, cancels active frame exports, leaves
+textures you injected alone), then free the device. Freeing the device first leaks backend handles.
+Closing twice is a no-op.
 
 ```gdscript
-# Example: a static generator onto a TextureRect.
 $TextureRect.texture = render_dsl_to_texture(
     "search synth\nnoise(scaleX: 60, scaleY: 60, seed: 1).write(o0)\nrender(o0)")
 ```
 
-**Write a PNG** instead of getting a texture. Render at an explicit normalized time. Save the result:
+To write a PNG instead, render at a normalized time and save the render surface:
 
 ```gdscript
 backend.setup(rd, "res://addons/noisemaker", Vector2i(512, 512))
-backend.render(graph, 0.25)                 # render normalized time 0..1 (default 0.25)
-backend.save_surface_png("user://out.png")  # → true on success
+backend.render(graph, 0.25)                 # normalized time 0..1
+backend.save_surface_png("user://out.png")  # true on success
 ```
 
-**Stateful sims** (navierStokes, feedback, cellularAutomata, agent flows) evolve over many frames —
-render a *sequence* and take the frame you want. `render_samples(graph, total_frames, sample_every)`
-steps the sim at 60 fps and returns the frames where `frame % sample_every == 0`:
+**Stateful programs** (navierStokes, feedback, cellularAutomata, agent sims) evolve over frames.
+`render_samples(graph, total_frames, sample_every)` steps at 60 fps and returns the frames where
+`frame % sample_every == 0`:
 
 ```gdscript
-# 30 seconds of evolution (1800 frames), keep only the final frame:
-var frames := backend.render_samples(graph, 1800, 1800)   # → Array[Image] of length 1
-var final_img: Image = frames[0]
+var frames := backend.render_samples(graph, 1800, 1800)   # 30 s of evolution, final frame only
 ```
 
-> A no-reference command-line path is also bundled: `tools/render_graph.gd --dsl <file.dsl> --out
-> <file.png>` renders a `.dsl` to a PNG, and `tools/present.gd` composes the DSL beside the canvas.
-> Both must run non-headless (`--position 5000,5000`).
+From the command line, `tools/render_graph.gd --dsl <file.dsl> --out <file.png>` renders a program to
+a PNG, and `tools/present.gd` shows the DSL beside the canvas. Both need a window.
+
+## Inputs
+
+- **Automation:** `osc()` oscillators, including `oscKind.noise2d`, are evaluated per frame.
+- **MIDI:** `set_midi_state(state)` with per-channel `key`, `velocity`, `gate` and `time`.
+- **Audio:** `set_audio_state(state)` for band levels (`low`, `mid`, `high`, `vol`, `raw`), and
+  `set_audio_samples(waveform, spectrum)` (up to 128 values each) for `synth/scope` and
+  `synth/spectrum`. `get_audio_input_requirements(graph)` lists the inputs a graph reads.
+- **Not supported:** content the reference draws on the CPU or receives from the host. `filter/text`
+  glyphs, `synth/media` images and video, and the `filter/fibers`, `filter/scratches` and
+  `filter/strayHair` overlays render from an empty texture; `render/meshLoader` draws a built-in
+  triangle instead of a loaded mesh.
 
 ## Host API
 
@@ -112,63 +107,57 @@ var final_img: Image = frames[0]
 
 | Member | Purpose |
 |---|---|
-| `load_all() -> void` | Load the bundled effect-definition JSON (`effects/**/*.json`). Call once. |
-| `get_op(name) / get_effect(name)` | Lookup used by the compiler. You normally do not call these. |
+| `load_all() -> void` | Load the bundled effect definitions (`effects/**/*.json`). Call once. |
 
 `Orchestrator` (`compiler/graph/orchestrator.gd`), constructed with an `EffectRegistry`:
 
 | Member | Purpose |
 |---|---|
-| `build_graph(source: String, options := {}) -> Dictionary` | Compile a DSL string to the normalized render graph (lex→parse→validate→expand→normalize), fully in-engine. On invalid input (unknown effect, malformed syntax, lexer errors, or any validator error diagnostic) it returns `{"compileError": {"stage", "diagnostics": [<NM_COMPILE_DIAG lines>]}}` instead of a renderable graph — check this before rendering and report the diagnostics to the user. Warning-only diagnostics do not reject. |
+| `build_graph(source: String, options := {}) -> Dictionary` | Compile a DSL string to the normalized render graph. Invalid input (unknown effect, malformed syntax, lexer errors, any validator error) returns `{"compileError": {"stage", "diagnostics"}}` instead; check for it before rendering. Warnings do not reject. |
 
 `Backend` (`runtime/nm_backend.gd`):
 
 | Member | Purpose |
 |---|---|
-| `setup(rd: RenderingDevice, addon_dir: String, screen: Vector2i) -> void` | Initialize against a RenderingDevice. `addon_dir` is `"res://addons/noisemaker"`. `screen` is the render resolution. |
-| `render(graph: Dictionary, normalized_time := 0.25) -> void` | Render one frame at normalized time 0..1. Updates internal state. Read the result via `save_surface_png`. |
-| `render_samples(graph, total_frames: int, sample_every: int) -> Array[Image]` | Step `total_frames` at 60 fps. Return an `Image` at each `frame % sample_every == 0`. The general way to get pixels (single frame: `render_samples(g, 1, 1)`). |
-| `save_surface_png(path: String) -> bool` | Write the current render surface to a PNG (8-bit RGBA). |
-| `render_surface_tex: String` | The surface presented (e.g. `"global_o1"`). The graph's `renderSurface` sets it. |
-| `create_frame_export_queue(options := {}) -> FrameExportQueue` | Queue for async frame export (background PNG packing of submitted frames via the device). Returns `null` (with an error) if called before `setup` or after `close`. Active exports are cancelled (readbacks abandoned) if the backend closes first. |
-| `close(options := {}) -> void` | Release ALL backend-owned GPU handles (textures it allocated, samplers, shaders, pipelines, vertex buffer) and cancel active frame exports. The device stays yours — free it only after `close()` returns. Call once; repeat calls are no-ops. Textures you injected into the backend stay yours. |
+| `setup(rd, addon_dir, screen: Vector2i) -> void` | Initialize against a `RenderingDevice`. `addon_dir` is `"res://addons/noisemaker"`; `screen` is the render resolution. |
+| `render(graph, normalized_time := 0.25) -> void` | Render one frame at normalized time 0..1. |
+| `render_samples(graph, total_frames, sample_every) -> Array[Image]` | Step `total_frames` at 60 fps and return an `Image` at each `frame % sample_every == 0`. |
+| `save_surface_png(path) -> bool` | Write the render surface as 8-bit RGBA PNG. |
+| `render_surface_texture() -> RID` | The texture of the surface the graph presents. |
+| `set_texture_pooling(enabled) -> void` | Reuse virtual textures from the graph's allocation plan. Off by default. |
+| `set_midi_state`, `set_audio_state`, `set_audio_samples`, `get_audio_input_requirements` | External inputs; see *Inputs*. |
+| `create_frame_export_queue(options := {})` | Asynchronous frame export. Returns `null` with an error before `setup` or after `close`; active exports are cancelled when the backend closes. |
+| `close(options := {}) -> void` | Release every backend-owned GPU handle and cancel active frame exports. The device stays yours. |
 
-The result is **8-bit RGBA, linear (no sRGB), top-down**. Convert with
-`ImageTexture.create_from_image(img)` and use it on any material / `TextureRect`.
+Output is 8-bit RGBA, linear (no sRGB curve) and top-down.
 
-## Performance & cost
+## Performance
 
-Performance is **not** optimized. Cost controls, roughly in order:
+Performance is not optimized. The main costs:
 
-- **Render resolution** (`setup(... Vector2i(w, h))`) dominates raymarch/fluid/feedback effects.
-  Start low (256²) and scale up.
-- **Particle / agent effects** (`points*`, `flow`) scale with `stateSize²` (capped at 2048 ⇒ up to
-  ~4.2M agents). Keep `stateSize` modest.
-- **Stateful sims** cost ~one full graph execution **per frame** — `render_samples(g, 1800, …)` for a
-  30 s evolution runs the graph 1800 times. Render only as many frames as you need.
-- Each `Backend` owns GPU resources sized by resolution, surface count, and `stateSize`.
+- **Resolution** dominates raymarch, fluid and feedback effects. Start at 256² and scale up.
+- **Points and agent effects** scale with `stateSize²` (capped at 2048, about 4.2M agents).
+- **Stateful programs** run the whole graph once per frame: `render_samples(g, 1800, …)` runs it 1800
+  times.
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `RD_NULL` / `null` from `create_local_rendering_device()` / blank | Running `--headless` (or no window) | Run with a window; for offscreen use `--position 5000,5000`. |
-| Compile errors in the Output log, nothing renders | Invalid DSL (the compiler `push_error`s and bails) | Fix the DSL; every program needs a `search` directive and a `write(oN)` / `render(oN)`. |
-| A stateful sim looks frozen / under-developed | Only one frame rendered | Use `render_samples(graph, N, …)` with enough frames (60 = 1 s). |
-| A 3D effect (`synth3d`/`filter3d`) renders nothing | Check the Output log for missing-shader or shader-compile errors | The 3D shader sources ship with the addon. Check that the installed addon is complete and verify the program with the parity harness. |
-| Chaotic agent flow / `target.dsl` differs from the reference | The documented chaos gate (~1-ULP `pow`) | Expected — see the repo's `docs/CHAOS-GATE.md`; it renders, just as a different chaos instance. |
+| `create_local_rendering_device()` returns null | Running `--headless` or without a window | Run with a window; for offscreen use `--position 5000,5000`. |
+| `build_graph` returns `compileError` | Invalid DSL | Read the diagnostics. Every program needs a `search` directive and a `write(oN)`. |
+| A stateful program looks frozen | Only one frame rendered | Use `render_samples(graph, N, …)` with enough frames (60 per second). |
+| A chaotic agent flow differs from the reference | Feedback amplifies a legal rounding difference | Expected; see the repository's `docs/CHAOS-GATE.md`. |
 
 ## How it works
 
-DSL → **in-engine compiler** (`Orchestrator.build_graph`: lexer → parser → validator →
-effect-registry → expander → orchestrator/normalize, all under `compiler/`) → a normalized **Render
-Graph** (`passes / programs / textures / renderSurface`) → `nm_backend.gd` executes the passes on
-`RenderingDevice` (fullscreen blits, MRT, points/billboard deposit, ping-pong double-buffering,
-repeat loops) into linear `rgba16f`/`rgba32f` surfaces, then presents the render surface. The compiler
-is parity-verified 214/214 against the reference; see the repo's `ARCHITECTURE.md` and
-`docs/GRAPH-JSON-SCHEMA.md`.
+DSL → in-engine compiler (`Orchestrator.build_graph`: lexer → parser → validator → expander →
+normalize) → render graph (`passes`, `programs`, `textures`, `renderSurface`) → `nm_backend.gd` runs
+the passes on `RenderingDevice` (fullscreen draws, MRT, points and billboards, ping-pong buffers,
+repeat loops) into linear `rgba16f`/`rgba32f` surfaces and presents the render surface. See the
+repository's `ARCHITECTURE.md` and `docs/GRAPH-JSON-SCHEMA.md`.
 
 ## License
 
-MIT — see the repo `LICENSE`. Use of the Noisemaker / Noise Factor names is subject to the repo's
-Trademark Policy.
+MIT; see `LICENSE` in this folder. The upstream Noisemaker engine's notice is `LICENSE-noisemaker.txt`.
+Use of the Noisemaker and Noise Factor names is subject to the repository's Trademark Policy.

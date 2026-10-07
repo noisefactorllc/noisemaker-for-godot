@@ -1,192 +1,127 @@
 # Noisemaker for Godot — GLSL Shader Porting Guide
 
-The rulebook for porting a Noisemaker effect shader to Godot `RenderingDevice` GLSL
-**pixel-identically**. Derived from the reference specs (`reference/07`, `reference/08`)
-and validated against the 8 Tier-1 ports. Every rule here is a parity requirement, not a
-style preference.
+How to port a Noisemaker effect shader to Godot `RenderingDevice` GLSL so it matches the reference
+pixel for pixel. The rules derive from the reference specs (`reference/07`, `reference/08`). Each one
+is a parity requirement, not a style preference.
 
 ## Golden rules
 
-1. **Port from the WGSL source, not the GLSL.** WGSL is top-left / D3D-oriented, exactly
-   like Godot's Vulkan `RenderingDevice`. Porting from WGSL means **no per-effect Y-flip**
-   (the runtime applies one global flip at present). Use the matching HLSL port
-   (the Unity/HLSL Noisemaker port's `Shaders/Effects/<ns>/<Name>.hlsl`) as a cross-check —
-   it is already a correct WGSL→top-left port. Use the reference GLSL only to disambiguate.
-2. **Port helpers verbatim, per effect.** `pcg`/`prng`/`random`/`map`/`periodicFunction`/
-   `positiveModulo` (and `PI`/`TAU`) are the *only* shared primitives, in
-   `include/nm_core.glsl`. Everything else — `rotate2D`, distance metrics, `smin`, `shape`,
-   color conversions, noise variants — is frequently **different between effects despite
-   identical names**. Copy each effect's own version inline. ⚠️ Some effects redefine even
-   the "shared" ones: `synth/shape`'s `periodicFunction` uses `sin`, not `nm_core`'s `cos`
-   — inline the effect's version under a renamed symbol when it differs. Likewise full-
-   precision `PI`/`TAU` (`3.141592653589793`) when an effect's WGSL uses them.
-3. **Do not simplify or reassociate arithmetic.** The references contain deliberately
-   redundant expressions (e.g. `catmullRom3`'s partially-cancelling terms). Reproduce them
-   literally.
-4. **Full 32-bit float only.** Never `mediump`/`lowp`. PCG and `floatBitsToUint(fract(s))`
-   are bit-sensitive. `RenderingDevice` does not force relaxed precision.
+1. **Port the reference GLSL (`shaders/effects/<ns>/<effect>/glsl/`).** The goldens are rendered by
+   the WebGL2 backend, so its GLSL is the authority. Port its math as written, including
+   `gl_FragCoord` arithmetic and rotation matrices. Godot's pipeline is top-left throughout and the
+   backend flips once at readback. That is the GL frame mirrored consistently, so no effect needs its
+   own flip and no orientation-dependent expression changes.
+2. **Treat the WGSL as a second backend, not a source.** It has diverged from the GLSL more than once:
+   `classicNoisedeck/effects` rotated the opposite way, `classicNoisedeck/coalesce` mixed the wrong
+   input in cloak mode and did not wrap refracted samples, and `grime`, `wobble`, `texture` and the
+   points passthroughs sampled upside down. This port's `effects` and `coalesce` had been translated
+   from the WGSL and carried those two bugs until they were ported from the GLSL. Read the WGSL, or
+   the Unity/HLSL port, only to cross-check.
+3. **Port helpers verbatim, per effect.** Only the primitives in `include/nm_core.glsl` are shared
+   (`pcg`, `prng`, `random`, `map`, `periodicFunction`, `positiveModulo`, `PI`, `TAU`). Helpers with the
+   same name often differ between effects: `synth/shape`'s `periodicFunction` uses `sin` where
+   `nm_core`'s uses `cos`. Inline each effect's own version, renamed if it differs from a shared one,
+   and use full-precision constants (`3.141592653589793`) where the effect does.
+4. **Do not simplify or reassociate arithmetic.** Reproduce deliberately redundant expressions (for
+   example `catmullRom3`'s partially cancelling terms) literally.
+5. **Full 32-bit floats only.** `pcg` and `floatBitsToUint(fract(s))` are bit-sensitive.
 
 ## Shader skeleton
 
-Two shapes, by whether the effect has a reference `uniformLayout` (check
+Two shapes, depending on whether the effect has a `uniformLayout` (see
 `addons/noisemaker/effects/<ns>/<func>.json`).
 
-**Layout effect** (declares its own UBO, reads `data[]` verbatim from WGSL):
+**Layout effect** (declares its own UBO and reads `data[]` at the layout's slots):
 ```glsl
 #version 450
 #include "include/nm_core.glsl"
 layout(set = 0, binding = 0, std140) uniform Params { vec4 data[N]; };   // N = max slot + 1
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 frag;
-// ... per-effect helpers (inlined verbatim) ...
-void main() { /* read data[i].comp exactly as the WGSL; gl_FragCoord for position; frag = ...; */ }
+// ... the effect's helpers, inlined ...
+void main() { /* read data[i].comp; gl_FragCoord for position; frag = ...; */ }
 ```
 
-**No-layout effect** (backend injects the UBO + `#define`s; use bare reference names):
+**No-layout effect** (the backend injects the UBO and the `#define`s; use the reference's bare names):
 ```glsl
 #version 450
-#include "include/nm_core.glsl"            // omit if it uses no shared primitives
-layout(set = 0, binding = 1) uniform sampler2D inputTex;   // inputs only, binding 1.. in pass.inputs order
+#include "include/nm_core.glsl"            // omit if no shared primitive is used
+layout(set = 0, binding = 1) uniform sampler2D inputTex;   // inputs only, bindings 1.. in pass.inputs order
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 frag;
-// ... helpers ...
-void main() { /* use bare names: resolution, time, st, radiusX, mode, ... ; frag = ...; */ }
+void main() { /* bare names: resolution, time, st, radiusX, mode, ...; frag = ...; */ }
 ```
-Do **not** declare a `Params` UBO or any `uniform`/`#define` for params or engine globals
-in a no-layout shader — the backend synthesizes the layout and injects them. Available
-bare engine names: `resolution`, `time`, `aspectRatio`, `tileOffset`, `fullResolution`,
-`renderScale`. Param names are the `uniform` fields in the effect's `<func>.json` globals.
 
-⚠️ **Reserved-name collision.** Those 8 engine names (`resolution`, `time`, `aspectRatio`,
-`tileOffset`, `fullResolution`, `renderScale`, `deltaTime`, `frame`) and every param name
-are injected as `#define <name> data[slot].comp`. A WGSL `let aspectRatio = …` then expands
-to `float data[0].w = …` → glslang error *"array size must be a positive integer"*. If the
-WGSL declares a **local variable OR a helper function parameter** with one of these names
-(or a param name), **rename it** (e.g. `aspectRatio`→`ar`, `resolution`→`res`, `offset`→
-`palOffset`, helper param `time`→`timeArg`) — a pure symbol rename, no behavior change (the
-HLSL ports do the same). The bare name must remain only at the `main()` use sites where the
-`#define` must resolve. Not hypothetical: `filter/lensFlare`'s reference source computes its
-own `let aspectRatio = …` local *and* passes it as a helper parameter of the same name
-(`flareAxis(…, aspectRatio: f32)`) — hit exactly this glslang error on first compile; fixed by
-the `aspectRatio`→`ar` rename above, recomputed explicitly from `fullResolution.x/
-fullResolution.y` rather than trusting the engine's own (numerically-equal-here, but not
-guaranteed-equal-in-general) bare `aspectRatio` value.
+In a no-layout shader, declare no `Params` UBO and no `uniform` or `#define` for parameters or engine
+globals. The engine names are `resolution`, `time`, `aspectRatio`, `tileOffset`, `fullResolution`,
+`renderScale`, `deltaTime` and `frame`. Parameter names are the `uniform` fields in the effect's JSON
+globals.
 
-⚠️⚠️ **Single-letter params `x`/`y` (and any 1-char name) are the nastiest:** `#define x
-data[3].x` rewrites *every* `.x` swizzle (`st.x` → `st.data[3].x`) and re-scans into other
-macros. Capture them into real locals at the top of `main` and `#undef x`/`#undef y` before
-any further use, or index by component (`st[0]`/`st[1]`) which is collision-proof. (Affects
-`repeat`/`scroll`/`translate`.) A future backend option is to inject real global vars instead
-of macros — until then, follow this.
+## From GLSL ES 3.00 to Godot GLSL 4.50
 
-## Translation table (WGSL → Godot-GLSL)
+| GLSL ES 3.00 (reference) | Godot GLSL 4.50 | Notes |
+|---|---|---|
+| `#version 300 es`, `precision highp float;` | `#version 450` | drop precision qualifiers |
+| `uniform float amount;` | injected `#define`, or `data[i].comp` | Vulkan has no loose uniforms |
+| `uniform sampler2D inputTex;` | `layout(set = 0, binding = N) uniform sampler2D inputTex;` | N from 1, in `pass.inputs` order |
+| `in vec2 v_texCoord;` | `layout(location = 0) in vec2 v_uv;` | same frame as `gl_FragCoord / resolution` |
+| `out vec4 fragColor;` | `layout(location = 0) out vec4 frag;` | |
+| `texture`, `texelFetch`, `textureSize`, `gl_FragCoord` | unchanged | |
+| `#define` / `#if` on compile-time defines | unchanged | the runtime injects the values |
 
-| Concept | WGSL | Godot GLSL (`#version 450`) | Notes |
-|---|---|---|---|
-| vectors | `vecN<f32>`,`vecN<i32>`,`vecN<u32>` | `vecN`,`ivecN`,`uvecN` | |
-| scalars | `f32`,`i32`,`u32` | `float`,`int`,`uint` | |
-| bindings | `var<uniform> u : T` | (injected / `data[]` UBO) | no loose uniforms in Vulkan |
-| typed local | `let x = …;` / `var x = …;` | `float x = …;` (explicit type) | GLSL has no inference |
-| select | `select(a, b, cond)` | `cond ? b : a` | **operands reversed** |
-| float bits→uint | `bitcast<u32>(f)` | `floatBitsToUint(f)` | bit reinterpret (jitter) |
-| uint bits→float | `bitcast<f32>(u)` | `uintBitsToFloat(u)` | |
-| float→uint | `vec3<u32>(p)`,`u32(f)` | `uvec3(p)`,`uint(f)` | **truncation**, not a bit-cast |
-| uint→float | `f32(u)`,`f32(0xffffffffu)` | `float(u)`,`float(0xffffffffu)` | round-to-nearest |
-| atan2 | `atan2(a, b)` | `atan(a, b)` | **copy arg order literally** |
-| float mod | `modulo(a,b)` / `a - b*floor(a/b)` | `mod(a, b)` | GLSL `mod` == that identity |
-| matrix | `mat2x2<f32>(a,b,c,d)` | `mat2(a,b,c,d)` | both column-major; `M*v` same |
-| texture size | `textureDimensions(t, 0)` | `textureSize(t, 0)` | returns `ivec2` → cast to `vec2` |
-| sample | `textureSample(t, s, uv)` | `texture(t, uv)` | combined `sampler2D`, linear, clamp |
-| frag coord | `@builtin(position) position` | `gl_FragCoord` | top-left, +0.5 — **no flip** |
-| out color | `-> @location(0) vec4<f32>` (return) | `frag` (`out vec4`) | assign instead of return |
-| switch | `switch x { case 0:{…} default:{…} }` | if/else-if chain | safest |
-| loop | `for (var i=…; i<=n; i++)` | `for (int i=…; i<=n; i++)` | keep bounds inclusive exactly |
+The samplers are linear and clamp to edge. Where the reference wraps a coordinate (`fract`, `mod`, a
+repeat-mode sampler), the port must wrap it explicitly.
 
-## Coordinate & sampling parity
+When an existing shader was ported from the WGSL, these translations apply: `select(a, b, c)` is
+`c ? b : a` (operands reversed); `bitcast<u32>(f)` is `floatBitsToUint(f)`; `u32(f)` truncates;
+`atan2(a, b)` is `atan(a, b)`; WGSL float `%` is not GLSL `mod`; `textureDimensions` is
+`textureSize`.
 
-- `st = (gl_FragCoord.xy + tileOffset) / fullResolution.y` — **divide by HEIGHT (.y)** for
-  most synths (x then spans `[0, aspect]`); filters divide by the **input texture size**
-  (`textureSize`). Match the WGSL exactly.
-- `gl_FragCoord` is top-left in Godot/Vulkan (matches WGSL). **Never add a per-effect
-  Y-flip.** If a WGSL shader contains an explicit flip (e.g. `res.y - position.y`),
-  **drop it** — our pipeline + the single present flip already handle orientation (see
-  `synth/osc2d`).
-- Samplers are linear + clamp-to-edge by default. `texture(t, uv)` with uv outside `[0,1]`
-  clamps; match the reference's wrap where it tiles.
+## Reserved names
 
-⚠️ **Rotation-matrix handedness is the one exception to "port raw WGSL, no per-effect
-  flip."** Effects that rotate a sample offset by a signed angle (spin/swirl-style
-  distortion — not simple translation/sampling, which the rule above still governs
-  correctly) need the **GLSL golden's rotation expansion**, not WGSL's raw one, even
-  though WGSL and Godot are both top-left/no-per-effect-flip pipelines. The reference's
-  GLSL commonly writes rotation as `mat2(co,-s,s,co) * v`, which is the **theta-negated**
-  form of the naive-looking WGSL expansion `vec2(co*v.x - s*v.y, s*v.x + co*v.y)` (GLSL
-  `mat2` is column-major: `mat2(co,-s,s,co)` has columns `(co,-s)`,`(s,co)`, i.e. matrix
-  `[[co,s],[-s,co]]` — the WGSL raw form at angle `-theta`). Some WGSL sources even carry
-  extensive doctrine comments (`filter/spinBlur`, `filter/pondRipples`, reference commit
-  a330fb83) arguing the raw form is screen-correct for WebGPU once its present-flip
-  applies — **that argument does not transfer to Godot**: `filter/pondRipples` (verified
-  via its `outFromCenter` (pure radial — passed under either convention) vs
-  `aroundCenter` (pure rotation — only passed under the GLSL/mat2 form, max-abs-diff 1 vs
-  a structural ssim-0.80 failure under raw) split) and `filter/spinBlur` (raw convention
-  "passed" a loose ad-hoc tolerance at first, but that test was later shown to be nearly
-  blind to handedness — spinBlur averages samples across a theta-symmetric tap arc, which
-  is provably invariant to a *global* handedness sign flip modulo a small per-pixel
-  jitter term, so it can't distinguish the two conventions; switching to the GLSL/mat2
-  form tightened its residual from max-abs-diff 11–15 down to 1) both empirically need
-  the GLSL/mat2 expansion on Godot's `RenderingDevice` pipeline. If you port a new
-  rotation-based effect: **use the GLSL golden's expansion for the rotation itself**
-  (translate/position math elsewhere in the same shader still follows the normal raw-WGSL
-  rule), and validate with a DSL program that isolates pure rotation from any radial/
-  translation component if the effect has one — an averaged/blended rotation (like a
-  multi-tap blur) can silently mask a handedness bug the way spinBlur's first pass did.
+Every engine name and parameter name is injected as `#define <name> data[slot].comp`. A local variable
+or helper parameter with one of those names expands to garbage (`float data[0].w = …` fails with
+glslang's "array size must be a positive integer"). Rename such locals and parameters (`aspectRatio`
+to `ar`, `resolution` to `res`, a helper's `time` to `timeArg`); keep the bare name only where the
+`#define` must resolve. `filter/lensFlare` computes its own `aspectRatio` and passes it to a helper
+parameter of the same name; both are renamed, and the value is recomputed from `fullResolution`.
+
+Single-letter parameters such as `x` and `y` are worse: `#define x data[3].x` rewrites every `.x`
+swizzle. Copy them into locals at the top of `main`, `#undef` them, or index components (`st[0]`).
+`repeat`, `scroll` and `translate` do this.
+
+## `define` versus `uniform`
+
+A global that the reference declares with `define:` is a compile-time define in the port too, never a
+`uniform`. A define is baked into the program name and never appears in `pass.uniforms`, so a port that
+reads it as a uniform falls back to its JSON default on every pass. The symptom is that the default
+value passes and every other value fails, which looks like a bug in the non-default branch.
+`check_definitions.mjs` keeps the JSONs identical to what `tools/convert-definitions.mjs` generates
+from the reference, so a hand edit that turns a define into a uniform fails the gate.
 
 ## Compile-time defines
 
-`NOISE_TYPE`, `LOOP_OFFSET`, `LOOP_A_OFFSET`, … are injected by the runtime as integer
-`#define`s (from the graph pass's `defines`). Keep them as **bare identifiers** in the
-shader (`if (NOISE_TYPE == 3) {…}`); do not declare or hardcode them. When a helper takes
-an `int` parameter, narrow at the call site (`int(NOISE_TYPE)`) — value is always integral.
+`NOISE_TYPE`, `LOOP_OFFSET`, `LOOP_A_OFFSET` and the like are injected as `#define`s from the pass's
+`defines`. Keep them bare (`if (NOISE_TYPE == 3)`); never declare or hardcode them. Narrow at a call
+site that takes an `int` (`int(NOISE_TYPE)`).
 
-## `define:` vs `uniform:` must match the reference exactly
+## Metal
 
-An effect-definition JSON global that the reference declares `define: "X"` (compile-time,
-baked into the graph's program name/defines) must be ported as `define` too — **not**
-`uniform`. This is not a style choice: `parity/run.sh` and the parity harness generally
-render off a graph produced by the *reference* compiler (`tools/export-graph.mjs`), and a
-`define`-only global never gets serialized into that graph's `pass.uniforms` at all — a
-global ported as `uniform` on this side then has nothing to read from the golden's graph
-and silently falls back to this port's own JSON default on *every* pass, regardless of what
-the DSL actually requested. The failure signature is characteristic: the *default* value of
-that global passes (it happens to match by coincidence), while every fixture that sets it to
-a non-default choice fails — easy to misdiagnose as an algorithm bug in the non-default
-branch when the branch is never actually selected. Confirmed root cause for
-`filter/pondRipples`'s `style`/`wrap` (aroundCenter/outFromCenter never took effect) and
-`filter/mosaicTiles`'s `mode`. A registry-wide mechanical scan (compare `define`-vs-`uniform`
-presence per global, reference JS vs this port's JSON, for every effect) is the fast way to
-catch every instance of this at once rather than one accidental-pass at a time; re-run it
-after any batch of effect-definition edits.
-
-## macOS / Metal gotchas
-
-- Godot cross-compiles SPIR-V→MSL on macOS. A function or variable named for an **MSL
-  keyword** compiles past glslang but fails the Metal stage and the pass draws nothing.
-  Seen: WGSL helper `constant()` → rename to `constantValue()` (`synth/shape`). (`point`
-  is *not* a GLSL reserved word and is fine.)
-- `RenderingDevice` is null under `--headless`; the parity harness runs Godot non-headless
-  with an offscreen window.
+On macOS Godot cross-compiles SPIR-V to MSL. A function or variable named after an MSL keyword passes
+glslang and then fails the Metal stage, so the pass draws nothing. `synth/shape`'s `constant()` is
+renamed `constantValue()` for this reason.
 
 ## Multi-program effects
 
-An effect with several programs (e.g. `filter/blur` → `blurH`, `blurV`) ships one
-`<progName>.glsl` per program; the runtime routes by the graph pass's `progName`. The
-effect-definition JSON (and its synthesized layout) is shared across the programs.
+An effect with several programs (`filter/blur` → `blurH`, `blurV`) has one `<program>.glsl` per
+program. The runtime routes by the pass's program name, and all programs share the effect's JSON and
+synthesized layout.
 
 ## Per-effect checklist
 
-1. Identify layout vs no-layout from `effects/<ns>/<func>.json`. Pick the skeleton.
-2. Port the WGSL body verbatim (helpers inline, no arithmetic changes), applying the table.
-3. Drop any explicit Y-flip; use `gl_FragCoord`.
-4. Write `addons/noisemaker/shaders/effects/<ns>/<progName>.glsl`.
-5. Verify: `GODOT=… bash parity/run.sh <name>` → `[PASS]` (max-abs-diff ≤ 2, SSIM ≥ 0.98).
-   Loosen tolerance only for genuinely chaotic effects (feedback/agents), and **log** it.
+1. Check `effects/<ns>/<func>.json` for a `uniformLayout` and pick the skeleton.
+2. Port the reference GLSL body as written, with its helpers inlined.
+3. Write `addons/noisemaker/shaders/effects/<ns>/<effect>/<program>.glsl`.
+4. Add a program to `parity/programs/` and `parity/ledger.json` if none exercises the effect.
+5. Run `GODOT=… scripts/parity-summary <case>`. The contract is fixed at tolerance 2.001 and SSIM
+   0.98; a case that cannot meet it stays a failure with its measured numbers.

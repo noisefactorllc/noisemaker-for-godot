@@ -1041,7 +1041,7 @@ class CompilerAutomationTests(unittest.TestCase):
         self.assertEqual(diag["location"], {"line": 2, "column": 9})
         self.assertEqual(diag["span"], {"start": 21, "end": 22})
 
-    def test_subchain_argument_diagnostics_gap027(self):
+    def test_subchain_argument_diagnostics(self):
         source = 'search synth\nnoise().subchain(bad: "x", name: "a" name: "b") { .noise() }.write(o0)\nrender(o0)'
         # In permissive mode, validator surfaces all 3 subchain argument diagnostics
         permissive_dump = self._dump("_validate_dump.gd", {"permissive.dsl": source})["permissive.dsl"]
@@ -1071,7 +1071,7 @@ class CompilerAutomationTests(unittest.TestCase):
         self.assertFalse(comma_dump["ok"])
         self.assertEqual(comma_dump["diagnostic"]["code"], "P010")
 
-    def test_expander_propagates_gap005_pass_fields(self):
+    def test_expander_propagates_pass_fields(self):
         source = """
             search synth3d
             cell3d().write(o0)

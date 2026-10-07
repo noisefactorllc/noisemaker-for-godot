@@ -86,7 +86,7 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 
 	var graph
 	if dsl_path != "":
-		# Self-contained path: compile the DSL to a render graph in-engine. GAP-004: compile
+		# Self-contained path: compile the DSL to a render graph in-engine. Compile
 		# BEFORE the RenderingDevice check so an invalid program is reported as an actionable
 		# NM_COMPILE_DIAG diagnostic without rendering, even in headless runs.
 		var src := FileAccess.get_file_as_string(dsl_path)
@@ -107,7 +107,7 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 		printerr("bad graph: ", graph_path if graph_path != "" else dsl_path)
 		return false
 	if graph.has("compileError"):
-		# GAP-004: the compiler rejected the DSL before expansion; the orchestrator already
+		# The compiler rejected the DSL before expansion; the orchestrator already
 		# printed each NM_COMPILE_DIAG line to stderr. Nothing renders, and the request fails.
 		printerr("compile failed (stage=", graph["compileError"].get("stage", ""), "): no render")
 		return false
@@ -120,7 +120,7 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 	var Backend = preload("res://addons/noisemaker/runtime/nm_backend.gd")
 	var backend = Backend.new()
 	backend.setup(rd, "res://addons/noisemaker", Vector2i(size, size))
-	# GAP-006 opt-in texture pooling (--texture-pooling / batch request key).
+	# Opt-in texture pooling (--texture-pooling / batch request key).
 	if texture_pooling:
 		backend.set_texture_pooling(true)
 	if run_seconds > 0:
@@ -141,7 +141,7 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 		print("NM_RENDERED_SAMPLES n=", imgs.size(), " surface=", backend.render_surface_tex)
 		return all_ok
 	backend.render(graph)
-	# Surface the last structured shader/compile diagnostic (GAP-006 sync, reference
+	# Surface the last structured shader/compile diagnostic (reference
 	# f83a427e): a black candidate on a runner usually means a pass silently failed
 	# to compile/link; the diagnostic union names the stage and program.
 	var diag = backend.last_shader_diagnostic

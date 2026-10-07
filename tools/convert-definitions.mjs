@@ -153,7 +153,7 @@ function projectTextures (textures, is3D) {
     if (spec.depth !== undefined) t.depth = spec.depth
     if (is3D || spec.is3D) t.is3D = true
     t.format = spec.format || 'rgba16f'
-    // GAP-004 authorable texture policies (reference a021a283): 3D filtering
+    // Authorable texture policies (reference a021a283): 3D filtering
     // ('nearest'|'linear') and 2D mip/persistence allocation policies. Mirrors
     // compiler.js extractTextureSpecs' PER-SPEC branch split — filter is 3D-only,
     // mipmaps/persistent are 2D-only — so a 3D spec never projects

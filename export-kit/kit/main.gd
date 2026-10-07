@@ -35,7 +35,7 @@ func _ready() -> void:
 	# Paint the warning before the blocking compute pass.
 	await get_tree().process_frame
 
-	# Compile first (GAP-004): an invalid program must surface an actionable
+	# Compile first: an invalid program must surface an actionable
 	# NM_COMPILE_DIAG diagnostic before any RenderingDevice/render work happens.
 	var reg := EffectRegistry.new()
 	reg.load_all()

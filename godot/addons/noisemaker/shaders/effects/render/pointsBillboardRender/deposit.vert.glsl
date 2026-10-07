@@ -103,7 +103,7 @@ void main() {
 	// port must too: the hi/lo "exact" split previously used here computed a
 	// slightly DIFFERENT random (the f32 product fract is not associative), which
 	// flipped 8 agents at threshold 0.5 and 3 at 0.65 for a 256x256 state grid
-	// (measured, GAP-002 round 2026-09-27). Known large-stateSize hazard (~1M
+	// (measured). Known large-stateSize hazard (~1M
 	// agents: raw product exceeds float32 fractional precision, step ~0.06 near
 	// 6.5e5, ~16 fract buckets) remains a reference-inherited property, not a
 	// port deviation.

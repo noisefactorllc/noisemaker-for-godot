@@ -27,7 +27,7 @@ const DIAGNOSTIC_CODES := {
 	"LINK": "ERR_SHADER_LINK",
 	"MISSING_SOURCE": "ERR_SHADER_MISSING",
 	"NO_SOURCE": "ERR_NO_WGSL_SOURCE",
-	# Reference codes from upstream GAP-007 (backends/diagnostics.js at
+	# Reference codes from upstream (backends/diagnostics.js at
 	# e24c844f8dad). UNIFORM_BLOCK mirrors the reference's uniform-block throw
 	# (RenderingDevice enforces block limits natively, so the port surfaces
 	# pipeline-create failures under PIPELINE instead); the remaining codes
@@ -50,7 +50,7 @@ const DIAGNOSTIC_CODES := {
 
 var last_diagnostic: Dictionary = {}
 
-# Mirror of the reference's DiagnosticCollector (upstream GAP-007,
+# Mirror of the reference's DiagnosticCollector (upstream
 # backends/diagnostics.js at e24c844f8dad): a capped, queryable store for
 # structured diagnostics that are RECORDED rather than thrown — the historically
 # silent fallbacks keep their behavior (no new failure) but surface records

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GAP-003 backend teardown and lifecycle contracts."""
+"""Backend teardown and lifecycle contracts."""
 
 import os
 import subprocess
@@ -102,7 +102,7 @@ class LiveLifecycleTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, output)
         self.assertIn("LIFECYCLE_TEST: PASS", output, output)
         self.assertNotIn("SCRIPT ERROR", output, output)
-        # GAP-003 acceptance: no leaked-handle warnings from the device free
+        # No leaked-handle warnings from the device free
         # (or any other backend teardown step). Precise warning signatures,
         # not a blanket "ERROR:" scan: this floor's engine exit prints an
         # unrelated macOS certificate-store noise line (see test_shader_import,

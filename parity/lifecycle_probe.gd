@@ -1,11 +1,8 @@
 extends SceneTree
 
-# GAP-003 lifecycle probe: repeated backend create/render/resize/dispose cycles
-# over a live RenderingDevice with resource accounting.
-#
-# Mirrors the gap's next action — "reproduce repeated creation, rendering,
-# resize, and disposal with resource accounting" — plus its dependency —
-# "exercise active export cancellation before device destruction".
+# Lifecycle probe: repeated backend create/render/resize/dispose cycles over a
+# live RenderingDevice with resource accounting, plus active export
+# cancellation before device destruction.
 #
 # Usage (non-headless; RenderingDevice needs a real window + device):
 #   $GODOT --path godot --script res://parity/lifecycle_probe.gd --position 5000,5000

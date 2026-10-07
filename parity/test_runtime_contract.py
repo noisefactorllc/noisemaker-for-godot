@@ -621,7 +621,7 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("LENS_WARP_SPEED_TEST: PASS", result.stdout, result.stdout + result.stderr)
 
-    def test_orchestrator_texture_specs_extracts_gap004_and_gap005_keys(self):
+    def test_orchestrator_texture_specs_extracts_policy_and_pass_keys(self):
         script = """
             extends SceneTree
 
@@ -653,15 +653,15 @@ class RuntimeContractTests(unittest.TestCase):
                     and t3.get("is3D") == true \
                     and t3.get("depth") == 32
                 if ok:
-                    print("TEXTURE_SPECS_GAP004_TEST: PASS")
+                    print("TEXTURE_SPECS_TEST: PASS")
                     quit(0)
                 else:
-                    print("TEXTURE_SPECS_GAP004_TEST: extracted=", extracted)
+                    print("TEXTURE_SPECS_TEST: extracted=", extracted)
                     quit(1)
         """
         result = self._run_godot_script(script)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("TEXTURE_SPECS_GAP004_TEST: PASS", result.stdout, result.stdout + result.stderr)
+        self.assertIn("TEXTURE_SPECS_TEST: PASS", result.stdout, result.stdout + result.stderr)
 
     def test_expander_propagates_sampler_types_and_clear(self):
         script = """
@@ -704,15 +704,15 @@ class RuntimeContractTests(unittest.TestCase):
                     and synth_pass.get("clear") == true \
                     and synth_pass.get("type") == "render"
                 if ok:
-                    print("EXPANDER_GAP005_TEST: PASS")
+                    print("EXPANDER_PASS_FIELDS_TEST: PASS")
                     quit(0)
                 else:
-                    print("EXPANDER_GAP005_TEST: expanded=", expanded)
+                    print("EXPANDER_PASS_FIELDS_TEST: expanded=", expanded)
                     quit(1)
         """
         result = self._run_godot_script(script)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("EXPANDER_GAP005_TEST: PASS", result.stdout, result.stdout + result.stderr)
+        self.assertIn("EXPANDER_PASS_FIELDS_TEST: PASS", result.stdout, result.stdout + result.stderr)
 
     def test_texture_pooling_plan_groups_and_guards(self):
         script = """
@@ -920,7 +920,7 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertIn("POOLING_RUNTIME_TEST: PASS", result.stdout, result.stdout + result.stderr)
 
     def test_resolve_dim_resolution_keyword(self):
-        # Upstream a0e9bbff (GAP-007 follow-up): resolveDimension must recognize
+        # Upstream a0e9bbff: resolveDimension must recognize
         # the validator-accepted 'resolution' keyword (DIM_KEYWORDS) like
         # 'screen'/'auto'/'input'. The port's _resolve_dim resolves all four to
         # the screen dimension, so the value is not observable; the guard is
@@ -935,7 +935,7 @@ class RuntimeContractTests(unittest.TestCase):
         script = """
             extends SceneTree
 
-            # Upstream GAP-007 (e24c844f8dad): historically-silent fallbacks
+            # Upstream e24c844f8dad: historically-silent fallbacks
             # surface structured records on a capped DiagnosticCollector instead
             # of pure silence. The port's RenderingDevice analogues are the
             # unknown-texture-format rgba16f fallback and the unknown dimension
@@ -1021,7 +1021,7 @@ class RuntimeContractTests(unittest.TestCase):
                     and made["program"] == "noise_prog" \
                     and made["source"].begins_with("#version 450") \
                     and diag.last_diagnostic["code"] == "ERR_SHADER_COMPILE"
-                # Reference code-table parity (upstream GAP-007, e24c844f8dad):
+                # Reference code-table parity (upstream e24c844f8dad):
                 # every reference diagnostics.js code must exist in the port's
                 # table, plus the port-side pipeline/draw-list codes.
                 var codes: Dictionary = Diag.get_script_constant_map()["DIAGNOSTIC_CODES"]
