@@ -55,7 +55,6 @@ func render_dsl_to_texture(dsl: String, size := 512) -> ImageTexture:
     backend.setup(rd, "res://addons/noisemaker", Vector2i(size, size))
     var img: Image = backend.render_samples(graph, 1, 1)[0]   # render one frame
     backend.close()                                 # release every backend-owned GPU handle
-    backend.free()
     rd.free()                                       # the device is yours: free it after close()
     return ImageTexture.create_from_image(img)
 ```

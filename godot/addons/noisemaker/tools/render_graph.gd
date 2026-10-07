@@ -14,6 +14,7 @@ extends SceneTree
 
 const Orchestrator := preload("res://addons/noisemaker/compiler/graph/orchestrator.gd")
 const EffectRegistry := preload("res://addons/noisemaker/compiler/lang/effect_registry.gd")
+const Backend := preload("res://addons/noisemaker/runtime/nm_backend.gd")
 
 func _init() -> void:
 	var a := OS.get_cmdline_user_args()
@@ -117,9 +118,20 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 		printerr("RD_NULL: RenderingDevice unavailable (run non-headless, with a window)")
 		return false
 
-	var Backend = preload("res://addons/noisemaker/runtime/nm_backend.gd")
-	var backend = Backend.new()
+	var backend := Backend.new()
 	backend.setup(rd, "res://addons/noisemaker", Vector2i(size, size))
+	var ok := _render_with_backend(backend, graph, out_path, run_seconds, sample_every_sec,
+		texture_pooling)
+	# Release the backend's GPU handles, then the device. A batch creates one device per
+	# request, and leaked devices exhaust the driver (Vulkan device creation fails with
+	# VK_ERROR_DEVICE_LOST after about 22 on NVIDIA).
+	backend.close()
+	rd.free()
+	return ok
+
+
+func _render_with_backend(backend: Backend, graph: Dictionary, out_path: String, run_seconds: int,
+		sample_every_sec: int, texture_pooling: bool) -> bool:
 	# Opt-in texture pooling (--texture-pooling / batch request key).
 	if texture_pooling:
 		backend.set_texture_pooling(true)
