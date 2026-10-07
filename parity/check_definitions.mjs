@@ -22,7 +22,7 @@
 // tree, so the committed and generated copies match themselves forever. The independent live
 // reference census below closes that gap without sharing the converter's namespace enumeration.
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
-import { basename, dirname, join, relative, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
@@ -69,7 +69,8 @@ try {
     for (const e of readdirSync(d)) {
       const p = join(d, e)
       if (statSync(p).isDirectory()) walk(p, base, out)
-      else if (e.endsWith('.json')) out.push(relative(base, p))
+      // Effect keys are ns/func on every host; relative() returns backslashes on Windows.
+      else if (e.endsWith('.json')) out.push(relative(base, p).split(sep).join('/'))
     }
     return out
   }

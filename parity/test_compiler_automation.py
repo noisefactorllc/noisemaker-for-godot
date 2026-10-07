@@ -23,7 +23,9 @@ class CompilerAutomationTests(unittest.TestCase):
             paths = []
             for name, source in programs.items():
                 path = Path(tmp) / name
-                path.write_text(textwrap.dedent(source))
+                # Bytes, not write_text: spans are byte offsets into UTF-8 with
+                # LF newlines, and Windows text mode would write cp1252 + CRLF.
+                path.write_bytes(textwrap.dedent(source).encode("utf-8"))
                 paths.append(path)
             result = subprocess.run(
                 [
@@ -38,7 +40,7 @@ class CompilerAutomationTests(unittest.TestCase):
                     *(str(path) for path in paths),
                 ],
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 timeout=30,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
