@@ -14,9 +14,11 @@ is a parity requirement, not a style preference.
 2. **Treat the WGSL as a second backend, not a source.** It has diverged from the GLSL more than once:
    `classicNoisedeck/effects` rotated the opposite way, `classicNoisedeck/coalesce` mixed the wrong
    input in cloak mode and did not wrap refracted samples, and `grime`, `wobble`, `texture` and the
-   points passthroughs sampled upside down. This port's `effects` and `coalesce` had been translated
-   from the WGSL and carried those two bugs until they were ported from the GLSL. Read the WGSL, or
-   the Unity/HLSL port, only to cross-check.
+   points passthroughs sampled upside down. Shaders this port once translated from the WGSL carried
+   the reversed rotation into `bulge`, `pinch`, `spiral`, `waves`, `skew`, `julia` and
+   `classicNoisedeck/effects`; it went unnoticed because every parity program used rotation 0. Read
+   the WGSL, or the Unity/HLSL port, only to cross-check, and give every rotation, wrap and mode a
+   parity program that exercises it.
 3. **Port helpers verbatim, per effect.** Only the primitives in `include/nm_core.glsl` are shared
    (`pcg`, `prng`, `random`, `map`, `periodicFunction`, `positiveModulo`, `PI`, `TAU`). Helpers with the
    same name often differ between effects: `synth/shape`'s `periodicFunction` uses `sin` where

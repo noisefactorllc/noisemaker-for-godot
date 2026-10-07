@@ -54,7 +54,8 @@ node.
   `random`, `map`, `periodicFunction`, `positiveModulo`, `PI`, `TAU`).
 - `effects/<ns>/<effect>/<program>.glsl` holds one fragment shader per reference program (an effect may
   have several, for example `blur → blurH, blurV`). Every program named by the 210 effect definitions
-  has a shader.
+  has a shader. Most are the reference GLSL adapted to the port's bindings and uniform model; the
+  rest were translated from the WGSL and say so in their header.
 - The fullscreen vertex stage, the present blit and the mip generator are built into `nm_backend.gd`.
 
 The backend resolves `#include`s textually, prepends the vertex stage and compiles with
