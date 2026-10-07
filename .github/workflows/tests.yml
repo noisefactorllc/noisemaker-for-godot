@@ -70,8 +70,8 @@ jobs:
           mkdir -p "$dir"
           cd "$dir"
           base="https://github.com/godotengine/godot-builds/releases/download/$GODOT_RELEASE"
-          curl -fsSL --retry 3 -o "$GODOT_ARCHIVE" "$base/$GODOT_ARCHIVE"
-          curl -fsSL --retry 3 -o SHA512-SUMS.txt "$base/SHA512-SUMS.txt"
+          curl -fsSL --retry 3 --connect-timeout 30 --max-time 300 -o "$GODOT_ARCHIVE" "$base/$GODOT_ARCHIVE"
+          curl -fsSL --retry 3 --connect-timeout 30 --max-time 300 -o SHA512-SUMS.txt "$base/SHA512-SUMS.txt"
           # The pinned digest must appear in the published list and match the archive.
           grep -Fx "$GODOT_SHA512  $GODOT_ARCHIVE" SHA512-SUMS.txt
           echo "$GODOT_SHA512  $GODOT_ARCHIVE" | sha512sum -c -
