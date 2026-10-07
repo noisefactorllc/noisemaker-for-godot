@@ -82,7 +82,7 @@ func _init() -> void:
 	registry.load_all()
 	var source := """search synth, points, render
 
-noise().pointsEmit(stateSize: x8).pointsRender(density: 100).write(o0)
+noise().pointsEmit(stateSize: x64).pointsRender(density: 100).write(o0)
 
 render(o0)
 """
