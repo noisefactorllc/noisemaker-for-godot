@@ -722,5 +722,21 @@ class HarnessContractTests(unittest.TestCase):
         self.assertIn("0/3 pass", result.stdout)
 
 
+class AddonNoticeTests(unittest.TestCase):
+    """The addon folder is the documented install unit, so it carries its own notices."""
+
+    ADDON = REPO / "godot" / "addons" / "noisemaker"
+
+    def test_port_notice_is_the_repository_license(self):
+        self.assertEqual(
+            (self.ADDON / "LICENSE").read_bytes(), (REPO / "LICENSE").read_bytes())
+
+    def test_upstream_engine_notice_ships_with_the_addon(self):
+        notice = (self.ADDON / "LICENSE-noisemaker.txt").read_bytes()
+        self.assertTrue(notice.startswith(b"MIT License\n"), notice[:40])
+        self.assertIn(b"Copyright (c) 2017-2025 Noise Factor LLC", notice)
+        self.assertNotIn(b"\r", notice)
+
+
 if __name__ == "__main__":
     unittest.main()
