@@ -125,7 +125,8 @@ void transformCoords(vec2 fragCoord, vec2 resolution,
 	float angle = -rot * TAU / 360.0;
 	float cs = cos(angle);
 	float sn = sin(angle);
-	uv = vec2(cs * uv.x - sn * uv.y, sn * uv.x + cs * uv.y);
+	// The reference GLSL's mat2(cs, -sn, sn, cs) * uv (column-major).
+	uv = vec2(cs * uv.x + sn * uv.y, -sn * uv.x + cs * uv.y);
 
 	float scale = 2.5 / zm;
 	reDF = df64_add(df64_mul_f(df64_from(uv.x), scale), df64_from(cx));
