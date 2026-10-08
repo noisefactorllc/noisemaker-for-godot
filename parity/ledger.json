@@ -560,6 +560,26 @@
     }
   },
   {
+    "program": "cnd_effectsShadow",
+    "effect": "filter/effects",
+    "mode": "effect: shadow, effectAmt: 4",
+    "golden": "parity/out/cnd_effectsShadow.golden.png",
+    "candidate": "parity/out/cnd_effectsShadow.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 0.9999999403953552,
+    "mean_abs_diff": 3.8146970382513246e-06,
+    "ssim": 0.9999998807907104,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
     "program": "cnd_fractal",
     "effect": null,
     "mode": "default",
@@ -2385,18 +2405,18 @@
     "mode": "default",
     "golden": "parity/out/juliaRotated.golden.png",
     "candidate": "parity/out/juliaRotated.candidate.png",
-    "verdict": "FAIL",
-    "max_abs_diff": 229.0,
-    "mean_abs_diff": 0.010620116256177425,
-    "ssim": 0.999914288520813,
-    "passed": false,
+    "verdict": "PASS",
+    "max_abs_diff": 0.0,
+    "mean_abs_diff": 0.0,
+    "ssim": 1.0,
+    "passed": true,
     "skipped": false,
     "policy": {
       "tolerance": 2.001,
       "ssim_min": 0.98,
       "strict_tolerance": 2.001,
       "strict_ssim_min": 0.98,
-      "reason": "comparison child exited nonzero"
+      "reason": "strict RGBA8 float round-trip allowance"
     }
   },
   {
@@ -3523,8 +3543,8 @@
     "candidate": "parity/out/newton.candidate.png",
     "verdict": "NEAR",
     "max_abs_diff": 251.0,
-    "mean_abs_diff": 0.1282653957605362,
-    "ssim": 0.9978650212287903,
+    "mean_abs_diff": 0.06104278936982155,
+    "ssim": 0.9989807605743408,
     "passed": true,
     "skipped": false,
     "policy": {
