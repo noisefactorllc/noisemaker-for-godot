@@ -48,7 +48,9 @@ GODOT=... bash parity/run_samples.sh navierStokes   # stateful programs as a tim
 ```
 
 `sweep.sh` applies the per-program tolerances in its `tol_for` table and records the verdict and
-policy of each program in `parity/ledger.json`. Those tolerances are wider than the
+policy of each program. The committed `parity/ledger.json` holds verdicts for the qualified host
+class, Apple silicon with Metal, so only a sweep there writes it by default. Any other host writes
+`parity/out/ledger.<os>-<arch>.json` as measured but unqualified, unless `LEDGER_PATH` names a file. Those tolerances are wider than the
 `scripts/parity-summary` contract for some programs, so a sweep `NEAR` is not a pass.
 
 `temporalAberration` is an eight-stage delay line whose single-frame golden depends on how many

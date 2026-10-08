@@ -151,7 +151,7 @@ class HarnessContractTests(unittest.TestCase):
 
         result = subprocess.run(
             ["bash", str(parity / "sweep.sh")],
-            env={**os.environ, "GODOT": "/bin/false"},
+            env={**os.environ, "LEDGER_PATH": "parity/ledger.json", "GODOT": "/bin/false"},
             capture_output=True,
             text=True,
         )
@@ -163,6 +163,32 @@ class HarnessContractTests(unittest.TestCase):
         self.assertEqual(ledger[0]["verdict"], "FAIL")
         self.assertFalse(ledger[0]["passed"])
         self.assertIn("comparison", ledger[0]["policy"]["reason"])
+
+    def test_sweep_writes_the_committed_ledger_only_on_the_qualified_host(self):
+        parity = self.tmp / "parity"
+        (parity / "programs").mkdir(parents=True)
+        (parity / "out").mkdir()
+        for helper in ("sweep.sh", "write-ledger.py", "make-batch-manifest.py"):
+            shutil.copy2(REPO / "parity" / helper, parity / helper)
+        (parity / "programs" / "missingGolden.dsl").write_text("noise().write(o0)\n")
+        env = {k: v for k, v in os.environ.items() if k != "LEDGER_PATH"}
+
+        result = subprocess.run(
+            ["bash", str(parity / "sweep.sh")],
+            env={**env, "GODOT": "/bin/false", "SKIP_RENDER": "1"},
+            capture_output=True,
+            text=True,
+        )
+
+        uname = subprocess.run(["uname", "-s", "-m"], capture_output=True, text=True).stdout.split()
+        host_ledgers = list((parity / "out").glob("ledger.*.json"))
+        if uname == ["Darwin", "arm64"]:
+            self.assertTrue((parity / "ledger.json").exists(), result.stdout)
+            self.assertEqual(host_ledgers, [])
+        else:
+            self.assertFalse((parity / "ledger.json").exists(), result.stdout)
+            self.assertEqual(len(host_ledgers), 1, result.stdout + result.stderr)
+            self.assertIn("unqualified host", result.stdout)
 
     def test_sweep_counts_a_required_dsl_with_no_golden_as_failure(self):
         parity = self.tmp / "parity"
@@ -176,7 +202,7 @@ class HarnessContractTests(unittest.TestCase):
 
         result = subprocess.run(
             ["bash", str(parity / "sweep.sh")],
-            env={**os.environ, "GODOT": "/bin/false", "SKIP_RENDER": "1"},
+            env={**os.environ, "LEDGER_PATH": "parity/ledger.json", "GODOT": "/bin/false", "SKIP_RENDER": "1"},
             capture_output=True,
             text=True,
         )
@@ -312,7 +338,7 @@ class HarnessContractTests(unittest.TestCase):
 
         result = subprocess.run(
             ["bash", str(parity / "sweep.sh")],
-            env={**os.environ, "GODOT": "/bin/false", "SKIP_RENDER": "1"},
+            env={**os.environ, "LEDGER_PATH": "parity/ledger.json", "GODOT": "/bin/false", "SKIP_RENDER": "1"},
             capture_output=True,
             text=True,
         )
@@ -456,7 +482,7 @@ class HarnessContractTests(unittest.TestCase):
 
         result = subprocess.run(
             ["bash", str(parity / "sweep.sh")],
-            env={**os.environ, "GODOT": str(renderer)},
+            env={**os.environ, "LEDGER_PATH": "parity/ledger.json", "GODOT": str(renderer)},
             capture_output=True,
             text=True,
         )
@@ -485,7 +511,7 @@ class HarnessContractTests(unittest.TestCase):
 
         result = subprocess.run(
             ["bash", str(parity / "sweep.sh")],
-            env={**os.environ, "GODOT": "/bin/false", "SKIP_RENDER": "1"},
+            env={**os.environ, "LEDGER_PATH": "parity/ledger.json", "GODOT": "/bin/false", "SKIP_RENDER": "1"},
             capture_output=True,
             text=True,
         )
@@ -513,7 +539,7 @@ class HarnessContractTests(unittest.TestCase):
 
         result = subprocess.run(
             ["bash", str(parity / "sweep.sh")],
-            env={**os.environ, "GODOT": "/bin/false", "SKIP_RENDER": "1"},
+            env={**os.environ, "LEDGER_PATH": "parity/ledger.json", "GODOT": "/bin/false", "SKIP_RENDER": "1"},
             capture_output=True,
             text=True,
         )
@@ -553,7 +579,7 @@ class HarnessContractTests(unittest.TestCase):
 
         result = subprocess.run(
             ["bash", str(parity / "sweep.sh")],
-            env={**os.environ, "GODOT": "/bin/false", "SKIP_RENDER": "1"},
+            env={**os.environ, "LEDGER_PATH": "parity/ledger.json", "GODOT": "/bin/false", "SKIP_RENDER": "1"},
             capture_output=True,
             text=True,
         )

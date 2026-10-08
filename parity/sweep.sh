@@ -6,7 +6,17 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GODOT="${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}"
-LEDGER_PATH="${LEDGER_PATH:-parity/ledger.json}"
+# parity/ledger.json records verdicts for the qualified host class, Apple silicon with
+# Metal. A sweep anywhere else is measured but unqualified, so unless LEDGER_PATH names a
+# file it writes parity/out/ledger.<os>-<arch>.json and leaves the committed ledger alone.
+if [ -z "${LEDGER_PATH:-}" ]; then
+	if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
+		LEDGER_PATH="parity/ledger.json"
+	else
+		LEDGER_PATH="parity/out/ledger.$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m).json"
+		echo "[LEDGER] unqualified host: writing $LEDGER_PATH, not parity/ledger.json"
+	fi
+fi
 RESULTS="$(mktemp -t noisemaker-for-godot-ledger.XXXXXX)"
 BATCH_MANIFEST="$(mktemp -t noisemaker-for-godot-batch.XXXXXX)"
 trap 'rm -f "$RESULTS" "$BATCH_MANIFEST"' EXIT
