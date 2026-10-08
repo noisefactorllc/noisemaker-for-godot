@@ -117,7 +117,7 @@ vec3 randomFromLatticeWithOffset(vec2 st, float freq, ivec2 xyOffset) {
     );
 }
 
-float constant(vec2 st, float freq, float speed) {
+float constantValue(vec2 st, float freq, float speed) {
     vec3 randTime = randomFromLatticeWithOffset(st, freq, ivec2(40, 0));
     float scaledTime = periodicFunction(randTime.x - time) * map(abs(speed), 0.0, 100.0, 0.0, 0.33);
 
@@ -146,17 +146,17 @@ float quadratic3x3Value(vec2 st, float freq, float speed) {
     vec2 f = fract(lattice);
     float nd = 1.0 / freq;
     
-    float v00 = constant(st + vec2(-nd, -nd), freq, speed);
-    float v10 = constant(st + vec2(0.0, -nd), freq, speed);
-    float v20 = constant(st + vec2(nd, -nd), freq, speed);
+    float v00 = constantValue(st + vec2(-nd, -nd), freq, speed);
+    float v10 = constantValue(st + vec2(0.0, -nd), freq, speed);
+    float v20 = constantValue(st + vec2(nd, -nd), freq, speed);
     
-    float v01 = constant(st + vec2(-nd, 0.0), freq, speed);
-    float v11 = constant(st, freq, speed);
-    float v21 = constant(st + vec2(nd, 0.0), freq, speed);
+    float v01 = constantValue(st + vec2(-nd, 0.0), freq, speed);
+    float v11 = constantValue(st, freq, speed);
+    float v21 = constantValue(st + vec2(nd, 0.0), freq, speed);
     
-    float v02 = constant(st + vec2(-nd, nd), freq, speed);
-    float v12 = constant(st + vec2(0.0, nd), freq, speed);
-    float v22 = constant(st + vec2(nd, nd), freq, speed);
+    float v02 = constantValue(st + vec2(-nd, nd), freq, speed);
+    float v12 = constantValue(st + vec2(0.0, nd), freq, speed);
+    float v22 = constantValue(st + vec2(nd, nd), freq, speed);
     
     float y0 = quadratic3(v00, v10, v20, f.x);
     float y1 = quadratic3(v01, v11, v21, f.x);
@@ -170,17 +170,17 @@ float catmullRom3x3Value(vec2 st, float freq, float speed) {
     vec2 f = fract(lattice);
     float nd = 1.0 / freq;
     
-    float v00 = constant(st + vec2(-nd, -nd), freq, speed);
-    float v10 = constant(st + vec2(0.0, -nd), freq, speed);
-    float v20 = constant(st + vec2(nd, -nd), freq, speed);
+    float v00 = constantValue(st + vec2(-nd, -nd), freq, speed);
+    float v10 = constantValue(st + vec2(0.0, -nd), freq, speed);
+    float v20 = constantValue(st + vec2(nd, -nd), freq, speed);
     
-    float v01 = constant(st + vec2(-nd, 0.0), freq, speed);
-    float v11 = constant(st, freq, speed);
-    float v21 = constant(st + vec2(nd, 0.0), freq, speed);
+    float v01 = constantValue(st + vec2(-nd, 0.0), freq, speed);
+    float v11 = constantValue(st, freq, speed);
+    float v21 = constantValue(st + vec2(nd, 0.0), freq, speed);
     
-    float v02 = constant(st + vec2(-nd, nd), freq, speed);
-    float v12 = constant(st + vec2(0.0, nd), freq, speed);
-    float v22 = constant(st + vec2(nd, nd), freq, speed);
+    float v02 = constantValue(st + vec2(-nd, nd), freq, speed);
+    float v12 = constantValue(st + vec2(0.0, nd), freq, speed);
+    float v22 = constantValue(st + vec2(nd, nd), freq, speed);
     
     float y0 = catmullRom3(v00, v10, v20, f.x);
     float y1 = catmullRom3(v01, v11, v21, f.x);
@@ -298,25 +298,25 @@ float bicubicValue(vec2 st, float freq, float speed) {
     float v2 = st.y + ndY;
     float v3 = st.y + ndY + ndY;
 
-    float x0y0 = constant(vec2(u0, v0), freq, speed);
-    float x0y1 = constant(vec2(u0, v1), freq, speed);
-    float x0y2 = constant(vec2(u0, v2), freq, speed);
-    float x0y3 = constant(vec2(u0, v3), freq, speed);
+    float x0y0 = constantValue(vec2(u0, v0), freq, speed);
+    float x0y1 = constantValue(vec2(u0, v1), freq, speed);
+    float x0y2 = constantValue(vec2(u0, v2), freq, speed);
+    float x0y3 = constantValue(vec2(u0, v3), freq, speed);
 
-    float x1y0 = constant(vec2(u1, v0), freq, speed);
-    float x1y1 = constant(st, freq, speed);
-    float x1y2 = constant(vec2(u1, v2), freq, speed);
-    float x1y3 = constant(vec2(u1, v3), freq, speed);
+    float x1y0 = constantValue(vec2(u1, v0), freq, speed);
+    float x1y1 = constantValue(st, freq, speed);
+    float x1y2 = constantValue(vec2(u1, v2), freq, speed);
+    float x1y3 = constantValue(vec2(u1, v3), freq, speed);
 
-    float x2y0 = constant(vec2(u2, v0), freq, speed);
-    float x2y1 = constant(vec2(u2, v1), freq, speed);
-    float x2y2 = constant(vec2(u2, v2), freq, speed);
-    float x2y3 = constant(vec2(u2, v3), freq, speed);
+    float x2y0 = constantValue(vec2(u2, v0), freq, speed);
+    float x2y1 = constantValue(vec2(u2, v1), freq, speed);
+    float x2y2 = constantValue(vec2(u2, v2), freq, speed);
+    float x2y3 = constantValue(vec2(u2, v3), freq, speed);
 
-    float x3y0 = constant(vec2(u3, v0), freq, speed);
-    float x3y1 = constant(vec2(u3, v1), freq, speed);
-    float x3y2 = constant(vec2(u3, v2), freq, speed);
-    float x3y3 = constant(vec2(u3, v3), freq, speed);
+    float x3y0 = constantValue(vec2(u3, v0), freq, speed);
+    float x3y1 = constantValue(vec2(u3, v1), freq, speed);
+    float x3y2 = constantValue(vec2(u3, v2), freq, speed);
+    float x3y3 = constantValue(vec2(u3, v3), freq, speed);
 
     vec2 uv = st * freq;
 
@@ -342,25 +342,25 @@ float catmullRom4x4Value(vec2 st, float freq, float speed) {
     float v2 = st.y + ndY;
     float v3 = st.y + ndY + ndY;
 
-    float x0y0 = constant(vec2(u0, v0), freq, speed);
-    float x0y1 = constant(vec2(u0, v1), freq, speed);
-    float x0y2 = constant(vec2(u0, v2), freq, speed);
-    float x0y3 = constant(vec2(u0, v3), freq, speed);
+    float x0y0 = constantValue(vec2(u0, v0), freq, speed);
+    float x0y1 = constantValue(vec2(u0, v1), freq, speed);
+    float x0y2 = constantValue(vec2(u0, v2), freq, speed);
+    float x0y3 = constantValue(vec2(u0, v3), freq, speed);
 
-    float x1y0 = constant(vec2(u1, v0), freq, speed);
-    float x1y1 = constant(st, freq, speed);
-    float x1y2 = constant(vec2(u1, v2), freq, speed);
-    float x1y3 = constant(vec2(u1, v3), freq, speed);
+    float x1y0 = constantValue(vec2(u1, v0), freq, speed);
+    float x1y1 = constantValue(st, freq, speed);
+    float x1y2 = constantValue(vec2(u1, v2), freq, speed);
+    float x1y3 = constantValue(vec2(u1, v3), freq, speed);
 
-    float x2y0 = constant(vec2(u2, v0), freq, speed);
-    float x2y1 = constant(vec2(u2, v1), freq, speed);
-    float x2y2 = constant(vec2(u2, v2), freq, speed);
-    float x2y3 = constant(vec2(u2, v3), freq, speed);
+    float x2y0 = constantValue(vec2(u2, v0), freq, speed);
+    float x2y1 = constantValue(vec2(u2, v1), freq, speed);
+    float x2y2 = constantValue(vec2(u2, v2), freq, speed);
+    float x2y3 = constantValue(vec2(u2, v3), freq, speed);
 
-    float x3y0 = constant(vec2(u3, v0), freq, speed);
-    float x3y1 = constant(vec2(u3, v1), freq, speed);
-    float x3y2 = constant(vec2(u3, v2), freq, speed);
-    float x3y3 = constant(vec2(u3, v3), freq, speed);
+    float x3y0 = constantValue(vec2(u3, v0), freq, speed);
+    float x3y1 = constantValue(vec2(u3, v1), freq, speed);
+    float x3y2 = constantValue(vec2(u3, v2), freq, speed);
+    float x3y3 = constantValue(vec2(u3, v3), freq, speed);
 
     vec2 uv = st * freq;
 
@@ -389,7 +389,7 @@ float value(vec2 st, float freq, int interp, float speed) {
         return sineNoise(st, freq, float(int(seed)), scaledTime);
     }
 
-    float x1y1 = constant(st, freq, speed);
+    float x1y1 = constantValue(st, freq, speed);
 
     if (interp == 0) {
         return x1y1;
@@ -398,9 +398,9 @@ float value(vec2 st, float freq, int interp, float speed) {
     float ndX = 1.0 / freq;
     float ndY = 1.0 / freq;
 
-    float x1y2 = constant(vec2(st.x, st.y + ndY), freq, speed);
-    float x2y1 = constant(vec2(st.x + ndX, st.y), freq, speed);
-    float x2y2 = constant(vec2(st.x + ndX, st.y + ndY), freq, speed);
+    float x1y2 = constantValue(vec2(st.x, st.y + ndY), freq, speed);
+    float x2y1 = constantValue(vec2(st.x + ndX, st.y), freq, speed);
+    float x2y2 = constantValue(vec2(st.x + ndX, st.y + ndY), freq, speed);
 
     vec2 uv = st * freq;
 

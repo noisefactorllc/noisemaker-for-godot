@@ -123,7 +123,7 @@ float constantFromLattice(vec2 lattice, vec2 freq, float s, float blend) {
     return constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(0, 0));
 }
 
-float constant(vec2 st, vec2 freq, float s, float blend) {
+float constantValue(vec2 st, vec2 freq, float s, float blend) {
     vec2 lattice = st * freq;
     return constantFromLattice(lattice, freq, s, blend);
 }

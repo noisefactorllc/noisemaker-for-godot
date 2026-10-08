@@ -2,6 +2,7 @@
 """Definition-driven coverage gate for shipped Godot effect shaders."""
 
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -31,9 +32,43 @@ def missing_required_shaders():
     return missing
 
 
+# On macOS Godot cross-compiles SPIR-V to MSL, which keeps GLSL function names.
+# A function named after an MSL or C++ keyword passes glslang on Vulkan and fails
+# the Metal stage, so the pass draws nothing on Apple hardware. SPIRV-Cross
+# escapes some keywords (kernel, vertex, fragment, compute, not, texture) but not
+# these, which Godot 4.7's Metal 4.0 backend rejected on an Apple M4.
+MSL_RESERVED_NAMES = frozenset({
+    "and", "and_eq", "array", "as_type", "auto", "bias", "bitand", "bitor",
+    "catch", "char", "compl", "constant", "constexpr", "decltype", "delete",
+    "device", "explicit", "export", "fast", "friend", "level", "metal",
+    "mutable", "new", "noexcept", "not_eq", "nullptr", "object_data",
+    "operator", "or", "or_eq", "private", "protected", "ray_data", "register",
+    "signed", "size_t", "static_assert", "thread", "threadgroup",
+    "threadgroup_imageblock", "throw", "try", "typeid", "typename", "uchar",
+    "ushort", "virtual", "xor", "xor_eq",
+})
+FUNCTION_DECLARATION = re.compile(
+    r"\b(?:void|bool|int|uint|float|[biu]?vec[234]|mat[234](?:x[234])?)\s+([A-Za-z_]\w*)\s*\("
+)
+COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
+
+
+def msl_reserved_declarations():
+    found = []
+    for shader in sorted(SHADERS.rglob("*.glsl")):
+        source = COMMENT.sub("", shader.read_text(encoding="utf-8"))
+        for name in FUNCTION_DECLARATION.findall(source):
+            if name in MSL_RESERVED_NAMES:
+                found.append(f"{shader.relative_to(ADDON).as_posix()}: {name}")
+    return found
+
+
 class ShaderCoverageTests(unittest.TestCase):
     def test_every_definition_pass_has_its_required_shader_stages(self):
         self.assertEqual([], missing_required_shaders())
+
+    def test_no_shader_function_takes_an_msl_reserved_name(self):
+        self.assertEqual([], msl_reserved_declarations())
 
     def test_registered_effect_definitions_satisfy_specification(self):
         definitions = sorted(DEFINITIONS.glob("*/*.json"))

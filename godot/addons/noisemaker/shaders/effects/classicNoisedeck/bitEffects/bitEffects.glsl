@@ -135,7 +135,7 @@ vec3 randomFromLatticeWithOffset(vec2 st, float xFreq, float yFreq, float s, ive
     );
 }
 
-float constant(vec2 st, float xFreq, float yFreq, float s) {
+float constantValue(vec2 st, float xFreq, float yFreq, float s) {
     vec3 randTime = randomFromLatticeWithOffset(st, xFreq, yFreq, s, ivec2(40, 0));
     float scaledTime = periodicFunction(randTime.x - time) * map(abs(speed), 0.0, 100.0, 0.0, 0.333);
 
@@ -144,7 +144,7 @@ float constant(vec2 st, float xFreq, float yFreq, float s) {
 }
 
 float value(vec2 st, float xFreq, float yFreq, float s) {
-    float x1y1 = constant(st, xFreq, yFreq, s);
+    float x1y1 = constantValue(st, xFreq, yFreq, s);
 
 #if INTERP == 0
     return x1y1;
@@ -153,9 +153,9 @@ float value(vec2 st, float xFreq, float yFreq, float s) {
     float ndX = 1.0 / xFreq;
     float ndY = 1.0 / yFreq;
 
-    float x1y2 = constant(vec2(st.x, st.y + ndY), xFreq, yFreq, s);
-    float x2y1 = constant(vec2(st.x + ndX, st.y), xFreq, yFreq, s);
-    float x2y2 = constant(vec2(st.x + ndX, st.y + ndY), xFreq, yFreq, s);
+    float x1y2 = constantValue(vec2(st.x, st.y + ndY), xFreq, yFreq, s);
+    float x2y1 = constantValue(vec2(st.x + ndX, st.y), xFreq, yFreq, s);
+    float x2y2 = constantValue(vec2(st.x + ndX, st.y + ndY), xFreq, yFreq, s);
 
     vec2 uv = vec2(st.x * xFreq, st.y * yFreq);
 
@@ -174,11 +174,11 @@ int modi(int x, int y) {
     return (x % y) & mask;
 }
 
-int or(int a, int b) {
+int bitOr(int a, int b) {
     return (a & mask) | (b & mask);
 }
 
-int and(int a, int b) {
+int bitAnd(int a, int b) {
     return (a & mask) & (b & mask);
 }
 
@@ -186,24 +186,24 @@ int not2(int a) {
     return (a ^ 0xFFFFFFFF) & mask;
 }
 
-int xor(int a, int b) {
+int bitXor(int a, int b) {
     return (a & mask) ^ (b & mask);
 }
 
-float or(float a, float b) {
-    return float(or(int(a), int(b)));
+float bitOr(float a, float b) {
+    return float(bitOr(int(a), int(b)));
 }
 
-float and(float a, float b) {
-    return float(and(int(a), int(b)));
+float bitAnd(float a, float b) {
+    return float(bitAnd(int(a), int(b)));
 }
 
 float not3(float a) {
     return float(not2(int(a)));
 }
 
-float xor(float a, float b) {
-    return float(xor(int(a), int(b)));
+float bitXor(float a, float b) {
+    return float(bitXor(int(a), int(b)));
 }
 // end bitwise operations
 
@@ -215,16 +215,16 @@ float bitValue(vec2 st, float freq, float nForColor) {
 
 #if FORMULA == 0
     // alien
-    v = mod(xor(st.x * freq, st.y * freq), blendy);
+    v = mod(bitXor(st.x * freq, st.y * freq), blendy);
 #elif FORMULA == 1
     // sierpinski
-    v = mod(or(st.x * freq, st.y * freq), blendy);
+    v = mod(bitOr(st.x * freq, st.y * freq), blendy);
 #elif FORMULA == 2
     // circular
     v = mod((st.x * freq) * (st.y * freq), blendy);
 #elif FORMULA == 3
     // steps
-    v = float(xor(st.x * freq, st.y * freq) < blendy);
+    v = float(bitXor(st.x * freq, st.y * freq) < blendy);
 #elif FORMULA == 4
     // beams
     v = mod(st.x * freq * blendy, st.y * freq);
@@ -357,7 +357,7 @@ vec3 rgb2hsv(vec3 rgb) {
 }
 
 float maskValue(vec2 st, float xFreq, float yFreq, float s) {
-    return constant(st, xFreq, yFreq, s);
+    return constantValue(st, xFreq, yFreq, s);
 }
 
 float maskValue(vec2 st, float freq, float s) {

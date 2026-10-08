@@ -109,9 +109,11 @@ site that takes an `int` (`int(NOISE_TYPE)`).
 
 ## Metal
 
-On macOS Godot cross-compiles SPIR-V to MSL. A function or variable named after an MSL keyword passes
-glslang and then fails the Metal stage, so the pass draws nothing. `synth/shape`'s `constant()` is
-renamed `constantValue()` for this reason.
+On macOS Godot cross-compiles SPIR-V to MSL. A function named after an MSL or C++ keyword
+(`constant`, `device`, `and`, `or`, `xor` and others) passes glslang and then fails the Metal stage,
+so the pass draws nothing. `parity/test_shader_coverage.py` lists the names Metal rejects and fails on
+a shader function that takes one. Rename the helper: `constant()` becomes `constantValue()`, and
+`bitEffects`' `and()`, `or()` and `xor()` become `bitAnd()`, `bitOr()` and `bitXor()`.
 
 ## Multi-program effects
 
