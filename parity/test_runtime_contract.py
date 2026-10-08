@@ -63,7 +63,9 @@ class RuntimeContractTests(unittest.TestCase):
                     backend.call("_format_define_value", "RIDGES", 1.0, curl, curl_source),
                     backend.call("_format_define_value", "RIDGES", 1.0, curl, "// if (RIDGES)\\nif (RIDGES != 0) {}"),
                 ]
-                var expected := ["false", "true", "false", "0", "4", "1", "1"]
+                # curl's source tests RIDGES as a bool, as the reference GLSL does; the
+                # inline source tests it as an int.
+                var expected := ["false", "true", "false", "0", "4", "true", "1"]
                 if actual == expected:
                     print("DEFINE_TEST: PASS")
                     quit(0)

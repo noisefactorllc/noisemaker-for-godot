@@ -1,16 +1,14 @@
 #version 450
-// synth3d/heightmap3d (program "precompute") — ported from wgsl/precompute.wgsl. Voxel
-// heightfield: bakes separate height and diffuse-color 2D surfaces into the volume atlas.
-// No-layout effect: backend injects Params UBO + `#define volumeSize …`/`heightScale …`/
-// `baseHeight …`. Inputs (pass.inputs order): heightTex=1, tex=2.
+// synth3d/heightmap3d program precompute — ported from glsl/precompute.glsl. No-layout effect: params and engine globals are injected as #defines;
+// bool params arrive as floats, int params via int().
 layout(set = 0, binding = 1) uniform sampler2D heightTex;
 layout(set = 0, binding = 2) uniform sampler2D tex;
+layout(location = 0) in vec2 v_uv;
 
-// MRT outputs: volume cache and geometry buffer
 layout(location = 0) out vec4 fragColor;
 layout(location = 1) out vec4 geoOut;
 
-// Native atlases and 2D surfaces use the same logical texel coordinates on both backends.
+// Sample each image independently at the center of the XZ voxel column.
 // Volume z = 0 holds the image's top row, so a view from above along -Y,
 // screen right on +X, shows the image as authored rather than mirrored.
 ivec2 imageTexel(ivec2 column, ivec2 size) {
@@ -21,12 +19,12 @@ ivec2 imageTexel(ivec2 column, ivec2 size) {
 float columnHeight(ivec2 column) {
     vec3 rgb = texelFetch(heightTex, imageTexel(column, textureSize(heightTex, 0)), 0).rgb;
     float luminance = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
-    return floor(clamp(luminance * heightScale + baseHeight, 0.0, 1.0) * float(volumeSize) + 0.5);
+    return floor(clamp(luminance * heightScale + baseHeight, 0.0, 1.0) * float(int(volumeSize)) + 0.5);
 }
 
 float density(ivec3 p) {
-    if (any(lessThan(p, ivec3(0))) || any(greaterThanEqual(p, ivec3(int(volumeSize))))) { return 0.0; }
-    return (float(p.y) < columnHeight(p.xz)) ? 1.0 : 0.0;
+    if (any(lessThan(p, ivec3(0))) || any(greaterThanEqual(p, ivec3(int(volumeSize))))) return 0.0;
+    return float(float(p.y) < columnHeight(p.xz));
 }
 
 void main() {
@@ -35,16 +33,16 @@ void main() {
     float occupied = density(p);
     fragColor = vec4(0.0);
     geoOut = vec4(0.5, 1.0, 0.5, 0.0);
-    if (occupied == 0.0) { return; }
+    if (occupied == 0.0) return;
 
     vec3 color = texelFetch(tex, imageTexel(p.xz, textureSize(tex, 0)), 0).rgb;
+    // Occupancy goes in both alpha channels; diffuse brightness never changes the shape.
     fragColor = vec4(color, occupied);
     vec3 normal = vec3(
         density(p - ivec3(1, 0, 0)) - density(p + ivec3(1, 0, 0)),
         density(p - ivec3(0, 1, 0)) - density(p + ivec3(0, 1, 0)),
         density(p - ivec3(0, 0, 1)) - density(p + ivec3(0, 0, 1))
     );
-    if (dot(normal, normal) > 0.0) { normal = normalize(normal); }
-    else { normal = vec3(0.0, 1.0, 0.0); }
+    normal = dot(normal, normal) > 0.0 ? normalize(normal) : vec3(0.0, 1.0, 0.0);
     geoOut = vec4(normal * 0.5 + 0.5, occupied);
 }

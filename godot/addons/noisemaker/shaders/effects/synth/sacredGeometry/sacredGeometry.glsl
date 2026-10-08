@@ -1,342 +1,318 @@
 #version 450
-// synth/sacredGeometry — ported PIXEL-IDENTICALLY from wgsl/sacredGeometry.wgsl.
-// Flower-of-life and related sacred-geometry lattices (flower, fruit, metatron,
-// seed, vesica, borromean, starPolygon, triquetra). Generator, no texture inputs.
-// Single render pass "sacredGeometry".
-//
-// No-layout effect (like solid.glsl / osc2d.glsl): the backend SYNTHESIZES the
-// Params UBO and injects, after #version, `#define <name> data[slot].comp` for
-// every engine global (resolution/time/aspectRatio/tileOffset/fullResolution/
-// renderScale) AND every param uniform (geometry/scale/rings/starPoints/rotation/
-// thickness/smoothness/fgColor/bgColor/animation/speed/pulseDepth). So we use the
-// bare names directly and declare NO UBO and NO uniforms.
-//
-// Coordinate note: the WGSL divides position.xy / u.resolution with NO explicit
-// Y-flip; gl_FragCoord is top-left in Godot/Vulkan (matches WGSL) so we divide
-// straight with no per-effect flip. WGSL u.aspect == fullResolution.x/.y == the
-// injected `aspectRatio` (confirmed by the HLSL disambiguator).
-//
-// All helpers (rotate2D, lineSegmentSDF, outlineEdge, ripplePulse, unfoldVis,
-// flowerMask, fruitMask, vesicaMask, triquetraMask, borromeanMask,
-// starPolygonMask) are this effect's OWN variants and are inlined VERBATIM per
-// PORTING-GUIDE rule 2. No shared nm_core primitives are used, so nm_core.glsl is
-// not included. PI/TAU/SQRT3 are the effect's own constants (PI/TAU differ from
-// nm_core's), declared locally.
-
+// synth/sacredGeometry program sacredGeometry — ported from glsl/sacredGeometry.glsl. No-layout effect: params and engine globals are injected as #defines;
+// bool params arrive as floats, int params via int().
 layout(location = 0) in vec2 v_uv;
-layout(location = 0) out vec4 frag;
+layout(location = 0) out vec4 fragColor;
 
-// Local constants matching WGSL exactly (PI/TAU differ from nm_core's).
-const float SG_PI    = 3.14159265359;
-const float SG_TAU   = 6.28318530718;
-const float SG_SQRT3 = 1.7320508075688772;
+#define PI 3.14159265359
+#define TAU 6.28318530718
+#define SQRT3 1.7320508075688772
 
-const int SG_ANIM_ROTATE = 1;
-const int SG_ANIM_PULSE  = 2;
-const int SG_ANIM_RIPPLE = 4;
-const int SG_ANIM_UNFOLD = 5;
+#define ANIM_ROTATE 1
+#define ANIM_PULSE 2
+#define ANIM_RIPPLE 4
+#define ANIM_UNFOLD 5
 
-const int SG_GEOM_FLOWER     = 0;
-const int SG_GEOM_FRUIT      = 1;
-const int SG_GEOM_METATRON   = 3;
-const int SG_GEOM_SEED       = 4;
-const int SG_GEOM_VESICA     = 5;
-const int SG_GEOM_BORROMEAN  = 6;
-const int SG_GEOM_STARPOLYGON = 7;
-const int SG_GEOM_TRIQUETRA  = 8;
+#define GEOM_FLOWER 0
+#define GEOM_FRUIT 1
+#define GEOM_METATRON 3
+#define GEOM_SEED 4
+#define GEOM_VESICA 5
+#define GEOM_BORROMEAN 6
+#define GEOM_STARPOLYGON 7
+#define GEOM_TRIQUETRA 8
 
-// fn rotate2D — verbatim from WGSL
-vec2 sg_rotate2D(vec2 p, float angle) {
-	float c = cos(angle);
-	float s = sin(angle);
-	return vec2(p.x * c - p.y * s, p.x * s + p.y * c);
+vec2 rotate2D(vec2 p, float angle) {
+    float c = cos(angle);
+    float s = sin(angle);
+    return vec2(p.x * c - p.y * s, p.x * s + p.y * c);
 }
 
-// fn lineSegmentSDF — verbatim from WGSL
-float sg_lineSegmentSDF(vec2 p, vec2 a, vec2 b) {
-	vec2 pa = p - a;
-	vec2 ba = b - a;
-	float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-	return length(pa - ba * h);
+float lineSegmentSDF(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a;
+    vec2 ba = b - a;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(pa - ba * h);
 }
 
-// fn outlineEdge — verbatim; reads `smoothness`
-float sg_outlineEdge(float d, float w) {
-	return smoothstep(w + smoothness, w - smoothness, abs(d));
+float outlineEdge(float d, float w) {
+    return smoothstep(w + smoothness, w - smoothness, abs(d));
 }
 
-// fn ripplePulse — verbatim; reads `pulseDepth`, `time`, `speed`
-float sg_ripplePulse(float phase) {
-	return 1.0 + pulseDepth * sin(time * SG_TAU * floor(float(speed)) - phase);
+// Ripple: per-circle radius modulation with phase offset. Phase shifts cycle
+// outward (or inward with negative speed). Used inside circle-based geometries.
+float ripplePulse(float phase) {
+    return 1.0 + pulseDepth * sin(time * TAU * floor(speed) - phase);
 }
 
-// fn unfoldVis — verbatim; reads `time`, `speed`
-float sg_unfoldVis(float t_e) {
-	return max(0.0, sin((time - t_e * 0.5) * SG_TAU * floor(float(speed))));
+// Unfold: per-element visibility with seamless half-period bump. Element with
+// appearance offset `t_e ∈ [0, 1]` peaks at time `0.25 + t_e * 0.5`. Loops cleanly.
+float unfoldVis(float t_e) {
+    return max(0.0, sin((time - t_e * 0.5) * TAU * floor(speed)));
 }
 
-// fn flowerMask — verbatim from WGSL
-float sg_flowerMask(vec2 p_in, int ringsN, float figureScale) {
-	float lineWidth = 0.04 + thickness * 0.12;
-	float circleRadius = 1.0;
-	vec2 p = p_in * figureScale;
+// Flower / Seed of Life — overlapping circles on a hex grid out to `ringsN` shells.
+float flowerMask(vec2 p, int ringsN, float figureScale) {
+    float lineWidth = 0.04 + thickness * 0.12;
+    float circleRadius = 1.0;
+    p = p * figureScale;
 
-	float m = 0.0;
-	for (int q = -6; q <= 6; q = q + 1) {
-		if (q < -ringsN || q > ringsN) { continue; }
-		for (int r = -6; r <= 6; r = r + 1) {
-			if (r < -ringsN || r > ringsN) { continue; }
-			if (q + r < -ringsN || q + r > ringsN) { continue; }
+    float m = 0.0;
+    for (int q = -6; q <= 6; q++) {
+        if (q < -ringsN || q > ringsN) continue;
+        for (int r = -6; r <= 6; r++) {
+            if (r < -ringsN || r > ringsN) continue;
+            if (q + r < -ringsN || q + r > ringsN) continue;
 
-			vec2 center = vec2(float(q) + float(r) * 0.5, float(r) * SG_SQRT3 * 0.5);
-			float hexDist = max(max(abs(float(q)), abs(float(r))), abs(float(q + r)));
+            vec2 center = vec2(float(q) + float(r) * 0.5, float(r) * SQRT3 * 0.5);
+            float hexDist = max(max(abs(float(q)), abs(float(r))), abs(float(q + r)));
 
-			float circleR = circleRadius;
-			if (animation == SG_ANIM_RIPPLE) {
-				circleR = circleR * sg_ripplePulse(hexDist * 1.4);
-			}
-			float d = length(p - center) - circleR;
+            float circleR = circleRadius;
+            if (int(animation) == ANIM_RIPPLE) {
+                circleR *= ripplePulse(hexDist * 1.4);
+            }
+            float d = length(p - center) - circleR;
 
-			float vis = 1.0;
-			if (animation == SG_ANIM_UNFOLD) {
-				float t_e = hexDist / max(float(ringsN), 1.0);
-				vis = sg_unfoldVis(t_e);
-			}
+            float vis = 1.0;
+            if (int(animation) == ANIM_UNFOLD) {
+                float t_e = hexDist / max(float(ringsN), 1.0);
+                vis = unfoldVis(t_e);
+            }
 
-			m = max(m, sg_outlineEdge(d, lineWidth) * vis);
-		}
-	}
-	return m;
+            m = max(m, outlineEdge(d, lineWidth) * vis);
+        }
+    }
+    return m;
 }
 
-// fn fruitMask — verbatim from WGSL
-float sg_fruitMask(vec2 p_in, bool drawLines) {
-	float lineWidth = 0.04 + thickness * 0.12;
-	vec2 p = p_in * 0.5;
+// Fruit of Life — 13 tangent circles (1 center + 6 inner + 6 outer).
+// When drawLines is true, also draw all C(13,2) = 78 connecting line segments
+// (Metatron's Cube).
+float fruitMask(vec2 p, bool drawLines) {
+    float lineWidth = 0.04 + thickness * 0.12;
+    p = p * 0.5;
 
-	vec2 centers[13];
-	centers[0] = vec2(0.0, 0.0);
-	for (int k = 0; k < 6; k = k + 1) {
-		float angle = float(k) * SG_PI / 3.0;
-		centers[1 + k] = 2.0 * vec2(cos(angle), sin(angle));
-	}
-	for (int k = 0; k < 6; k = k + 1) {
-		float angle = float(k) * SG_PI / 3.0 + SG_PI / 6.0;
-		centers[7 + k] = 2.0 * SG_SQRT3 * vec2(cos(angle), sin(angle));
-	}
+    vec2 centers[13];
+    centers[0] = vec2(0.0, 0.0);
+    for (int k = 0; k < 6; k++) {
+        float angle = float(k) * PI / 3.0;
+        centers[1 + k] = 2.0 * vec2(cos(angle), sin(angle));
+    }
+    for (int k = 0; k < 6; k++) {
+        float angle = float(k) * PI / 3.0 + PI / 6.0;
+        centers[7 + k] = 2.0 * SQRT3 * vec2(cos(angle), sin(angle));
+    }
 
-	float maxCircleDist = 2.0 * SG_SQRT3;
-	float circleUnfoldRange = 1.0;
-	if (drawLines) {
-		circleUnfoldRange = 0.6;
-	}
+    float maxCircleDist = 2.0 * SQRT3;  // outer ring
+    // For metatron, circles unfold in the first 60% of the cycle, lines in the rest.
+    float circleUnfoldRange = drawLines ? 0.6 : 1.0;
 
-	float m = 0.0;
+    float m = 0.0;
 
-	for (int i = 0; i < 13; i = i + 1) {
-		float distFromOrigin = length(centers[i]);
+    for (int i = 0; i < 13; i++) {
+        float distFromOrigin = length(centers[i]);
 
-		float circleR = 1.0;
-		if (animation == SG_ANIM_RIPPLE) {
-			circleR = circleR * sg_ripplePulse(distFromOrigin * 0.8);
-		}
-		float d = length(p - centers[i]) - circleR;
+        float circleR = 1.0;
+        if (int(animation) == ANIM_RIPPLE) {
+            circleR *= ripplePulse(distFromOrigin * 0.8);
+        }
+        float d = length(p - centers[i]) - circleR;
 
-		float vis = 1.0;
-		if (animation == SG_ANIM_UNFOLD) {
-			float t_e = distFromOrigin / maxCircleDist * circleUnfoldRange;
-			vis = sg_unfoldVis(t_e);
-		}
+        float vis = 1.0;
+        if (int(animation) == ANIM_UNFOLD) {
+            float t_e = distFromOrigin / maxCircleDist * circleUnfoldRange;
+            vis = unfoldVis(t_e);
+        }
 
-		m = max(m, sg_outlineEdge(d, lineWidth) * vis);
-	}
+        m = max(m, outlineEdge(d, lineWidth) * vis);
+    }
 
-	if (drawLines) {
-		float lineVis = 1.0;
-		if (animation == SG_ANIM_UNFOLD) {
-			lineVis = sg_unfoldVis(0.65);
-		}
-		for (int i = 0; i < 13; i = i + 1) {
-			for (int j = 0; j < 13; j = j + 1) {
-				if (j <= i) { continue; }
-				float dL = sg_lineSegmentSDF(p, centers[i], centers[j]);
-				m = max(m, sg_outlineEdge(dL, lineWidth * 0.5) * lineVis);
-			}
-		}
-	}
+    if (drawLines) {
+        // Lines come second in the unfold sequence (t_e starting at 0.6).
+        float lineVis = 1.0;
+        if (int(animation) == ANIM_UNFOLD) {
+            lineVis = unfoldVis(0.65);
+        }
+        for (int i = 0; i < 13; i++) {
+            for (int j = 0; j < 13; j++) {
+                if (j <= i) continue;
+                float dL = lineSegmentSDF(p, centers[i], centers[j]);
+                m = max(m, outlineEdge(dL, lineWidth * 0.5) * lineVis);
+            }
+        }
+    }
 
-	return m;
+    return m;
 }
 
-// fn vesicaMask — verbatim from WGSL
-float sg_vesicaMask(vec2 p_in) {
-	float lineWidth = 0.04 + thickness * 0.12;
-	vec2 p = p_in * 0.25;
-	float r = 1.5;
-	float sep = r * 0.5;
+// Vesica Piscis — two overlapping circles with centers separated by 1 radius.
+float vesicaMask(vec2 p) {
+    float lineWidth = 0.04 + thickness * 0.12;
+    p = p * 0.25;
+    float r = 1.5;
+    float sep = r * 0.5;
 
-	float rA = r;
-	float rB = r;
-	if (animation == SG_ANIM_RIPPLE) {
-		rA = rA * sg_ripplePulse(0.0);
-		rB = rB * sg_ripplePulse(SG_PI);
-	}
+    float rA = r;
+    float rB = r;
+    if (int(animation) == ANIM_RIPPLE) {
+        rA *= ripplePulse(0.0);
+        rB *= ripplePulse(PI);  // 180° out of phase
+    }
 
-	float visA = 1.0;
-	float visB = 1.0;
-	if (animation == SG_ANIM_UNFOLD) {
-		visA = sg_unfoldVis(0.0);
-		visB = sg_unfoldVis(0.5);
-	}
+    float visA = 1.0;
+    float visB = 1.0;
+    if (int(animation) == ANIM_UNFOLD) {
+        visA = unfoldVis(0.0);
+        visB = unfoldVis(0.5);
+    }
 
-	float dA = length(p - vec2(-sep, 0.0)) - rA;
-	float dB = length(p - vec2( sep, 0.0)) - rB;
+    float dA = length(p - vec2(-sep, 0.0)) - rA;
+    float dB = length(p - vec2( sep, 0.0)) - rB;
 
-	float m = 0.0;
-	m = max(m, sg_outlineEdge(dA, lineWidth) * visA);
-	m = max(m, sg_outlineEdge(dB, lineWidth) * visB);
-	return m;
+    float m = 0.0;
+    m = max(m, outlineEdge(dA, lineWidth) * visA);
+    m = max(m, outlineEdge(dB, lineWidth) * visB);
+    return m;
 }
 
-// fn triquetraMask — verbatim from WGSL
-float sg_triquetraMask(vec2 p_in) {
-	float lineWidth = 0.04 + thickness * 0.12;
-	vec2 p = p_in * 0.30;
-	float r = 2.25;
-	float dist = r / SG_SQRT3;
+// Triquetra — three pairwise vesica intersection outlines.
+float triquetraMask(vec2 p) {
+    float lineWidth = 0.04 + thickness * 0.12;
+    p = p * 0.30;
+    float r = 2.25;
+    float dist = r / SQRT3;
 
-	vec2 C0 = dist * vec2(cos(SG_PI * 0.5),                     sin(SG_PI * 0.5));
-	vec2 C1 = dist * vec2(cos(SG_PI * 0.5 + SG_TAU / 3.0),      sin(SG_PI * 0.5 + SG_TAU / 3.0));
-	vec2 C2 = dist * vec2(cos(SG_PI * 0.5 + 2.0 * SG_TAU / 3.0), sin(SG_PI * 0.5 + 2.0 * SG_TAU / 3.0));
+    vec2 C0 = dist * vec2(cos(PI * 0.5),                   sin(PI * 0.5));
+    vec2 C1 = dist * vec2(cos(PI * 0.5 + TAU / 3.0),       sin(PI * 0.5 + TAU / 3.0));
+    vec2 C2 = dist * vec2(cos(PI * 0.5 + 2.0 * TAU / 3.0), sin(PI * 0.5 + 2.0 * TAU / 3.0));
 
-	float r0 = r;
-	float r1 = r;
-	float r2 = r;
-	if (animation == SG_ANIM_RIPPLE) {
-		r0 = r0 * sg_ripplePulse(0.0);
-		r1 = r1 * sg_ripplePulse(SG_TAU / 3.0);
-		r2 = r2 * sg_ripplePulse(2.0 * SG_TAU / 3.0);
-	}
+    float r0 = r;
+    float r1 = r;
+    float r2 = r;
+    if (int(animation) == ANIM_RIPPLE) {
+        r0 *= ripplePulse(0.0);
+        r1 *= ripplePulse(TAU / 3.0);
+        r2 *= ripplePulse(2.0 * TAU / 3.0);
+    }
 
-	float d0 = length(p - C0) - r0;
-	float d1 = length(p - C1) - r1;
-	float d2 = length(p - C2) - r2;
+    float d0 = length(p - C0) - r0;
+    float d1 = length(p - C1) - r1;
+    float d2 = length(p - C2) - r2;
 
-	float v01 = 1.0;
-	float v02 = 1.0;
-	float v12 = 1.0;
-	if (animation == SG_ANIM_UNFOLD) {
-		v01 = sg_unfoldVis(0.0);
-		v02 = sg_unfoldVis(0.33);
-		v12 = sg_unfoldVis(0.66);
-	}
+    float v01 = 1.0;
+    float v02 = 1.0;
+    float v12 = 1.0;
+    if (int(animation) == ANIM_UNFOLD) {
+        v01 = unfoldVis(0.0);
+        v02 = unfoldVis(0.33);
+        v12 = unfoldVis(0.66);
+    }
 
-	float m = 0.0;
-	m = max(m, sg_outlineEdge(max(d0, d1), lineWidth) * v01);
-	m = max(m, sg_outlineEdge(max(d0, d2), lineWidth) * v02);
-	m = max(m, sg_outlineEdge(max(d1, d2), lineWidth) * v12);
-	return m;
+    float m = 0.0;
+    m = max(m, outlineEdge(max(d0, d1), lineWidth) * v01);
+    m = max(m, outlineEdge(max(d0, d2), lineWidth) * v02);
+    m = max(m, outlineEdge(max(d1, d2), lineWidth) * v12);
+    return m;
 }
 
-// fn borromeanMask — verbatim from WGSL
-float sg_borromeanMask(vec2 p_in) {
-	float lineWidth = 0.04 + thickness * 0.12;
-	vec2 p = p_in * 0.32;
-	float r = 1.5;
-	float dist = 1.4;
+// Borromean Rings — three full circles arranged at 120°.
+float borromeanMask(vec2 p) {
+    float lineWidth = 0.04 + thickness * 0.12;
+    p = p * 0.32;
+    float r = 1.5;
+    float dist = 1.4;
 
-	float m = 0.0;
-	for (int i = 0; i < 3; i = i + 1) {
-		float angle = float(i) * SG_TAU / 3.0 + SG_PI * 0.5;
-		vec2 c = dist * vec2(cos(angle), sin(angle));
+    float m = 0.0;
+    for (int i = 0; i < 3; i++) {
+        float angle = float(i) * TAU / 3.0 + PI * 0.5;
+        vec2 c = dist * vec2(cos(angle), sin(angle));
 
-		float circleR = r;
-		if (animation == SG_ANIM_RIPPLE) {
-			circleR = circleR * sg_ripplePulse(float(i) * SG_TAU / 3.0);
-		}
-		float d = length(p - c) - circleR;
+        float circleR = r;
+        if (int(animation) == ANIM_RIPPLE) {
+            circleR *= ripplePulse(float(i) * TAU / 3.0);
+        }
+        float d = length(p - c) - circleR;
 
-		float vis = 1.0;
-		if (animation == SG_ANIM_UNFOLD) {
-			vis = sg_unfoldVis(float(i) / 3.0);
-		}
+        float vis = 1.0;
+        if (int(animation) == ANIM_UNFOLD) {
+            vis = unfoldVis(float(i) / 3.0);
+        }
 
-		m = max(m, sg_outlineEdge(d, lineWidth) * vis);
-	}
-	return m;
+        m = max(m, outlineEdge(d, lineWidth) * vis);
+    }
+    return m;
 }
 
-// fn starPolygonMask — verbatim from WGSL
-float sg_starPolygonMask(vec2 p_in, int n) {
-	float lineWidth = 0.04 + thickness * 0.12;
-	vec2 p = p_in * 0.32;
-	float radius = 2.8;
+// Star Polygon {n/2} — n vertices, each connected to the vertex two positions away.
+float starPolygonMask(vec2 p, int n) {
+    float lineWidth = 0.04 + thickness * 0.12;
+    p = p * 0.32;
+    float radius = 2.8;
 
-	if (animation == SG_ANIM_RIPPLE) {
-		radius = radius * sg_ripplePulse(0.0);
-	}
+    if (int(animation) == ANIM_RIPPLE) {
+        radius *= ripplePulse(0.0);
+    }
 
-	float m = 0.0;
-	for (int i = 0; i < 12; i = i + 1) {
-		if (i >= n) { break; }
-		int j = (i + 2) - ((i + 2) / n) * n;
-		float angle1 = float(i) * SG_TAU / float(n) + SG_PI * 0.5;
-		float angle2 = float(j) * SG_TAU / float(n) + SG_PI * 0.5;
-		vec2 a = radius * vec2(cos(angle1), sin(angle1));
-		vec2 b = radius * vec2(cos(angle2), sin(angle2));
-		float dL = sg_lineSegmentSDF(p, a, b);
+    float m = 0.0;
+    for (int i = 0; i < 12; i++) {
+        if (i >= n) break;
+        int j = (i + 2) - ((i + 2) / n) * n;
+        float angle1 = float(i) * TAU / float(n) + PI * 0.5;
+        float angle2 = float(j) * TAU / float(n) + PI * 0.5;
+        vec2 a = radius * vec2(cos(angle1), sin(angle1));
+        vec2 b = radius * vec2(cos(angle2), sin(angle2));
+        float dL = lineSegmentSDF(p, a, b);
 
-		float vis = 1.0;
-		if (animation == SG_ANIM_UNFOLD) {
-			vis = sg_unfoldVis(float(i) / float(n));
-		}
+        float vis = 1.0;
+        if (int(animation) == ANIM_UNFOLD) {
+            vis = unfoldVis(float(i) / float(n));
+        }
 
-		m = max(m, sg_outlineEdge(dL, lineWidth) * vis);
-	}
-	return m;
+        m = max(m, outlineEdge(dL, lineWidth) * vis);
+    }
+    return m;
 }
 
 void main() {
-	// WGSL: var st = position.xy / u.resolution
-	vec2 st = gl_FragCoord.xy / resolution;
-	// WGSL: st = (st - 0.5) * 2;  st.x *= aspect
-	st = (st - vec2(0.5, 0.5)) * 2.0;
-	st.x = st.x * aspectRatio;
+    vec2 globalCoord = gl_FragCoord.xy + tileOffset;
+    vec2 st = globalCoord / fullResolution;
+    st = (st - 0.5) * 2.0;
+    st.x *= aspectRatio;
 
-	float rad = rotation * SG_PI / 180.0;
-	st = sg_rotate2D(st, rad);
+    float rad = rotation * PI / 180.0;
+    st = rotate2D(st, rad);
 
-	if (animation == SG_ANIM_ROTATE) {
-		st = sg_rotate2D(st, time * SG_TAU * floor(float(speed)));
-	}
+    if (int(animation) == ANIM_ROTATE) {
+        st = rotate2D(st, time * TAU * floor(speed));
+    }
 
-	float scaleFactor = 21.0 - scale;
-	if (animation == SG_ANIM_PULSE) {
-		scaleFactor = scaleFactor * (1.0 + pulseDepth * sin(time * SG_TAU * floor(float(speed))));
-	}
+    float scaleFactor = 21.0 - scale;
+    if (int(animation) == ANIM_PULSE) {
+        scaleFactor *= 1.0 + pulseDepth * sin(time * TAU * floor(speed));
+    }
 
-	vec2 p = st * scaleFactor;
+    vec2 p = st * scaleFactor;
 
-	float m = 0.0;
-	if (geometry == SG_GEOM_FLOWER) {
-		m = sg_flowerMask(p, int(rings), 0.45);
-	} else if (geometry == SG_GEOM_SEED) {
-		m = sg_flowerMask(p, 1, 0.23);
-	} else if (geometry == SG_GEOM_FRUIT) {
-		m = sg_fruitMask(p, false);
-	} else if (geometry == SG_GEOM_METATRON) {
-		m = sg_fruitMask(p, true);
-	} else if (geometry == SG_GEOM_VESICA) {
-		m = sg_vesicaMask(p);
-	} else if (geometry == SG_GEOM_BORROMEAN) {
-		m = sg_borromeanMask(p);
-	} else if (geometry == SG_GEOM_TRIQUETRA) {
-		m = sg_triquetraMask(p);
-	} else if (geometry == SG_GEOM_STARPOLYGON) {
-		m = sg_starPolygonMask(p, int(starPoints));
-	}
+    float m = 0.0;
+    if (int(geometry) == GEOM_FLOWER) {
+        m = flowerMask(p, int(rings), 0.45);
+    } else if (int(geometry) == GEOM_SEED) {
+        m = flowerMask(p, 1, 0.23);
+    } else if (int(geometry) == GEOM_FRUIT) {
+        m = fruitMask(p, false);
+    } else if (int(geometry) == GEOM_METATRON) {
+        m = fruitMask(p, true);
+    } else if (int(geometry) == GEOM_VESICA) {
+        m = vesicaMask(p);
+    } else if (int(geometry) == GEOM_BORROMEAN) {
+        m = borromeanMask(p);
+    } else if (int(geometry) == GEOM_TRIQUETRA) {
+        m = triquetraMask(p);
+    } else if (int(geometry) == GEOM_STARPOLYGON) {
+        m = starPolygonMask(p, int(starPoints));
+    }
 
-	m = clamp(m, 0.0, 1.0);
-	vec3 color = mix(bgColor, fgColor, m);
-	frag = vec4(color, 1.0);
+    m = clamp(m, 0.0, 1.0);
+    vec3 color = mix(bgColor, fgColor, m);
+    fragColor = vec4(color, 1.0);
 }

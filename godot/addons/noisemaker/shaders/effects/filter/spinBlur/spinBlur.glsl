@@ -1,6 +1,6 @@
 #version 450
-// filter/spinBlur program spinBlur — ported from glsl/spinBlur.glsl. No-layout effect: params
-// and engine globals are injected as #defines; bool params arrive as floats, int params via int().
+// filter/spinBlur program spinBlur — ported from glsl/spinBlur.glsl. No-layout effect: params and engine globals are injected as #defines;
+// bool params arrive as floats, int params via int().
 layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 fragColor;
@@ -14,16 +14,6 @@ layout(location = 0) out vec4 fragColor;
  * own distortion (multiply x by aspect before rotating, divide after).
  * A per-pixel hash shifts the whole tap comb by up to half an angular
  * step to hide banding from the fixed tap count.
- *
- * Y-convention note: the tap arc is symmetric about theta=0, so the
- * zero-jitter effect is Y-mirror invariant (negating every tap angle
- * maps the tap set onto itself). Per-pixel jitter shifts the whole arc
- * by a bounded sub-step offset, which does not preserve that symmetry
- * exactly - it bounds the residual cross-backend difference by the
- * jitter magnitude rather than eliminating it outright, so this is
- * weaker than "structurally immune." GLSL gl_FragCoord and WGSL
- * @builtin(position) are both used unflipped; presented-pixel parity is
- * covered with a non-centered, non-default regression fixture.
  */
 const int N = 32;
 
@@ -35,31 +25,29 @@ float hash12(vec2 p) {
 
 // Rotate uv around center by angle, aspect-corrected exactly as
 // filter/pinch's rotate2D corrects its own distortion.
-vec2 rotateAround(vec2 uv, vec2 center, float angle, float ar) {
+vec2 rotateAround(vec2 uv, vec2 center, float angle, float aspectRatio_) {
     vec2 p = uv;
-    p.x *= ar;
+    p.x *= aspectRatio_;
     vec2 c = center;
-    c.x *= ar;
+    c.x *= aspectRatio_;
     p -= c;
     float s = sin(angle);
     float co = cos(angle);
     p = mat2(co, -s, s, co) * p;
     p += c;
-    p.x /= ar;
+    p.x /= aspectRatio_;
     return p;
 }
 
 void main() {
-    float ar = fullResolution.x / fullResolution.y;
+    float aspectRatio_ = fullResolution.x / fullResolution.y;
     vec2 globalCoord = gl_FragCoord.xy + tileOffset;
     vec2 uv = globalCoord / fullResolution;
     vec2 center = vec2(centerX, centerY);
 
     float arc = radians(amount);
     float angularStep = arc / float(N - 1);
-    // Mirror-invariant global coordinates keep corresponding WebGL2/WebGPU
-    // pixels on the same dither value while remaining continuous across
-    // tiled renders. The reflected WebGPU tap set applies the opposite sign.
+    // Mirror-invariant global coordinates, continuous across tiled renders.
     vec2 jitterCoord = vec2(globalCoord.x,
         abs(globalCoord.y - fullResolution.y * 0.5));
     float jitter = (hash12(jitterCoord) - 0.5) * angularStep;
@@ -67,7 +55,7 @@ void main() {
     vec4 sum = vec4(0.0);
     for (int i = 0; i < N; i++) {
         float theta = (float(i) / float(N - 1) - 0.5) * arc + jitter;
-        vec2 distorted = clamp(rotateAround(uv, center, theta, ar), 0.0, 1.0);
+        vec2 distorted = clamp(rotateAround(uv, center, theta, aspectRatio_), 0.0, 1.0);
         vec2 sampleUV = clamp((distorted * fullResolution - tileOffset) / resolution, 0.0, 1.0);
         sum += texture(inputTex, sampleUV);
     }

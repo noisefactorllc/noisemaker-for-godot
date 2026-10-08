@@ -1,430 +1,525 @@
 #version 450
-// synth/noise (VNoise) — ported VERBATIM from wgsl/noise.wgsl (WGSL is canonical).
-// Value noise with multiple interpolation types; single render pass. Top-left origin
-// (Godot/Vulkan, matches WGSL) — NO Y-flip (runtime handles the single global flip).
-//
-// NOISE_TYPE and LOOP_OFFSET are compile-time #defines injected by the runtime from
-// the graph's `defines` (see noise.json globals.type.define / loopOffset.define).
-// Kept here as bare identifiers; never declared/hardcoded.
-//
-// pcg/prng/random/map/periodicFunction/positiveModulo come from nm_core (bit-exact,
-// shared). All other helpers are this effect's own, inlined here. Packed uniformLayout:
-// vec4 data[5] (effects/synth/noise.json).
-#include "include/nm_core.glsl"
-
+// synth/noise program noise — ported from glsl/noise.glsl. Declared-layout effect: the shader names each layout slot with a #define;
+// bool params arrive as floats, int params via int().
 layout(set = 0, binding = 0, std140) uniform Params { vec4 data[5]; };
+#define resolution data[0].xy
+#define time data[0].z
+#define aspectRatio data[0].w
+#define scaleX data[1].x
+#define scaleY data[1].y
+#define seed data[1].z
+#define loopScale data[1].w
+#define speed data[2].x
+#define octaves data[2].w
+#define ridges data[3].x
+#define wrap data[3].y
+#define colorMode data[3].z
+#define tileOffset data[4].xy
+#define fullResolution data[4].zw
 layout(location = 0) in vec2 v_uv;
-layout(location = 0) out vec4 frag;
+layout(location = 0) out vec4 fragColor;
 
-// Values referenced by helper functions (set from data[] in main; WGSL private vars).
-vec2 resolution;
-float time;
-float aspectRatio;
-float scaleX;
-float scaleY;
-float seed;
-float loopScale;
-float speed;
-int octaves;
-bool ridges;
-bool wrap;
-int colorMode;
+/*
+ * VNoise - Simplified value noise synthesizer.
+ * From nd/noise with colorization simplified to mono and rgb only.
+ * Implements deterministic value and ridged noise variants with PCG jitter.
+ */
+// NOISE_TYPE is a compile-time define injected by the runtime (see definition.js
+// `globals.type.define`). Wrapping the variant dispatch in #if blocks instead of a
+// runtime if-else avoids ANGLE→D3D inlining the entire 9-way decision tree into
+// every call site, which was causing 16+ second compiles on Windows Chrome.
+#ifndef NOISE_TYPE
+#define NOISE_TYPE 10
+#endif
 
-float blendBicubic(float p0, float p1, float p2, float p3, float t) {
-	float t2 = t * t;
-	float t3 = t2 * t;
-	float b0 = (1.0 - t) * (1.0 - t) * (1.0 - t) / 6.0;
-	float b1 = (3.0 * t3 - 6.0 * t2 + 4.0) / 6.0;
-	float b2 = (-3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0) / 6.0;
-	float b3 = t3 / 6.0;
-	return p0 * b0 + p1 * b1 + p2 * b2 + p3 * b3;
+// LOOP_OFFSET is a compile-time define for the same reason — see
+// classicNoisedeck/noise/glsl/noise.glsl for the rationale.
+#ifndef LOOP_OFFSET
+#define LOOP_OFFSET 300
+#endif
+#define PI 3.14159265359
+#define TAU 6.28318530718
+#define ar fullResolution.x / fullResolution.y
+
+vec2 globalCoord;
+
+// PCG PRNG - MIT License
+// https://github.com/riccardoscalco/glsl-pcg-prng
+uvec3 pcg(uvec3 v) {
+	v = v * uint(1664525) + uint(1013904223);
+	v.x += v.y * v.z;
+	v.y += v.z * v.x;
+	v.z += v.x * v.y;
+	v ^= v >> uint(16);
+	v.x += v.y * v.z;
+	v.y += v.z * v.x;
+	v.z += v.x * v.y;
+	return v;
 }
 
-float catmullRom3(float p0, float p1, float p2, float t) {
-	float t2 = t * t;
-	float t3 = t2 * t;
-	return p1 + 0.5 * t * (p2 - p0) +
-	       0.5 * t2 * (2.0*p0 - 5.0*p1 + 4.0*p2 - p0) +
-	       0.5 * t3 * (-p0 + 3.0*p1 - 3.0*p2 + p0);
+vec3 prng (vec3 p) {
+    p.x = p.x >= 0.0 ? p.x * 2.0 : -p.x * 2.0 + 1.0;
+    p.y = p.y >= 0.0 ? p.y * 2.0 : -p.y * 2.0 + 1.0;
+    p.z = p.z >= 0.0 ? p.z * 2.0 : -p.z * 2.0 + 1.0;
+    return vec3(pcg(uvec3(p))) / float(uint(0xffffffff));
 }
 
-float catmullRom4(float p0, float p1, float p2, float p3, float t) {
-	return p1 + 0.5 * t * (p2 - p0 + t * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + t * (3.0 * (p1 - p2) + p3 - p0)));
+float random(vec2 st) {
+    return prng(vec3(st, 0.0)).x;
 }
 
-float quadratic3(float p0, float p1, float p2, float t) {
-	float t2 = t * t;
-	return p0 * 0.5 * (1.0 - t) * (1.0 - t) +
-	       p1 * 0.5 * (-2.0 * t2 + 2.0 * t + 1.0) +
-	       p2 * 0.5 * t2;
+float map(float value, float inMin, float inMax, float outMin, float outMax) {
+    return outMin + (outMax - outMin) * (value - inMin) / (inMax - inMin);
 }
 
-float blendLinearOrCosine(float a, float b, float amount, int nType) {
-	if (nType == 1) { return mix(a, b, amount); }
-	return mix(a, b, smoothstep(0.0, 1.0, amount));
+float periodicFunction(float p) {
+    return map(cos(p * TAU), -1.0, 1.0, 0.0, 1.0);
+}
+
+int positiveModulo(int value, int modulus) {
+    if (modulus == 0) return 0;
+    int r = value % modulus;
+    return (r < 0) ? r + modulus : r;
 }
 
 float constantFromLatticeWithOffset(vec2 lattice, vec2 freq, float s, float blend, ivec2 offset) {
-	vec2 baseFloor = floor(lattice);
-	ivec2 base = ivec2(baseFloor) + offset;
-	vec2 fr = lattice - baseFloor;
-	int seedInt = int(floor(s));
-	float sFrac = fract(s);
-	float xCombined = fr.x + sFrac;
-	int xi = base.x + int(floor(xCombined));
-	int yi = base.y;
+    vec2 baseFloor = floor(lattice);
+    ivec2 base = ivec2(baseFloor) + offset;
+    vec2 frac = lattice - baseFloor;
 
-	if (wrap) {
-		int freqX = int(freq.x + 0.5);
-		int freqY = int(freq.y + 0.5);
-		if (freqX > 0) { xi = positiveModulo(xi, freqX); }
-		if (freqY > 0) { yi = positiveModulo(yi, freqY); }
-	}
+    int seedInt = int(floor(s));
+    float sFrac = fract(s);
 
-	uint xBits = uint(xi);
-	uint yBits = uint(yi);
-	uint seedBits = uint(seedInt);
-	uint fracBits = floatBitsToUint(sFrac);
+    float xCombined = frac.x + sFrac;
+    int xi = base.x + int(floor(xCombined));
+    int yi = base.y;
 
-	uvec3 jitter = uvec3(
-		(fracBits * 374761393u) ^ 0x9E3779B9u,
-		(fracBits * 668265263u) ^ 0x7F4A7C15u,
-		(fracBits * 2246822519u) ^ 0x94D049B4u
-	);
+    if (wrap != 0.0) {
+        int freqX = int(freq.x + 0.5);
+        int freqY = int(freq.y + 0.5);
+        if (freqX > 0) xi = positiveModulo(xi, freqX);
+        if (freqY > 0) yi = positiveModulo(yi, freqY);
+    }
 
-	uvec3 state = uvec3(xBits, yBits, seedBits) ^ jitter;
-	uvec3 prngState = pcg(state);
-	float noiseValue = float(prngState.x) / float(0xffffffffu);
-	return periodicFunction(noiseValue - blend);
+    uint xBits = uint(xi);
+    uint yBits = uint(yi);
+    uint seedBits = uint(seedInt);
+    uint fracBits = floatBitsToUint(sFrac);
+
+    uvec3 jitter = uvec3(
+        (fracBits * 374761393u) ^ 0x9E3779B9u,
+        (fracBits * 668265263u) ^ 0x7F4A7C15u,
+        (fracBits * 2246822519u) ^ 0x94D049B4u
+    );
+
+    uvec3 state = uvec3(xBits, yBits, seedBits) ^ jitter;
+    uvec3 prngState = pcg(state);
+    float noiseValue = float(prngState.x) / float(0xffffffffu);
+
+    return periodicFunction(noiseValue - blend);
 }
 
 float constantFromLattice(vec2 lattice, vec2 freq, float s, float blend) {
-	return constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(0, 0));
+    return constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(0, 0));
 }
 
 float constant(vec2 st, vec2 freq, float s, float blend) {
-	vec2 lattice = st * freq;
-	return constantFromLattice(lattice, freq, s, blend);
+    vec2 lattice = st * freq;
+    return constantFromLattice(lattice, freq, s, blend);
+}
+
+float cubic(float t) {
+    return t * t * (3.0 - 2.0 * t);
+}
+
+float quadratic3(float p0, float p1, float p2, float t) {
+    float t2 = t * t;
+    return p0 * 0.5 * (1.0 - t) * (1.0 - t) +
+           p1 * 0.5 * (-2.0 * t2 + 2.0 * t + 1.0) +
+           p2 * 0.5 * t2;
+}
+
+float latticeValue(vec2 lattice, vec2 freq, float s, float blend) {
+    return constantFromLattice(lattice, freq, s, blend);
+}
+
+#if NOISE_TYPE == 5
+float cubic3x3ValueNoise(vec2 st, vec2 freq, float s, float blend) {
+    vec2 lattice = st * freq;
+    vec2 f = fract(lattice);
+
+    float v00 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(-1, -1));
+    float v10 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 0, -1));
+    float v20 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 1, -1));
+    float v01 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(-1,  0));
+    float v11 = constantFromLattice(lattice, freq, s, blend);
+    float v21 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 1,  0));
+    float v02 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(-1,  1));
+    float v12 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 0,  1));
+    float v22 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 1,  1));
+
+    float y0 = quadratic3(v00, v10, v20, f.x);
+    float y1 = quadratic3(v01, v11, v21, f.x);
+    float y2 = quadratic3(v02, v12, v22, f.x);
+
+    return quadratic3(y0, y1, y2, f.y);
+}
+#endif
+
+float blendBicubic(float p0, float p1, float p2, float p3, float t) {
+    float t2 = t * t;
+    float t3 = t2 * t;
+    float b0 = (1.0 - t) * (1.0 - t) * (1.0 - t) / 6.0;
+    float b1 = (3.0 * t3 - 6.0 * t2 + 4.0) / 6.0;
+    float b2 = (-3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0) / 6.0;
+    float b3 = t3 / 6.0;
+    return p0 * b0 + p1 * b1 + p2 * b2 + p3 * b3;
+}
+
+float catmullRom3(float p0, float p1, float p2, float t) {
+    float t2 = t * t;
+    float t3 = t2 * t;
+    return p1 + 0.5 * t * (p2 - p0) + 
+           0.5 * t2 * (2.0*p0 - 5.0*p1 + 4.0*p2 - p0) +
+           0.5 * t3 * (-p0 + 3.0*p1 - 3.0*p2 + p0);
+}
+
+float catmullRom4(float p0, float p1, float p2, float p3, float t) {
+    return p1 + 0.5 * t * (p2 - p0 + t * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + t * (3.0 * (p1 - p2) + p3 - p0)));
+}
+
+float blendLinearOrCosine(float a, float b, float amount, int nType) {
+    if (nType == 1) return mix(a, b, amount);
+    return mix(a, b, smoothstep(0.0, 1.0, amount));
 }
 
 float constantOffset(vec2 lattice, vec2 freq, float s, float blend, ivec2 offset) {
-	return constantFromLatticeWithOffset(lattice, freq, s, blend, offset);
+    return constantFromLatticeWithOffset(lattice, freq, s, blend, offset);
 }
 
-float cubic3x3ValueNoise(vec2 st, vec2 freq, float s, float blend) {
-	vec2 lattice = st * freq;
-	vec2 f = fract(lattice);
-	float v00 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(-1, -1));
-	float v10 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 0, -1));
-	float v20 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 1, -1));
-	float v01 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(-1,  0));
-	float v11 = constantFromLattice(lattice, freq, s, blend);
-	float v21 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 1,  0));
-	float v02 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(-1,  1));
-	float v12 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 0,  1));
-	float v22 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 1,  1));
-	float y0 = quadratic3(v00, v10, v20, f.x);
-	float y1 = quadratic3(v01, v11, v21, f.x);
-	float y2 = quadratic3(v02, v12, v22, f.x);
-	return quadratic3(y0, y1, y2, f.y);
-}
-
+#if NOISE_TYPE == 6
 float bicubicValue(vec2 st, vec2 freq, float s, float blend) {
-	vec2 lattice = st * freq;
-	float x0y0 = constantOffset(lattice, freq, s, blend, ivec2(-1, -1));
-	float x0y1 = constantOffset(lattice, freq, s, blend, ivec2(-1, 0));
-	float x0y2 = constantOffset(lattice, freq, s, blend, ivec2(-1, 1));
-	float x0y3 = constantOffset(lattice, freq, s, blend, ivec2(-1, 2));
-	float x1y0 = constantOffset(lattice, freq, s, blend, ivec2(0, -1));
-	float x1y1 = constantFromLattice(lattice, freq, s, blend);
-	float x1y2 = constantOffset(lattice, freq, s, blend, ivec2(0, 1));
-	float x1y3 = constantOffset(lattice, freq, s, blend, ivec2(0, 2));
-	float x2y0 = constantOffset(lattice, freq, s, blend, ivec2(1, -1));
-	float x2y1 = constantOffset(lattice, freq, s, blend, ivec2(1, 0));
-	float x2y2 = constantOffset(lattice, freq, s, blend, ivec2(1, 1));
-	float x2y3 = constantOffset(lattice, freq, s, blend, ivec2(1, 2));
-	float x3y0 = constantOffset(lattice, freq, s, blend, ivec2(2, -1));
-	float x3y1 = constantOffset(lattice, freq, s, blend, ivec2(2, 0));
-	float x3y2 = constantOffset(lattice, freq, s, blend, ivec2(2, 1));
-	float x3y3 = constantOffset(lattice, freq, s, blend, ivec2(2, 2));
-	vec2 fr = fract(lattice);
-	float y0 = blendBicubic(x0y0, x1y0, x2y0, x3y0, fr.x);
-	float y1 = blendBicubic(x0y1, x1y1, x2y1, x3y1, fr.x);
-	float y2 = blendBicubic(x0y2, x1y2, x2y2, x3y2, fr.x);
-	float y3 = blendBicubic(x0y3, x1y3, x2y3, x3y3, fr.x);
-	return blendBicubic(y0, y1, y2, y3, fr.y);
-}
+    vec2 lattice = st * freq;
 
+    float x0y0 = constantOffset(lattice, freq, s, blend, ivec2(-1, -1));
+    float x0y1 = constantOffset(lattice, freq, s, blend, ivec2(-1, 0));
+    float x0y2 = constantOffset(lattice, freq, s, blend, ivec2(-1, 1));
+    float x0y3 = constantOffset(lattice, freq, s, blend, ivec2(-1, 2));
+    float x1y0 = constantOffset(lattice, freq, s, blend, ivec2(0, -1));
+    float x1y1 = constantFromLattice(lattice, freq, s, blend);
+    float x1y2 = constantOffset(lattice, freq, s, blend, ivec2(0, 1));
+    float x1y3 = constantOffset(lattice, freq, s, blend, ivec2(0, 2));
+    float x2y0 = constantOffset(lattice, freq, s, blend, ivec2(1, -1));
+    float x2y1 = constantOffset(lattice, freq, s, blend, ivec2(1, 0));
+    float x2y2 = constantOffset(lattice, freq, s, blend, ivec2(1, 1));
+    float x2y3 = constantOffset(lattice, freq, s, blend, ivec2(1, 2));
+    float x3y0 = constantOffset(lattice, freq, s, blend, ivec2(2, -1));
+    float x3y1 = constantOffset(lattice, freq, s, blend, ivec2(2, 0));
+    float x3y2 = constantOffset(lattice, freq, s, blend, ivec2(2, 1));
+    float x3y3 = constantOffset(lattice, freq, s, blend, ivec2(2, 2));
+
+    vec2 frac = fract(lattice);
+    float y0 = blendBicubic(x0y0, x1y0, x2y0, x3y0, frac.x);
+    float y1 = blendBicubic(x0y1, x1y1, x2y1, x3y1, frac.x);
+    float y2 = blendBicubic(x0y2, x1y2, x2y2, x3y2, frac.x);
+    float y3 = blendBicubic(x0y3, x1y3, x2y3, x3y3, frac.x);
+    return blendBicubic(y0, y1, y2, y3, frac.y);
+}
+#endif
+
+#if NOISE_TYPE == 3
 float catmullRom3x3ValueNoise(vec2 st, vec2 freq, float s, float blend) {
-	vec2 lattice = st * freq;
-	vec2 f = fract(lattice);
-	float v00 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(-1, -1));
-	float v10 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 0, -1));
-	float v20 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 1, -1));
-	float v01 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(-1,  0));
-	float v11 = constantFromLattice(lattice, freq, s, blend);
-	float v21 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 1,  0));
-	float v02 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(-1,  1));
-	float v12 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 0,  1));
-	float v22 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 1,  1));
-	float y0 = catmullRom3(v00, v10, v20, f.x);
-	float y1 = catmullRom3(v01, v11, v21, f.x);
-	float y2 = catmullRom3(v02, v12, v22, f.x);
-	return catmullRom3(y0, y1, y2, f.y);
-}
+    vec2 lattice = st * freq;
+    vec2 f = fract(lattice);
 
+    float v00 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(-1, -1));
+    float v10 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 0, -1));
+    float v20 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 1, -1));
+    float v01 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(-1,  0));
+    float v11 = constantFromLattice(lattice, freq, s, blend);
+    float v21 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 1,  0));
+    float v02 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2(-1,  1));
+    float v12 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 0,  1));
+    float v22 = constantFromLatticeWithOffset(lattice, freq, s, blend, ivec2( 1,  1));
+
+    float y0 = catmullRom3(v00, v10, v20, f.x);
+    float y1 = catmullRom3(v01, v11, v21, f.x);
+    float y2 = catmullRom3(v02, v12, v22, f.x);
+    return catmullRom3(y0, y1, y2, f.y);
+}
+#endif
+
+#if NOISE_TYPE == 4
 float catmullRom4x4ValueNoise(vec2 st, vec2 freq, float s, float blend) {
-	vec2 lattice = st * freq;
-	float x0y0 = constantOffset(lattice, freq, s, blend, ivec2(-1, -1));
-	float x0y1 = constantOffset(lattice, freq, s, blend, ivec2(-1, 0));
-	float x0y2 = constantOffset(lattice, freq, s, blend, ivec2(-1, 1));
-	float x0y3 = constantOffset(lattice, freq, s, blend, ivec2(-1, 2));
-	float x1y0 = constantOffset(lattice, freq, s, blend, ivec2(0, -1));
-	float x1y1 = constantFromLattice(lattice, freq, s, blend);
-	float x1y2 = constantOffset(lattice, freq, s, blend, ivec2(0, 1));
-	float x1y3 = constantOffset(lattice, freq, s, blend, ivec2(0, 2));
-	float x2y0 = constantOffset(lattice, freq, s, blend, ivec2(1, -1));
-	float x2y1 = constantOffset(lattice, freq, s, blend, ivec2(1, 0));
-	float x2y2 = constantOffset(lattice, freq, s, blend, ivec2(1, 1));
-	float x2y3 = constantOffset(lattice, freq, s, blend, ivec2(1, 2));
-	float x3y0 = constantOffset(lattice, freq, s, blend, ivec2(2, -1));
-	float x3y1 = constantOffset(lattice, freq, s, blend, ivec2(2, 0));
-	float x3y2 = constantOffset(lattice, freq, s, blend, ivec2(2, 1));
-	float x3y3 = constantOffset(lattice, freq, s, blend, ivec2(2, 2));
-	vec2 fr = fract(lattice);
-	float y0 = catmullRom4(x0y0, x1y0, x2y0, x3y0, fr.x);
-	float y1 = catmullRom4(x0y1, x1y1, x2y1, x3y1, fr.x);
-	float y2 = catmullRom4(x0y2, x1y2, x2y2, x3y2, fr.x);
-	float y3 = catmullRom4(x0y3, x1y3, x2y3, x3y3, fr.x);
-	return catmullRom4(y0, y1, y2, y3, fr.y);
-}
+    vec2 lattice = st * freq;
 
-vec3 mod289v3(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-vec2 mod289v2(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-vec3 permute(vec3 x) { return mod289v3(((x*34.0)+1.0)*x); }
+    float x0y0 = constantOffset(lattice, freq, s, blend, ivec2(-1, -1));
+    float x0y1 = constantOffset(lattice, freq, s, blend, ivec2(-1, 0));
+    float x0y2 = constantOffset(lattice, freq, s, blend, ivec2(-1, 1));
+    float x0y3 = constantOffset(lattice, freq, s, blend, ivec2(-1, 2));
+    float x1y0 = constantOffset(lattice, freq, s, blend, ivec2(0, -1));
+    float x1y1 = constantFromLattice(lattice, freq, s, blend);
+    float x1y2 = constantOffset(lattice, freq, s, blend, ivec2(0, 1));
+    float x1y3 = constantOffset(lattice, freq, s, blend, ivec2(0, 2));
+    float x2y0 = constantOffset(lattice, freq, s, blend, ivec2(1, -1));
+    float x2y1 = constantOffset(lattice, freq, s, blend, ivec2(1, 0));
+    float x2y2 = constantOffset(lattice, freq, s, blend, ivec2(1, 1));
+    float x2y3 = constantOffset(lattice, freq, s, blend, ivec2(1, 2));
+    float x3y0 = constantOffset(lattice, freq, s, blend, ivec2(2, -1));
+    float x3y1 = constantOffset(lattice, freq, s, blend, ivec2(2, 0));
+    float x3y2 = constantOffset(lattice, freq, s, blend, ivec2(2, 1));
+    float x3y3 = constantOffset(lattice, freq, s, blend, ivec2(2, 2));
+
+    vec2 frac = fract(lattice);
+    float y0 = catmullRom4(x0y0, x1y0, x2y0, x3y0, frac.x);
+    float y1 = catmullRom4(x0y1, x1y1, x2y1, x3y1, frac.x);
+    float y2 = catmullRom4(x0y2, x1y2, x2y2, x3y2, frac.x);
+    float y3 = catmullRom4(x0y3, x1y3, x2y3, x3y3, frac.x);
+    return catmullRom4(y0, y1, y2, y3, frac.y);
+}
+#endif
+
+#if NOISE_TYPE == 10
+// Simplex 2D - MIT License (Ashima Arts)
+vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
 
 float simplexValue(vec2 st, vec2 freq, float s, float blend) {
-	vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
-	vec2 uv = st * freq;
-	uv.x += s;
-	vec2 i = floor(uv + dot(uv, C.yy));
-	vec2 x0 = uv - i + dot(i, C.xx);
-	vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-	vec4 x12 = x0.xyxy + C.xxzz;
-	x12 = vec4(x12.xy - i1, x12.zw);
-	vec2 ii = mod289v2(i);
-	vec3 p = permute(permute(ii.y + vec3(0.0, i1.y, 1.0)) + ii.x + vec3(0.0, i1.x, 1.0));
-	vec3 m = max(vec3(0.5) - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), vec3(0.0));
-	m = m*m;
-	m = m*m;
-	vec3 x = 2.0 * fract(p * C.www) - 1.0;
-	vec3 h = abs(x) - 0.5;
-	vec3 ox = floor(x + 0.5);
-	vec3 a0 = x - ox;
-	m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
-	vec3 g;
-	g.x = a0.x * x0.x + h.x * x0.y;
-	g.y = a0.y * x12.x + h.y * x12.y;
-	g.z = a0.z * x12.z + h.z * x12.w;
-	float v = 130.0 * dot(m, g);
-	return periodicFunction(map(v, -1.0, 1.0, 0.0, 1.0) - blend);
-}
+    const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
+    vec2 uv = st * freq;
+    uv.x += s;
 
-float sineNoise(vec2 st, vec2 freq, float s, float blend) {
-	vec2 stt = st * freq;
-	stt.x += s;
-	float a = blend;
-	float b = blend;
-	float c = 1.0 - blend;
-	vec3 r1 = prng(vec3(s, s, s)) * 0.75 + 0.125;
-	vec3 r2 = prng(vec3(s + 10.0, s + 10.0, s + 10.0)) * 0.75 + 0.125;
-	float x = sin(r1.x * stt.y + sin(r1.y * stt.x + a) + sin(r1.z * stt.x + b) + c);
-	float y = sin(r2.x * stt.x + sin(r2.y * stt.y + b) + sin(r2.z * stt.y + c) + a);
-	return (x + y) * 0.5 + 0.5;
+    vec2 i  = floor(uv + dot(uv, C.yy));
+    vec2 x0 = uv - i + dot(i, C.xx);
+    vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+    vec4 x12 = x0.xyxy + C.xxzz;
+    x12.xy -= i1;
+
+    i = mod289(i);
+    vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+    vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+    m = m*m;
+    m = m*m;
+
+    vec3 x = 2.0 * fract(p * C.www) - 1.0;
+    vec3 h = abs(x) - 0.5;
+    vec3 ox = floor(x + 0.5);
+    vec3 a0 = x - ox;
+    m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
+
+    vec3 g;
+    g.x = a0.x * x0.x + h.x * x0.y;
+    g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+    float v = 130.0 * dot(m, g);
+
+    return periodicFunction(map(v, -1.0, 1.0, 0.0, 1.0) - blend);
 }
+#endif
+
+#if NOISE_TYPE == 11
+float sineNoise(vec2 st, vec2 freq, float s, float blend) {
+    st *= freq;
+    st.x += s;
+    float a = blend;
+    float b = blend;
+    float c = 1.0 - blend;
+    vec3 r1 = prng(vec3(s)) * 0.75 + 0.125;
+    vec3 r2 = prng(vec3(s + 10.0)) * 0.75 + 0.125;
+    float x = sin(r1.x * st.y + sin(r1.y * st.x + a) + sin(r1.z * st.x + b) + c);
+    float y = sin(r2.x * st.x + sin(r2.y * st.y + b) + sin(r2.z * st.y + c) + a);
+    return (x + y) * 0.5 + 0.5;
+}
+#endif
 
 float value(vec2 st, vec2 freq, float s, float blend) {
-	if (NOISE_TYPE == 3) { return catmullRom3x3ValueNoise(st, freq, s, blend); }
-	if (NOISE_TYPE == 4) { return catmullRom4x4ValueNoise(st, freq, s, blend); }
-	if (NOISE_TYPE == 5) { return cubic3x3ValueNoise(st, freq, s, blend); }
-	if (NOISE_TYPE == 6) { return bicubicValue(st, freq, s, blend); }
-	if (NOISE_TYPE == 10) { return simplexValue(st, freq, s, blend); }
-	if (NOISE_TYPE == 11) { return sineNoise(st, freq, s, blend); }
-
-	vec2 lattice = st * freq;
-	float x1y1 = constantFromLattice(lattice, freq, s, blend);
-	if (NOISE_TYPE == 0) { return x1y1; }
-
-	float x2y1 = constantOffset(lattice, freq, s, blend, ivec2(1, 0));
-	float x1y2 = constantOffset(lattice, freq, s, blend, ivec2(0, 1));
-	float x2y2 = constantOffset(lattice, freq, s, blend, ivec2(1, 1));
-	vec2 fr = fract(lattice);
-	// NOISE_TYPE is injected by the backend as a float #define (e.g. 10.0); the
-	// canonical helper takes an int nType, so narrow it here (value is integral).
-	float aa = blendLinearOrCosine(x1y1, x2y1, fr.x, int(NOISE_TYPE));
-	float bb = blendLinearOrCosine(x1y2, x2y2, fr.x, int(NOISE_TYPE));
-	return blendLinearOrCosine(aa, bb, fr.y, int(NOISE_TYPE));
+#if NOISE_TYPE == 3
+    return catmullRom3x3ValueNoise(st, freq, s, blend);
+#elif NOISE_TYPE == 4
+    return catmullRom4x4ValueNoise(st, freq, s, blend);
+#elif NOISE_TYPE == 5
+    return cubic3x3ValueNoise(st, freq, s, blend);
+#elif NOISE_TYPE == 6
+    return bicubicValue(st, freq, s, blend);
+#elif NOISE_TYPE == 10
+    return simplexValue(st, freq, s, blend);
+#elif NOISE_TYPE == 11
+    return sineNoise(st, freq, s, blend);
+#elif NOISE_TYPE == 0
+    return constantFromLattice(st * freq, freq, s, blend);
+#else
+    // NOISE_TYPE == 1 (linear) or NOISE_TYPE == 2 (hermite/cosine)
+    vec2 lattice = st * freq;
+    float x1y1 = constantFromLattice(lattice, freq, s, blend);
+    float x2y1 = constantOffset(lattice, freq, s, blend, ivec2(1, 0));
+    float x1y2 = constantOffset(lattice, freq, s, blend, ivec2(0, 1));
+    float x2y2 = constantOffset(lattice, freq, s, blend, ivec2(1, 1));
+    vec2 frac = fract(lattice);
+    float a = blendLinearOrCosine(x1y1, x2y1, frac.x, NOISE_TYPE);
+    float b = blendLinearOrCosine(x1y2, x2y2, frac.x, NOISE_TYPE);
+    return blendLinearOrCosine(a, b, frac.y, NOISE_TYPE);
+#endif
 }
 
 float circles(vec2 st, float freq) {
-	float dist = length(st - vec2(0.5 * aspectRatio, 0.5));
-	return dist * freq;
+    float dist = length(st - vec2(0.5 * ar, 0.5));
+    return dist * freq;
 }
 
 float rings(vec2 st, float freq) {
-	float dist = length(st - vec2(0.5 * aspectRatio, 0.5));
-	return cos(dist * PI * freq);
+    float dist = length(st - vec2(0.5 * ar, 0.5));
+    return cos(dist * PI * freq);
 }
 
-float diamonds(vec2 st, float freq, vec2 pos) {
-	vec2 stt = pos / resolution.y;
-	stt -= vec2(0.5 * aspectRatio, 0.5);
-	stt *= freq;
-	return (cos(stt.x * PI) + cos(stt.y * PI));
+float diamonds(vec2 st, float freq) {
+    st = globalCoord / fullResolution.y;
+    st -= vec2(0.5 * ar, 0.5);
+    st *= freq;
+    return (cos(st.x * PI) + cos(st.y * PI));
 }
 
 float shape(vec2 st, int sides, float blend) {
-	vec2 stt = st * 2.0 - vec2(aspectRatio, 1.0);
-	float a = atan(stt.x, stt.y) + PI;
-	float r = TAU / float(sides);
-	return cos(floor(0.5 + a / r) * r - a) * length(stt) * blend;
+    st = st * 2.0 - vec2(ar, 1.0);
+    float a = atan(st.x, st.y) + PI;
+    float r = TAU / float(sides);
+    return cos(floor(0.5 + a / r) * r - a) * length(st) * blend;
 }
 
-float offset(vec2 st, vec2 freq, vec2 pos) {
-	if (LOOP_OFFSET == 10) { return circles(st, freq.x); }
-	if (LOOP_OFFSET == 20) { return shape(st, 3, freq.x * 0.5); }
-	if (LOOP_OFFSET == 30) { return (abs(st.x - 0.5 * aspectRatio) + abs(st.y - 0.5)) * freq.x * 0.5; }
-	if (LOOP_OFFSET == 40) { return shape(st, 4, freq.x * 0.5); }
-	if (LOOP_OFFSET == 50) { return shape(st, 5, freq.x * 0.5); }
-	if (LOOP_OFFSET == 60) { return shape(st, 6, freq.x * 0.5); }
-	if (LOOP_OFFSET == 70) { return shape(st, 7, freq.x * 0.5); }
-	if (LOOP_OFFSET == 80) { return shape(st, 8, freq.x * 0.5); }
-	if (LOOP_OFFSET == 90) { return shape(st, 9, freq.x * 0.5); }
-	if (LOOP_OFFSET == 100) { return shape(st, 10, freq.x * 0.5); }
-	if (LOOP_OFFSET == 110) { return shape(st, 11, freq.x * 0.5); }
-	if (LOOP_OFFSET == 120) { return shape(st, 12, freq.x * 0.5); }
-	if (LOOP_OFFSET == 200) { return st.x * freq.x * 0.5; }
-	if (LOOP_OFFSET == 210) { return st.y * freq.x * 0.5; }
-	if (LOOP_OFFSET == 300) {
-		vec2 stt = st - vec2(aspectRatio * 0.5, 0.5);
-		return value(stt, freq, seed + 50.0, 0.0);
-	}
-	if (LOOP_OFFSET == 400) { return 1.0 - rings(st, freq.x); }
-	if (LOOP_OFFSET == 410) { return 1.0 - diamonds(st, freq.x, pos); }
-	return 0.0;
+float offset(vec2 st, vec2 freq) {
+#if LOOP_OFFSET == 10
+    return circles(st, freq.x);
+#elif LOOP_OFFSET == 20
+    return shape(st, 3, freq.x * 0.5);
+#elif LOOP_OFFSET == 30
+    return (abs(st.x - 0.5 * ar) + abs(st.y - 0.5)) * freq.x * 0.5;
+#elif LOOP_OFFSET == 40
+    return shape(st, 4, freq.x * 0.5);
+#elif LOOP_OFFSET == 50
+    return shape(st, 5, freq.x * 0.5);
+#elif LOOP_OFFSET == 60
+    return shape(st, 6, freq.x * 0.5);
+#elif LOOP_OFFSET == 70
+    return shape(st, 7, freq.x * 0.5);
+#elif LOOP_OFFSET == 80
+    return shape(st, 8, freq.x * 0.5);
+#elif LOOP_OFFSET == 90
+    return shape(st, 9, freq.x * 0.5);
+#elif LOOP_OFFSET == 100
+    return shape(st, 10, freq.x * 0.5);
+#elif LOOP_OFFSET == 110
+    return shape(st, 11, freq.x * 0.5);
+#elif LOOP_OFFSET == 120
+    return shape(st, 12, freq.x * 0.5);
+#elif LOOP_OFFSET == 200
+    return st.x * freq.x * 0.5;
+#elif LOOP_OFFSET == 210
+    return st.y * freq.x * 0.5;
+#elif LOOP_OFFSET == 300
+    st -= vec2(ar * 0.5, 0.5);
+    return value(st, freq, float(int(seed)) + 50.0, 0.0);
+#elif LOOP_OFFSET == 400
+    return 1.0 - rings(st, freq.x);
+#elif LOOP_OFFSET == 410
+    return 1.0 - diamonds(st, freq.x);
+#else
+    return 0.0;
+#endif
 }
 
 vec3 generate_octave(vec2 st, vec2 freq, float s, float blend, float layer) {
-	vec3 color = vec3(0.0);
-	color.r = value(st, freq, s, blend);
-	color.g = value(st, freq, s + 10.0, blend);
-	color.b = value(st, freq, s + 20.0, blend);
-	return color;
+    vec3 color = vec3(0.0);
+    color.r = value(st, freq, s, blend);
+    color.g = value(st, freq, s + 10.0, blend);
+    color.b = value(st, freq, s + 20.0, blend);
+    return color;
 }
 
-vec3 multires(vec2 st_in, vec2 freq, int oct, float s, float blend) {
-	vec2 st = st_in;
-	vec3 color = vec3(0.0);
-	float multiplicand = 0.0;
+vec3 multires(vec2 st, vec2 freq, int oct, float s, float blend) {
+    vec3 color = vec3(0.0);
+    float multiplicand = 0.0;
 
-	for (int i = 1; i <= oct; i++) {
-		float multiplier = pow(2.0, float(i));
-		vec2 baseFreq = freq * 0.5 * multiplier;
-		multiplicand += 1.0 / multiplier;
+    for (int i = 1; i <= oct; i++) {
+        float multiplier = pow(2.0, float(i));
+        vec2 baseFreq = freq * 0.5 * multiplier;
+        multiplicand += 1.0 / multiplier;
 
-		vec3 layer = generate_octave(st, baseFreq, s + 10.0 * float(i), blend, float(i));
+        vec3 layer = generate_octave(st, baseFreq, s + 10.0 * float(i), blend, float(i));
 
-		color = color + layer / multiplier;
-	}
+        color.rgb += layer / multiplier;
+    }
 
-	color = color / multiplicand;
-
-	// Simplified colorization: mono (0) or rgb (1) only
-	if (colorMode == 0) {
-		// mono - use blue channel
-		float b = color.b;
-		if (ridges) { b = 1.0 - abs(b * 2.0 - 1.0); }
-		return vec3(b);
-	} else {
-		// rgb
-		if (ridges) {
-			color.r = 1.0 - abs(color.r * 2.0 - 1.0);
-			color.g = 1.0 - abs(color.g * 2.0 - 1.0);
-			color.b = 1.0 - abs(color.b * 2.0 - 1.0);
-		}
-		return color;
-	}
+    color.rgb /= multiplicand;
+    
+    // Simplified colorization: mono (0) or rgb (1) only
+    if (int(colorMode) == 0) {
+        // mono - use blue channel
+        if (ridges != 0.0) color.b = 1.0 - abs(color.b * 2.0 - 1.0);
+        return vec3(color.b);
+    } else {
+        // rgb
+        if (ridges != 0.0) {
+            color.r = 1.0 - abs(color.r * 2.0 - 1.0);
+            color.g = 1.0 - abs(color.g * 2.0 - 1.0);
+            color.b = 1.0 - abs(color.b * 2.0 - 1.0);
+        }
+        return color;
+    }
 }
 
 void main() {
-	// Unpack uniforms
-	resolution = data[0].xy;
-	time = data[0].z;
-	aspectRatio = data[0].w;
-	scaleX = data[1].x;
-	scaleY = data[1].y;
-	seed = data[1].z;
-	loopScale = data[1].w;
-	speed = data[2].x;
-	// data[2].y was loopOffset (now compile-time LOOP_OFFSET)
-	octaves = int(data[2].w);
-	ridges = data[3].x > 0.5;
-	wrap = data[3].y > 0.5;
-	colorMode = int(data[3].z);
+    globalCoord = gl_FragCoord.xy + tileOffset;
+    vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
+    vec2 st = globalCoord / fullResolution.y;
+    vec2 centered = st - vec2(ar * 0.5, 0.5);
 
-	vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
-	vec2 tileOffset = data[4].xy;
-	vec2 fullResolution = data[4].zw;
-	vec2 st = (gl_FragCoord.xy + tileOffset) / fullResolution.y;
-	vec2 centered = st - vec2(aspectRatio * 0.5, 0.5);
+    vec2 freq = vec2(1.0);
+    vec2 lf = vec2(1.0);
 
-	vec2 freq = vec2(1.0);
-	vec2 lf = vec2(1.0);
+#if NOISE_TYPE == 11
+    freq.x = map(scaleX, 1.0, 100.0, 40.0, 1.0);
+    freq.y = map(scaleY, 1.0, 100.0, 40.0, 1.0);
+    lf = vec2(map(loopScale, 1.0, 100.0, 10.0, 1.0));
+#elif NOISE_TYPE == 10
+    freq.x = map(scaleX, 1.0, 100.0, 6.0, 0.5);
+    freq.y = map(scaleY, 1.0, 100.0, 6.0, 0.5);
+    lf = vec2(map(loopScale, 1.0, 100.0, 6.0, 0.5));
+#else
+    freq.x = map(scaleX, 1.0, 100.0, 20.0, 3.0);
+    freq.y = map(scaleY, 1.0, 100.0, 20.0, 3.0);
+    lf = vec2(map(loopScale, 1.0, 100.0, 12.0, 3.0));
+#endif
 
-	if (NOISE_TYPE == 11) {
-		freq.x = map(scaleX, 1.0, 100.0, 40.0, 1.0);
-		freq.y = map(scaleY, 1.0, 100.0, 40.0, 1.0);
-		lf = vec2(map(loopScale, 1.0, 100.0, 10.0, 1.0));
-	} else if (NOISE_TYPE == 10) {
-		freq.x = map(scaleX, 1.0, 100.0, 6.0, 0.5);
-		freq.y = map(scaleY, 1.0, 100.0, 6.0, 0.5);
-		lf = vec2(map(loopScale, 1.0, 100.0, 6.0, 0.5));
-	} else {
-		freq.x = map(scaleX, 1.0, 100.0, 20.0, 3.0);
-		freq.y = map(scaleY, 1.0, 100.0, 20.0, 3.0);
-		lf = vec2(map(loopScale, 1.0, 100.0, 12.0, 3.0));
-	}
+#if LOOP_OFFSET == 300
+#if NOISE_TYPE == 11
+    float base = map(75.0, 1.0, 100.0, 40.0, 1.0);
+#elif NOISE_TYPE == 10
+    float base = map(75.0, 1.0, 100.0, 6.0, 0.5);
+#else
+    float base = map(75.0, 1.0, 100.0, 20.0, 3.0);
+#endif
+    {
+        vec2 nominalFreq = vec2(base);
+        lf *= freq / nominalFreq;
+    }
+#endif
 
-	if (LOOP_OFFSET == 300) {
-		vec2 nominalFreq = vec2(1.0);
-		if (NOISE_TYPE == 11) {
-			float base = map(75.0, 1.0, 100.0, 40.0, 1.0);
-			nominalFreq = vec2(base);
-		} else if (NOISE_TYPE == 10) {
-			float base = map(75.0, 1.0, 100.0, 6.0, 0.5);
-			nominalFreq = vec2(base);
-		} else {
-			float base = map(75.0, 1.0, 100.0, 20.0, 3.0);
-			nominalFreq = vec2(base);
-		}
-		lf *= freq / nominalFreq;
-	}
+#if NOISE_TYPE != 4 && NOISE_TYPE != 10
+    if (wrap != 0.0) {
+        freq = floor(freq);
+#if LOOP_OFFSET == 300
+        lf = floor(lf);
+#endif
+    }
+#endif
 
-	if (NOISE_TYPE != 4 && NOISE_TYPE != 10 && wrap) {
-		freq = floor(freq);
-		if (LOOP_OFFSET == 300) {
-			lf = floor(lf);
-		}
-	}
+    float t = 1.0;
+    if (speed < 0.0) {
+        t = time + offset(st, lf);
+    } else {
+        t = time - offset(st, lf);
+    }
+    float blend = periodicFunction(t) * abs(speed) * 0.01;
 
-	float t = 1.0;
-	if (speed < 0.0) {
-		t = time + offset(st, lf, gl_FragCoord.xy);
-	} else {
-		t = time - offset(st, lf, gl_FragCoord.xy);
-	}
-	float blend = periodicFunction(t) * abs(speed) * 0.01;
-
-	color = vec4(multires(centered, freq, octaves, seed, blend), 1.0);
-	frag = color;
+    color.rgb = multires(centered, freq, int(octaves), float(int(seed)), blend);
+    fragColor = color;
 }

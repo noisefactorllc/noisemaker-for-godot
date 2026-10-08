@@ -1,15 +1,12 @@
 #version 450
-// points/heightGrid (program "agent") — ported from wgsl/agent.wgsl. Arranges every
-// pointsEmit-allocated slot into a square XZ grid with height-mapped Y, sourced from
-// separate height/diffuse 2D surfaces. No-layout effect: backend injects Params UBO +
-// `#define gridScale …`/`heightScale …`/`heightOffset …`. Common Agent Architecture inputs
-// (pass.inputs order): xyzTex=1, velTex=2, heightTex=3, diffuseTex=4.
+// points/heightGrid program agent — ported from glsl/agent.glsl. No-layout effect: params and engine globals are injected as #defines;
+// bool params arrive as floats, int params via int().
 layout(set = 0, binding = 1) uniform sampler2D xyzTex;
 layout(set = 0, binding = 2) uniform sampler2D velTex;
 layout(set = 0, binding = 3) uniform sampler2D heightTex;
 layout(set = 0, binding = 4) uniform sampler2D diffuseTex;
+layout(location = 0) in vec2 v_uv;
 
-// MRT outputs
 layout(location = 0) out vec4 outXYZ;
 layout(location = 1) out vec4 outVel;
 layout(location = 2) out vec4 outRGBA;
