@@ -26,7 +26,7 @@ That language is Noisemaker's **DSL**. The original engine runs in the browser a
 [noisedeck.app](https://noisedeck.app).
 
 **Noisemaker for Godot** runs the same programs inside Godot 4, with the 210 effects of Noisemaker
-1.0.262 rendered on Godot's own GPU pipeline. Use it to make textures, materials and animated
+1.0.271 rendered on Godot's own GPU pipeline. Use it to make textures, materials and animated
 backgrounds from code, with no image files.
 
 It is self-contained: the addon compiles the DSL and renders it entirely in Godot, with no internet,

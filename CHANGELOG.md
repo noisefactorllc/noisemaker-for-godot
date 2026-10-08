@@ -8,7 +8,7 @@ All notable changes to Noisemaker for Godot. Versions track `godot/addons/noisem
 - An in-engine GDScript compiler (`compiler/lang`, `compiler/graph`): DSL programs compile to the
   render graph with no Node.js, reference engine or network. Invalid programs return structured
   diagnostics instead of a graph.
-- The full reference effect catalog, synced to Noisemaker 1.0.262: 210 effect definitions generated
+- The full reference effect catalog, synced to Noisemaker 1.0.271: 210 effect definitions generated
   from the reference, with GPU programs for the 3D (`synth3d`, `filter3d`), points and render effects.
 - Executor support for MRT, points, billboards, mesh triangles, repeat loops, ping-pong buffers and
   feedback.
