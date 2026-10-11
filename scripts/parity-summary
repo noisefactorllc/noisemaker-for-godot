@@ -48,7 +48,7 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
   # HEAD AND a clean tree — a dirty or tampered cache is re-cloned, never
   # trusted. The swap is locked so concurrent invocations cannot move the
   # cache out from under each other.
-  PIN=5976b7a6b77f69c47c41f4ee296a54d5318e1f9d
+  PIN=38064f6c61f5bd77c88a5ee967e1865b70157c9b
   CACHE="${PARITY_REFERENCE_CACHE:-${TMPDIR:-/tmp}/noisemaker-reference}"
   export NM_REFERENCE_ROOT="$CACHE"
   usable=0

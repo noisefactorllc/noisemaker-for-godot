@@ -69,9 +69,14 @@ void main() {
 """
 
 # Engine-provided globals (reference/04 §10.1), sourced from the runtime.
+# aspectInv / invFullResolution are CPU-computed reciprocals of aspectRatio and
+# fullResolution (reference pipeline.js getUniforms): reference shaders multiply
+# by them instead of dividing so both of the reference's backends evaluate the
+# same correctly-rounded multiply.
 const ENGINE_GLOBALS := {
 	"resolution": true, "time": true, "aspectRatio": true, "tileOffset": true,
 	"fullResolution": true, "renderScale": true, "deltaTime": true, "frame": true,
+	"aspectInv": true, "invFullResolution": true,
 }
 
 # Fixed engine header for synthesized (no-layout) effect layouts.
@@ -84,6 +89,8 @@ const ENGINE_SYNTH := {
 	"renderScale": {"slot": 2, "components": "x"},
 	"deltaTime": {"slot": 2, "components": "y"},
 	"frame": {"slot": 2, "components": "z"},
+	"aspectInv": {"slot": 2, "components": "w"},
+	"invFullResolution": {"slot": 3, "components": "xy"},
 }
 
 const AUTOMATION_FIELD_RANGES := {
@@ -161,6 +168,7 @@ var _owned_textures := {}
 # persist their final binding, display surfaces toggle). Write-only globals (o0, the
 # present target) stay as flat single textures — see allocate_textures.
 var _surfaces := {}        # bareName -> {"read": texId, "write": texId}
+var _feedback_persist := {}  # bareName -> true; read-before-write surfaces whose end-of-frame swap PERSISTS the final bindings (reference pipeline.js _feedbackSurfaces)
 var _frame_read := {}      # bareName -> texId (this frame's read buffer)
 var _frame_write := {}     # bareName -> texId (this frame's write target)
 var _pingpong := {}        # global texId -> bareName (the double-buffered set)
@@ -654,6 +662,12 @@ func _resolve_dim(d, screen_size: int, uniforms: Dictionary = {}) -> int:
 		if d.has("screenDivide"):
 			var key := str(d["screenDivide"])
 			var div = uniforms[key] if uniforms.has(key) else d.get("default", 1)
+			# Func wrappers and other nonnumeric authored values are not
+			# evaluated by the runtime; fall back to the spec's numeric default
+			# so the divisor is never a nonnumeric value (reference
+			# pipeline.js resolveDimension).
+			if not _finite_number(div):
+				div = d.get("default", 1)
 			if div == null or float(div) == 0.0:
 				div = d.get("default", 1)
 			return max(1, int(round(screen_size / float(div))))
@@ -679,6 +693,19 @@ func _resolve_dim(d, screen_size: int, uniforms: Dictionary = {}) -> int:
 			# (for example volumeSize² defaults to 4096), not the base to transform.
 			if has_transform and not has_param and d.has("default"):
 				val = d["default"]
+			# Func wrappers and other nonnumeric authored values are not
+			# evaluated by the runtime. Use the texture spec's existing numeric
+			# default so backends never allocate a NaN size (reference
+			# pipeline.js resolveDimension).
+			if not _finite_number(val):
+				if d.has("default"):
+					val = d["default"]
+				else:
+					val = d.get("paramDefault", 64)
+					if d.has("multiply"):
+						val = float(val) * float(d["multiply"])
+					if d.has("power"):
+						val = pow(float(val), float(d["power"]))
 			return max(1, int(floor(float(val))))
 	# Unknown dimension forms keep the historical screen-size fallback (no new
 	# rejection of previously accepted input), but surface it as a structured
@@ -697,6 +724,7 @@ func allocate_textures(graph: Dictionary) -> void:
 	_clamp_graph_volume_sizes(graph, _max_texture_size_2d)
 	_apply_mrt_format_budget(graph, _max_color_bytes_per_sample)
 	_surfaces.clear()
+	_feedback_persist.clear()
 	_frame_read.clear()
 	_frame_write.clear()
 	_pingpong.clear()
@@ -777,6 +805,12 @@ func allocate_textures(graph: Dictionary) -> void:
 				if existing.is_valid() and not _texture_aliases.has(tex_id):
 					_free_owned(existing)
 			_tex_mip[tex_id] = levels
+	# Read-before-write surfaces persist their final frame bindings at
+	# end-of-frame (reference pipeline.js _feedbackSurfaces: a surface read
+	# before its write is cross-frame feedback, while write-then-read scratch
+	# never enters this set). _alloc_pingpong registered the bare names.
+	for tex_id in pp:
+		_feedback_persist[tex_id.substr("global_".length())] = true
 	var rs = graph.get("renderSurface", null)
 	if rs != null:
 		render_surface_tex = "global_" + str(rs)
@@ -1648,7 +1682,9 @@ func _synth_layout(ns: String, fn: String, globals: Dictionary) -> Dictionary:
 	for k in ENGINE_SYNTH:
 		layout[k] = ENGINE_SYNTH[k]
 	var letters := ["x", "y", "z", "w"]
-	var slot := 3
+	# Params start after the fixed engine header: slots 0-2 plus
+	# invFullResolution's slot 3 (see ENGINE_SYNTH).
+	var slot := 4
 	var cursor := 0
 	for gk in globals:
 		var g = globals[gk]
@@ -1705,6 +1741,19 @@ func _engine_value(name: String) -> Array:
 			return [_time]
 		"aspectRatio":
 			return [float(screen.x) / float(screen.y) if screen.y != 0 else 1.0]
+		"aspectInv":
+			var aspect_inv := 1.0
+			if screen.y != 0:
+				aspect_inv = 1.0 / (float(screen.x) / float(screen.y))
+			return [aspect_inv]
+		"invFullResolution":
+			var inv_w := 1.0
+			var inv_h := 1.0
+			if screen.x != 0:
+				inv_w = 1.0 / float(screen.x)
+			if screen.y != 0:
+				inv_h = 1.0 / float(screen.y)
+			return [inv_w, inv_h]
 		"renderScale":
 			return [_render_scale]
 		"deltaTime":
@@ -2799,14 +2848,17 @@ func _update_frame_bindings(p: Dictionary) -> void:
 		if cur_read != null:
 			_frame_write[bare] = cur_read
 
-# End-of-frame swap (reference §10.7): state surfaces persist their final frame bindings
-# (the sim continues from the latest buffers — NO toggle); display surfaces toggle
-# read<->write. (Per-iteration binding adoption for repeat>1 passes: see
-# _adopt_iteration_bindings — reactionDiffusion's `repeat: "iterations"` solver pass.)
+# End-of-frame swap (reference §10.7): state surfaces, graph feedback surfaces
+# (read-before-write, _feedback_persist) and explicitly persistent surfaces
+# persist their final frame bindings (the sim continues from the latest
+# buffers — NO toggle, even when an intervening write pass was skipped);
+# display surfaces toggle read<->write. (Per-iteration binding adoption for
+# repeat>1 passes: see _adopt_iteration_bindings — reactionDiffusion's
+# `repeat: "iterations"` solver pass.)
 func _end_frame() -> void:
 	for bare in _surfaces:
 		var rec: Dictionary = _surfaces[bare]
-		if _is_state_surface(bare):
+		if _is_state_surface(bare) or _feedback_persist.has(bare):
 			if _frame_read.has(bare) and _frame_write.has(bare):
 				rec["read"] = _frame_read[bare]
 				rec["write"] = _frame_write[bare]

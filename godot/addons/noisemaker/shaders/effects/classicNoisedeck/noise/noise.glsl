@@ -281,8 +281,11 @@ float simplexValue(vec2 st_in, vec2 freq, float s, float blend) {
 	vec2 uv = vec2(st_in.x * freq.x, st_in.y * freq.y);
 	uv.x = uv.x + s;
 
-	vec2 i = floor(uv + dot(uv, C.yy));
-	vec2 x0 = uv - i + dot(i, C.xx);
+	// First corner. The dot feeds an add, so clamp it: without the barrier one
+	// backend can contract the dot's last product into the outer add (fma)
+	// while the other double-rounds.
+	vec2 i = floor(uv + min(max(dot(uv, C.yy), -1e38), 1e38));
+	vec2 x0 = uv - i + min(max(dot(i, C.xx), -1e38), 1e38);
 
 	vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
 	vec2 x1 = x0 - i1 + vec2(C.x, C.x);
@@ -291,7 +294,7 @@ float simplexValue(vec2 st_in, vec2 freq, float s, float blend) {
 	i = mod289_2(i);
 	vec3 p = permute3(permute3(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
 
-	vec3 m = max(vec3(0.5) - vec3(dot(x0, x0), dot(x1, x1), dot(x2, x2)), vec3(0.0));
+	vec3 m = max(vec3(0.5) - min(max(vec3(dot(x0, x0), dot(x1, x1), dot(x2, x2)), vec3(-1e38)), vec3(1e38)), vec3(0.0));
 	m = m * m;
 	m = m * m;
 
@@ -300,11 +303,11 @@ float simplexValue(vec2 st_in, vec2 freq, float s, float blend) {
 	vec3 ox = floor(x + 0.5);
 	vec3 a0 = x - ox;
 
-	m = m * (1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h));
+	m = m * (1.79284291400159 - min(max(0.85373472095314 * (min(max(a0 * a0, vec3(-1e38)), vec3(1e38)) + min(max(h * h, vec3(-1e38)), vec3(1e38))), vec3(-1e38)), vec3(1e38)));
 
 	vec3 g = vec3(0.0);
-	g.x = a0.x * x0.x + h.x * x0.y;
-	vec2 gyz = a0.yz * vec2(x1.x, x2.x) + h.yz * vec2(x1.y, x2.y);
+	g.x = min(max(a0.x * x0.x, -1e38), 1e38) + min(max(h.x * x0.y, -1e38), 1e38);
+	vec2 gyz = min(max(a0.yz * vec2(x1.x, x2.x), vec2(-1e38)), vec2(1e38)) + min(max(h.yz * vec2(x1.y, x2.y), vec2(-1e38)), vec2(1e38));
 	g.y = gyz.x;
 	g.z = gyz.y;
 
@@ -611,7 +614,16 @@ vec3 multires(vec2 st_in, vec2 freq, int oct, float s, float blend) {
 		color = color + layer / multiplier;
 	}
 
-	color = color / multiplicand;
+	// The normalization divides by a runtime-accumulated value (e.g. 1.25 for
+	// two octaves). Dawn lowers the division to an approximate reciprocal
+	// multiply while ANGLE divides, so the two differ by ~1 ulp at knife-edge
+	// texels and the noise field is not bit-identical across backends. One
+	// Newton-Raphson step pins the reciprocal: both backends then compute the
+	// identical refined reciprocal and the identical quotient. The clamp keeps
+	// the multiplicand*rmul multiply from fusing into the (2.0 - ...) subtract.
+	float rmul = 1.0 / multiplicand;
+	float mc = min(max(multiplicand * rmul, -1e38), 1e38);
+	color = color * (rmul * (2.0 - mc));
 
 	vec3 result = color;
 	if (COLOR_MODE == 0) {
