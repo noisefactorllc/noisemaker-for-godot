@@ -7,8 +7,8 @@
     "candidate": "parity/out/adjust.candidate.png",
     "verdict": "PASS",
     "max_abs_diff": 1.0000075101852417,
-    "mean_abs_diff": 0.00196075439453125,
-    "ssim": 0.9999998807907104,
+    "mean_abs_diff": 0.0019607546273618937,
+    "ssim": 0.9999997615814209,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -48,7 +48,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -68,7 +68,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 2.2888181774760596e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -128,7 +128,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 2.6702879040385596e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -208,7 +208,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 7.629394076502649e-06,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -228,7 +228,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.8146970382513246e-06,
-    "ssim": 1.0,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -428,7 +428,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 0.9999998807907104,
+    "ssim": 0.9999998211860657,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -468,7 +468,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 31.999998092651367,
     "mean_abs_diff": 0.0005226134671829641,
-    "ssim": 0.9999990463256836,
+    "ssim": 0.9999992251396179,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -488,7 +488,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 17.999998092651367,
     "mean_abs_diff": 0.0008392333984375,
-    "ssim": 0.9999991655349731,
+    "ssim": 0.9999990463256836,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -508,7 +508,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.8146970382513246e-06,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -568,7 +568,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.8146970382513246e-06,
-    "ssim": 1.0,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -628,7 +628,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.8146970382513246e-06,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -708,7 +708,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.000003695487976,
     "mean_abs_diff": 0.00032806393573991954,
-    "ssim": 0.9999999403953552,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -828,7 +828,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -848,7 +848,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 0.9999998211860657,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -887,7 +887,7 @@
     "candidate": "parity/out/crt.candidate.png",
     "verdict": "PASS",
     "max_abs_diff": 1.9999998807907104,
-    "mean_abs_diff": 0.004367827903479338,
+    "mean_abs_diff": 0.004367828369140625,
     "ssim": 0.9999997019767761,
     "passed": true,
     "skipped": false,
@@ -928,7 +928,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 0.00011444091069279239,
-    "ssim": 1.0,
+    "ssim": 0.9999998211860657,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -947,8 +947,8 @@
     "candidate": "parity/out/degauss.candidate.png",
     "verdict": "NEAR",
     "max_abs_diff": 3.999999761581421,
-    "mean_abs_diff": 0.004535675514489412,
-    "ssim": 0.9999985694885254,
+    "mean_abs_diff": 0.004535675048828125,
+    "ssim": 0.9999986290931702,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -988,7 +988,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.814696901827119e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1048,7 +1048,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 9.999999046325684,
     "mean_abs_diff": 0.0004997269716113806,
-    "ssim": 0.9999998211860657,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1088,7 +1088,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 85.0,
     "mean_abs_diff": 0.01232147216796875,
-    "ssim": 0.9999261498451233,
+    "ssim": 0.9999262094497681,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1108,7 +1108,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 85.0,
     "mean_abs_diff": 0.01232147216796875,
-    "ssim": 0.9999261498451233,
+    "ssim": 0.9999262094497681,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1208,7 +1208,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1248,7 +1248,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 4.959106081514619e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1268,7 +1268,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 7.247924077091739e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1328,7 +1328,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1348,7 +1348,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.0,
     "mean_abs_diff": 0.0,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1408,7 +1408,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 8.392333256779239e-05,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1448,7 +1448,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 2.2888181774760596e-05,
-    "ssim": 1.000000238418579,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1468,7 +1468,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 2.2888181774760596e-05,
-    "ssim": 1.000000238418579,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1526,9 +1526,9 @@
     "golden": "parity/out/filter3dPalette3d.golden.png",
     "candidate": "parity/out/filter3dPalette3d.candidate.png",
     "verdict": "PASS",
-    "max_abs_diff": 0.9999999403953552,
-    "mean_abs_diff": 3.8146970382513246e-06,
-    "ssim": 1.0000001192092896,
+    "max_abs_diff": 0.0,
+    "mean_abs_diff": 0.0,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1549,46 +1549,6 @@
     "max_abs_diff": 0.0,
     "mean_abs_diff": 0.0,
     "ssim": 1.0,
-    "passed": true,
-    "skipped": false,
-    "policy": {
-      "tolerance": 2.001,
-      "ssim_min": 0.98,
-      "strict_tolerance": 2.001,
-      "strict_ssim_min": 0.98,
-      "reason": "strict RGBA8 float round-trip allowance"
-    }
-  },
-  {
-    "program": "flipMirrorRtoLDtoU",
-    "effect": "filter/flipMirror",
-    "mode": "mode: mirrorRtoLDtoU",
-    "golden": "parity/out/flipMirrorRtoLDtoU.golden.png",
-    "candidate": "parity/out/flipMirrorRtoLDtoU.candidate.png",
-    "verdict": "PASS",
-    "max_abs_diff": 0.9999999403953552,
-    "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0,
-    "passed": true,
-    "skipped": false,
-    "policy": {
-      "tolerance": 2.001,
-      "ssim_min": 0.98,
-      "strict_tolerance": 2.001,
-      "strict_ssim_min": 0.98,
-      "reason": "strict RGBA8 float round-trip allowance"
-    }
-  },
-  {
-    "program": "flipMirrorUtoD",
-    "effect": "filter/flipMirror",
-    "mode": "mode: mirrorUtoD",
-    "golden": "parity/out/flipMirrorUtoD.golden.png",
-    "candidate": "parity/out/flipMirrorUtoD.candidate.png",
-    "verdict": "PASS",
-    "max_abs_diff": 0.9999999403953552,
-    "mean_abs_diff": 2.2888181774760596e-05,
-    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1628,7 +1588,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.0000075101852417,
     "mean_abs_diff": 1.525884545117151e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1648,7 +1608,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.0000075101852417,
     "mean_abs_diff": 1.5258816347341053e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.000000238418579,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1688,7 +1648,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1828,7 +1788,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.0,
     "mean_abs_diff": 9.155272709904239e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1868,7 +1828,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.8146970382513246e-06,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -1928,7 +1888,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.9073484509135596e-05,
-    "ssim": 1.0,
+    "ssim": 1.000000238418579,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2048,7 +2008,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 7.629394076502649e-06,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2067,8 +2027,8 @@
     "candidate": "parity/out/hatchPencil.candidate.png",
     "verdict": "NEAR",
     "max_abs_diff": 241.0,
-    "mean_abs_diff": 0.015205384232103825,
-    "ssim": 0.9997842907905579,
+    "mean_abs_diff": 0.01520538330078125,
+    "ssim": 0.9997841715812683,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2128,7 +2088,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 207.0,
     "mean_abs_diff": 0.010997772216796875,
-    "ssim": 0.9998632669448853,
+    "ssim": 0.9998634457588196,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2168,7 +2128,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.433227175264619e-05,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2188,7 +2148,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 7.629394076502649e-06,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2227,7 +2187,7 @@
     "candidate": "parity/out/heightGrid_billboard.candidate.png",
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
-    "mean_abs_diff": 3.0517576306010596e-05,
+    "mean_abs_diff": 2.2888181774760596e-05,
     "ssim": 1.0,
     "passed": true,
     "skipped": false,
@@ -2246,9 +2206,9 @@
     "golden": "parity/out/heightGrid_billboard_alpha.golden.png",
     "candidate": "parity/out/heightGrid_billboard_alpha.candidate.png",
     "verdict": "PASS",
-    "max_abs_diff": 0.0,
-    "mean_abs_diff": 0.0,
-    "ssim": 1.0,
+    "max_abs_diff": 0.9999999403953552,
+    "mean_abs_diff": 3.8146970382513246e-06,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2308,7 +2268,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.814696901827119e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2488,7 +2448,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.0000017881393433,
     "mean_abs_diff": 1.525879451946821e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2508,7 +2468,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2528,7 +2488,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2548,7 +2508,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2608,7 +2568,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2628,7 +2588,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.8146970382513246e-06,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2648,7 +2608,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2688,7 +2648,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2728,7 +2688,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2748,7 +2708,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 9.155272709904239e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.000000238418579,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2788,7 +2748,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 8.000000953674316,
     "mean_abs_diff": 0.0004119873046875,
-    "ssim": 0.9999997615814209,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2808,7 +2768,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.8146970382513246e-06,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2848,7 +2808,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -2908,7 +2868,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.8146970382513246e-06,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3008,7 +2968,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3087,8 +3047,8 @@
     "candidate": "parity/out/median.candidate.png",
     "verdict": "NEAR",
     "max_abs_diff": 13.999999046325684,
-    "mean_abs_diff": 0.00107574462890625,
-    "ssim": 0.9999998211860657,
+    "mean_abs_diff": 0.0010757445124909282,
+    "ssim": 0.9999997019767761,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3108,7 +3068,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3468,7 +3428,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3502,7 +3462,7 @@
     "verdict": "PASS",
     "max_abs_diff": 2.0000035762786865,
     "mean_abs_diff": 0.042964935302734375,
-    "ssim": 0.9999065399169922,
+    "ssim": 0.999906599521637,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3518,8 +3478,8 @@
         "golden": "parity/out/navierStokes.golden.t5.png",
         "candidate": "parity/out/navierStokes.candidate.t5.png",
         "max_abs_diff": 1.000003695487976,
-        "mean_abs_diff": 0.005920409690588713,
-        "ssim": 0.999991774559021,
+        "mean_abs_diff": 0.00592041015625,
+        "ssim": 0.9999916553497314,
         "passed": true,
         "policy_matches": true
       },
@@ -3529,7 +3489,7 @@
         "candidate": "parity/out/navierStokes.candidate.t10.png",
         "max_abs_diff": 1.000003695487976,
         "mean_abs_diff": 0.006793975830078125,
-        "ssim": 0.9999905824661255,
+        "ssim": 0.9999906420707703,
         "passed": true,
         "policy_matches": true
       },
@@ -3538,8 +3498,8 @@
         "golden": "parity/out/navierStokes.golden.t15.png",
         "candidate": "parity/out/navierStokes.candidate.t15.png",
         "max_abs_diff": 1.000003695487976,
-        "mean_abs_diff": 0.004840850830078125,
-        "ssim": 0.9999926686286926,
+        "mean_abs_diff": 0.0048408517614007,
+        "ssim": 0.9999929070472717,
         "passed": true,
         "policy_matches": true
       },
@@ -3549,7 +3509,7 @@
         "candidate": "parity/out/navierStokes.candidate.t20.png",
         "max_abs_diff": 2.0000035762786865,
         "mean_abs_diff": 0.042964935302734375,
-        "ssim": 0.9999065399169922,
+        "ssim": 0.999906599521637,
         "passed": true,
         "policy_matches": true
       },
@@ -3558,8 +3518,8 @@
         "golden": "parity/out/navierStokes.golden.t25.png",
         "candidate": "parity/out/navierStokes.candidate.t25.png",
         "max_abs_diff": 1.000003695487976,
-        "mean_abs_diff": 0.00464630126953125,
-        "ssim": 0.9999929070472717,
+        "mean_abs_diff": 0.004646301735192537,
+        "ssim": 0.999992847442627,
         "passed": true,
         "policy_matches": true
       },
@@ -3568,8 +3528,8 @@
         "golden": "parity/out/navierStokes.golden.t30.png",
         "candidate": "parity/out/navierStokes.candidate.t30.png",
         "max_abs_diff": 1.000003695487976,
-        "mean_abs_diff": 0.007335663307458162,
-        "ssim": 0.9999892711639404,
+        "mean_abs_diff": 0.007335662841796875,
+        "ssim": 0.9999892115592957,
         "passed": true,
         "policy_matches": true
       }
@@ -3583,7 +3543,7 @@
     "candidate": "parity/out/newton.candidate.png",
     "verdict": "NEAR",
     "max_abs_diff": 251.0,
-    "mean_abs_diff": 0.06104278564453125,
+    "mean_abs_diff": 0.06104278936982155,
     "ssim": 0.9989807605743408,
     "passed": true,
     "skipped": false,
@@ -3604,7 +3564,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3644,7 +3604,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3664,7 +3624,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 1.0,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3684,7 +3644,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 107.0,
     "mean_abs_diff": 0.00102996826171875,
-    "ssim": 0.9999995827674866,
+    "ssim": 0.9999996423721313,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3704,7 +3664,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 49.0,
     "mean_abs_diff": 0.00063323974609375,
-    "ssim": 0.9999997019767761,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3744,7 +3704,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 81.0,
     "mean_abs_diff": 0.0030059814453125,
-    "ssim": 0.9999855160713196,
+    "ssim": 0.9999853372573853,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3764,7 +3724,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 8.999999046325684,
     "mean_abs_diff": 0.00017166142060887069,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3784,7 +3744,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 107.0,
     "mean_abs_diff": 0.00102996826171875,
-    "ssim": 0.9999995827674866,
+    "ssim": 0.9999996423721313,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3884,7 +3844,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 42.999996185302734,
     "mean_abs_diff": 0.00026321408222429454,
-    "ssim": 1.0,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3904,7 +3864,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 43.000003814697266,
     "mean_abs_diff": 0.00026321414043195546,
-    "ssim": 1.0,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -3984,7 +3944,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.0517576306010596e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4004,7 +3964,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 9.155272709904239e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4024,7 +3984,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 2.6702879040385596e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4104,7 +4064,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.0000075101852417,
     "mean_abs_diff": 5.7220804592361674e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4224,7 +4184,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.000003695487976,
     "mean_abs_diff": 2.2888196326675825e-05,
-    "ssim": 1.0,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4244,7 +4204,7 @@
     "verdict": "FAIL",
     "max_abs_diff": 3.999999761581421,
     "mean_abs_diff": 0.00010299681889591739,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": false,
     "skipped": false,
     "policy": {
@@ -4343,8 +4303,8 @@
     "candidate": "parity/out/plasticWrapDirectedReference.candidate.png",
     "verdict": "NEAR",
     "max_abs_diff": 29.999998092651367,
-    "mean_abs_diff": 0.000690460205078125,
-    "ssim": 0.9999984502792358,
+    "mean_abs_diff": 0.0006904602632857859,
+    "ssim": 0.9999986886978149,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4364,7 +4324,7 @@
     "verdict": "FAIL",
     "max_abs_diff": 26.999998092651367,
     "mean_abs_diff": 0.001308441162109375,
-    "ssim": 0.9999976754188538,
+    "ssim": 0.999997615814209,
     "passed": false,
     "skipped": false,
     "policy": {
@@ -4424,7 +4384,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.9073484509135596e-05,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4444,7 +4404,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4464,7 +4424,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.8146970382513246e-06,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4484,7 +4444,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4644,7 +4604,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.9073484509135596e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4724,7 +4684,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 6.103515261202119e-05,
-    "ssim": 1.0,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4784,7 +4744,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.9999998807907104,
     "mean_abs_diff": 9.918215073412284e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4824,7 +4784,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 6.999999523162842,
     "mean_abs_diff": 0.00025939938495866954,
-    "ssim": 0.9999995827674866,
+    "ssim": 0.9999995231628418,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4944,7 +4904,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 0.9999998807907104,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -4984,7 +4944,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.0517576306010596e-05,
-    "ssim": 1.0,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5064,7 +5024,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.0517576306010596e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5124,7 +5084,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5144,7 +5104,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 8.0,
     "mean_abs_diff": 0.00012207030522404239,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5184,7 +5144,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 1.0,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5264,7 +5224,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 1.0,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5304,7 +5264,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5364,7 +5324,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5444,7 +5404,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.0000075101852417,
     "mean_abs_diff": 0.00010681221465347335,
-    "ssim": 1.0,
+    "ssim": 0.9999997615814209,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5464,7 +5424,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.9073484509135596e-05,
-    "ssim": 1.0,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5484,7 +5444,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 7.629394076502649e-06,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5524,7 +5484,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.9073484509135596e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5544,7 +5504,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.000003695487976,
     "mean_abs_diff": 0.000148773193359375,
-    "ssim": 1.0,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5584,7 +5544,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.0517576306010596e-05,
-    "ssim": 1.0,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5624,7 +5584,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 7.629394076502649e-06,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5644,7 +5604,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5664,7 +5624,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5704,7 +5664,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.0000075101852417,
     "mean_abs_diff": 0.00018692018056754023,
-    "ssim": 1.0,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5784,7 +5744,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 6.866454350529239e-05,
-    "ssim": 1.0,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5864,7 +5824,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 3.999999761581421,
     "mean_abs_diff": 4.196166628389619e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5904,7 +5864,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.9073484509135596e-05,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5924,7 +5884,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.0000075101852417,
     "mean_abs_diff": 0.00012588586832862347,
-    "ssim": 1.0,
+    "ssim": 0.9999998211860657,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -5984,7 +5944,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.9999998807907104,
     "mean_abs_diff": 0.00012969969247933477,
-    "ssim": 1.0,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6244,7 +6204,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.9999998807907104,
     "mean_abs_diff": 0.00012207030522404239,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6284,7 +6244,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.9999998807907104,
     "mean_abs_diff": 0.00012207030522404239,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6304,7 +6264,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.9999998807907104,
     "mean_abs_diff": 2.6702879040385596e-05,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6323,7 +6283,7 @@
     "candidate": "parity/out/strokesReferenceSmudge.candidate.png",
     "verdict": "NEAR",
     "max_abs_diff": 65.0,
-    "mean_abs_diff": 0.012100220657885075,
+    "mean_abs_diff": 0.012100218795239925,
     "ssim": 0.9999793767929077,
     "passed": true,
     "skipped": false,
@@ -6384,7 +6344,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 56.999996185302734,
     "mean_abs_diff": 0.016696931794285774,
-    "ssim": 0.9999744892120361,
+    "ssim": 0.9999745488166809,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6404,7 +6364,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.9999998807907104,
     "mean_abs_diff": 7.629394076502649e-06,
-    "ssim": 1.0,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6482,9 +6442,9 @@
     "golden": "parity/out/synth3dCellularAutomata3d.golden.png",
     "candidate": "parity/out/synth3dCellularAutomata3d.candidate.png",
     "verdict": "PASS",
-    "max_abs_diff": 0.0,
-    "mean_abs_diff": 0.0,
-    "ssim": 1.0,
+    "max_abs_diff": 0.9999999403953552,
+    "mean_abs_diff": 1.1444090887380298e-05,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6501,10 +6461,10 @@
     "mode": "default",
     "golden": "parity/out/synth3dFlythrough3d.golden.png",
     "candidate": "parity/out/synth3dFlythrough3d.candidate.png",
-    "verdict": "PASS",
-    "max_abs_diff": 1.9999998807907104,
-    "mean_abs_diff": 9.536742436466739e-05,
-    "ssim": 1.0,
+    "verdict": "NEAR",
+    "max_abs_diff": 87.0,
+    "mean_abs_diff": 0.007904052734375,
+    "ssim": 0.9998933672904968,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6522,9 +6482,9 @@
     "golden": "parity/out/synth3dFractal3d.golden.png",
     "candidate": "parity/out/synth3dFractal3d.candidate.png",
     "verdict": "PASS",
-    "max_abs_diff": 0.9999999403953552,
-    "mean_abs_diff": 2.2888181774760596e-05,
-    "ssim": 1.0,
+    "max_abs_diff": 1.0000075101852417,
+    "mean_abs_diff": 4.577645086101256e-05,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6582,8 +6542,8 @@
     "golden": "parity/out/synth3dShape3d.golden.png",
     "candidate": "parity/out/synth3dShape3d.candidate.png",
     "verdict": "PASS",
-    "max_abs_diff": 0.9999999403953552,
-    "mean_abs_diff": 1.1444090887380298e-05,
+    "max_abs_diff": 0.0,
+    "mean_abs_diff": 0.0,
     "ssim": 1.0,
     "passed": true,
     "skipped": false,
@@ -6684,7 +6644,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.9073484509135596e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6704,7 +6664,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.433227175264619e-05,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6724,7 +6684,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6744,7 +6704,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.8146970382513246e-06,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6804,7 +6764,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 7.629394076502649e-06,
-    "ssim": 0.9999998807907104,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6824,7 +6784,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -6944,7 +6904,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7044,7 +7004,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.8146970382513246e-06,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7064,7 +7024,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 7.629394076502649e-06,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7084,7 +7044,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 2.2888181774760596e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7144,7 +7104,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7164,7 +7124,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 1.0,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7184,7 +7144,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.0000075101852417,
     "mean_abs_diff": 0.00010681230196496472,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7224,7 +7184,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 3.8146970382513246e-06,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7244,7 +7204,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.5258788153005298e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7264,7 +7224,7 @@
     "verdict": "FAIL",
     "max_abs_diff": 2.999999761581421,
     "mean_abs_diff": 4.577636354952119e-05,
-    "ssim": 1.0,
+    "ssim": 0.9999998807907104,
     "passed": false,
     "skipped": false,
     "policy": {
@@ -7284,7 +7244,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 2.999999761581421,
     "mean_abs_diff": 0.00012588499521370977,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7304,7 +7264,7 @@
     "verdict": "NEAR",
     "max_abs_diff": 19.999998092651367,
     "mean_abs_diff": 0.0022315976675599813,
-    "ssim": 0.9999967217445374,
+    "ssim": 0.9999969601631165,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7324,7 +7284,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 1.0,
+    "ssim": 1.0000001192092896,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7424,7 +7384,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.0000075101852417,
     "mean_abs_diff": 8.010866440599784e-05,
-    "ssim": 1.0,
+    "ssim": 0.9999998807907104,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7484,7 +7444,7 @@
     "verdict": "PASS",
     "max_abs_diff": 2.000007390975952,
     "mean_abs_diff": 3.814699812210165e-05,
-    "ssim": 0.9999998211860657,
+    "ssim": 0.9999999403953552,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7504,7 +7464,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.1444090887380298e-05,
-    "ssim": 1.0000001192092896,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7524,7 +7484,7 @@
     "verdict": "PASS",
     "max_abs_diff": 1.0000075101852417,
     "mean_abs_diff": 9.918215073412284e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7584,7 +7544,7 @@
     "verdict": "PASS",
     "max_abs_diff": 0.9999999403953552,
     "mean_abs_diff": 1.9073484509135596e-05,
-    "ssim": 0.9999999403953552,
+    "ssim": 1.0,
     "passed": true,
     "skipped": false,
     "policy": {
@@ -7684,7 +7644,7 @@
     "verdict": "FAIL",
     "max_abs_diff": 178.0,
     "mean_abs_diff": 0.0469970740377903,
-    "ssim": 0.9997503161430359,
+    "ssim": 0.9997502565383911,
     "passed": false,
     "skipped": false,
     "policy": {

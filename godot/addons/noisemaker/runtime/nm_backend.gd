@@ -40,11 +40,14 @@ layout(location = 0) out vec4 frag;
 void main() { frag = texture(src, v_uv); }
 """
 
-# Shared resample shader (reference webgpu.js RESAMPLE_WGSL, mode 0 = fsMip):
-# a fullscreen triangle reading the source with texelFetch (works for filterable
-# and unfilterable float formats alike). Mode 0 downsamples the bound mip level
-# by a 2x2 box average into the destination mip level; mode 1 (fsScale) resamples
-# the source to the destination size (persistent-texture recreation at a new size).
+# Shared resample shader (reference webgpu.js RESAMPLE_WGSL fsMip/fsScale): a
+# fullscreen triangle reading the source with texelFetch (works for filterable
+# and unfilterable float formats alike). Both modes sample the SOURCE PIXEL
+# CENTER nearest each destination pixel center — ((2*px+1)*src)/(2*dst) in exact
+# integer math, clamped to the source extent — the pick webgl2.js's NEAREST
+# blitFramebuffer and the upstream mip-resize readback (5x3 -> 7x5) require.
+# Mode 0 targets the next mip level (dst defaults to max(src/2, 1)); mode 1
+# resamples the source to the destination size (persistent-texture recreation).
 # Params = (srcWidth, srcHeight, srcMip, mode); Dims = (dstWidth, dstHeight, _, _).
 const MIP_FS := """#version 450
 layout(set = 0, binding = 0) uniform sampler2D src;
@@ -52,19 +55,10 @@ layout(set = 0, binding = 1) uniform Params { ivec4 p; ivec4 d; };
 layout(location = 0) out vec4 frag;
 void main() {
 	ivec2 px = ivec2(gl_FragCoord.xy);
-	if (p.w == 0) {
-		ivec2 base = px * 2;
-		vec4 a = texelFetch(src, base, p.z);
-		vec4 b = texelFetch(src, base + ivec2(1, 0), p.z);
-		vec4 c = texelFetch(src, base + ivec2(0, 1), p.z);
-		vec4 e = texelFetch(src, base + ivec2(1, 1), p.z);
-		frag = (a + b + c + e) * 0.25;
-	} else {
-		vec2 ratio = vec2(p.x, p.y) / vec2(d.x, d.y);
-		vec2 scaled = vec2(px) * ratio;
-		ivec2 maxCoord = ivec2(max(vec2(p.x - 1.0, p.y - 1.0), vec2(0.0)));
-		frag = texelFetch(src, min(ivec2(scaled), maxCoord), p.z);
-	}
+	ivec2 srcSize = max(ivec2(p.x, p.y), ivec2(1));
+	ivec2 dstSize = (p.w == 0) ? max(srcSize / 2, ivec2(1)) : max(ivec2(d.x, d.y), ivec2(1));
+	ivec2 coord = min(((2 * px + ivec2(1)) * srcSize) / (2 * dstSize), srcSize - ivec2(1));
+	frag = texelFetch(src, coord, p.z);
 }
 """
 
@@ -1230,9 +1224,10 @@ func _refresh_mip_targets(graph: Dictionary) -> void:
 		else:
 			_mip_targets.append(tex_id)
 
-# Render a fullscreen NEAREST resample of `src` (mip level `src_mip`) into `dst`.
-# mode 0 = 2x2 box downsample (mip chain regeneration), mode 1 = scaled resample
-# (persistent-texture recreation). Mirrors reference webgpu.js fsMip/fsScale.
+# Render a fullscreen NEAREST resample of `src` (mip level `src_mip`) into `dst`,
+# sampling the source pixel center nearest each destination pixel center (mode 0
+# = next mip level, mode 1 = scaled persistent-texture recreation; both use the
+# same center-nearest pick, matching reference webgpu.js fsMip/fsScale).
 func _draw_resample(src: RID, dst: RID, src_dims: Vector2i, dst_dims: Vector2i,
 		src_mip: int, mode: int) -> void:
 	var shader: RID = _mip_shader
@@ -1304,8 +1299,9 @@ func _resample_tex(src: RID, dst: RID, src_dims: Vector2i, dst_dims: Vector2i, f
 
 # Regenerate the mip chains of every mipmapped texture from the level-0 contents
 # written by this frame's passes (reference backend.generateMipmaps, called before
-# endFrame). Each level renders a 2x2 box downsample of the previous level into a
-# scratch texture, then copies it into that mip level (RenderingDevice framebuffers
+# endFrame). Each level renders a center-nearest resample of the previous level
+# (the NEAREST blit chain both reference backends use) into a scratch texture,
+# then copies it into that mip level (RenderingDevice framebuffers
 # attach mip 0 only, so the level write goes through texture_copy).
 func _generate_mipmaps() -> void:
 	if _mip_targets.is_empty():
