@@ -1,7 +1,7 @@
 // check_registry.mjs — EFFECTREGISTRY parity gate. Compares the GDScript registry (candidate, via
 // _registry_dump.gd) against the reference registration logic (oracle, via dump-registry.mjs), both
 // fed the SAME effect JSONs under godot/addons/noisemaker/effects. Deep value-compare per surface
-// (ops / enums / paramAliases / effectAliases / effectKeys); report PASS or the first divergence.
+// (ops / enums / effectAliases / effectKeys); report PASS or the first divergence.
 //
 //   NM_REFERENCE_ROOT=/path/to/noisemaker GODOT=/path/to/Godot node parity/check_registry.mjs
 //
@@ -65,7 +65,7 @@ function firstDiff(a, b, path) {
     return `${path}: (object differs)`
 }
 
-const sections = ['ops', 'enums', 'paramAliases', 'effectAliases', 'effectKeys']
+const sections = ['ops', 'enums', 'effectAliases', 'effectKeys']
 let allPass = true
 console.log('REGISTRY PARITY:')
 for (const s of sections) {

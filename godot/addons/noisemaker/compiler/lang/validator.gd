@@ -21,8 +21,6 @@
 #   - `?.`/`??` -> .get()/guards; spreads -> Dictionary.duplicate(); JSON-clone -> duplicate(true).
 extends RefCounted
 
-const ALIAS_EOL_DATE := "2026-09-01"
-
 # !! Do not expand — strict allowlist for string params (reference ALLOWED_STRING_PARAMS).
 const ALLOWED_STRING_PARAMS := [
 	"text.text", "text.font", "text.justify", "text.style",
@@ -222,22 +220,7 @@ func _check_effect_alias(op_name):
 	if new_name == null:
 		return null
 	var old_name: String = op_name.split(".")[-1] if op_name.contains(".") else op_name
-	return "effect '%s' is deprecated, use '%s' instead. Aliases will be removed on %s." % [old_name, new_name, ALIAS_EOL_DATE]
-
-func _resolve_param_aliases(op_name: String, kwargs: Dictionary) -> Array:
-	var warnings: Array = []
-	var aliases = reg.param_aliases().get(op_name)
-	if not (aliases is Dictionary):
-		return warnings
-	for old_name in aliases.keys():
-		if not kwargs.has(old_name):
-			continue
-		var new_name = aliases[old_name]
-		if not kwargs.has(new_name):
-			kwargs[new_name] = kwargs[old_name]
-		kwargs.erase(old_name)
-		warnings.push_back("param '%s' is deprecated, use '%s' instead. Aliases will be removed on %s." % [old_name, new_name, ALIAS_EOL_DATE])
-	return warnings
+	return "effect '%s' is deprecated, use '%s' instead." % [old_name, new_name]
 
 func _clone(node):
 	if node is Dictionary or node is Array:
@@ -740,10 +723,6 @@ func _resolve_args(call: Dictionary, original: Dictionary, spec: Dictionary, op_
 	var args := {}
 	var arg_sources = null
 	var kw = call.get("kwargs") if call.get("kwargs") is Dictionary else null
-	if kw != null:
-		var alias_warnings := _resolve_param_aliases(op_name, kw)
-		for w in alias_warnings:
-			_push_diag("S007", call, w)
 	var seen := {}
 	var spec_args: Array = spec.get("args", []) if spec.get("args") is Array else []
 	var call_args = call.get("args", [])

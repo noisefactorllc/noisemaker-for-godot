@@ -1,6 +1,6 @@
 # effect_registry.gd — effect + op registry. Port of the REFERENCE load-time registration in
 # renderer/canvas.js registerEffectWithRuntime() (with runtime/registry.js, lang/ops.js,
-# lang/paramAliases.js, lang/effectAliases.js, lang/enums.js). Sources: upstream noisemaker +
+# lang/effectAliases.js, lang/enums.js). Sources: upstream noisemaker +
 # noisemaker-for-unity ONLY.
 #
 # For every effect definition JSON under res://addons/noisemaker/effects/<ns>/<func>.json this
@@ -13,9 +13,6 @@
 #   _ops      : op-spec map  "<ns>.<func>" -> {"name", "args":[...]}.  args is derived from `globals`
 #               exactly as canvas.js does (vec4->color, choices->derived enumPath, enum passthrough,
 #               undefined fields omitted). Consumed by the validator.
-#   _param_aliases  : "<ns>.<func>" -> {oldParam:newParam}  (validator resolveParamAliases). Empty
-#               alias maps are inert (the JS for-loop no-ops) and GDScript's empty Dictionary is
-#               falsy, so — matching that behavior — only NON-EMPTY maps are recorded.
 #   _effect_aliases : "<ns>.<func>" -> replacementName  for hidden+deprecatedBy effects
 #               (validator checkEffectAlias deprecation warnings).
 #   enums (owned Enums instance): effect `choices` registered as nested leaves
@@ -46,7 +43,6 @@ const _STARTER_INPUT_SENTINELS := ["inputTex", "inputTex3d", "src", "o0", "o1"]
 var enums: Enums
 var _effects: Dictionary        # lookup key -> effect def (Dictionary)
 var _ops: Dictionary            # "<ns>.<func>" -> {name, args}
-var _param_aliases: Dictionary  # "<ns>.<func>" -> {old:new}
 var _effect_aliases: Dictionary # "<ns>.<func>" -> replacement name
 var _starter_ops: Dictionary    # set of "<ns>.<func>" that are starters (value = true)
 var _define_map: Dictionary     # "<ns>.<func>" -> {globalKey: DEFINE_NAME} for compile-time defines
@@ -56,7 +52,6 @@ func _init() -> void:
 	enums = Enums.new()
 	_effects = {}
 	_ops = {}
-	_param_aliases = {}
 	_effect_aliases = {}
 	_starter_ops = {}
 	_define_map = {}
@@ -84,9 +79,6 @@ func is_starter_registered(name: String) -> bool:
 # "<ns>.<func>" -> {globalKey: DEFINE_NAME} for compile-time-define globals (orchestrator promotion).
 func define_map() -> Dictionary:
 	return _define_map
-
-func param_aliases() -> Dictionary:
-	return _param_aliases
 
 func effect_aliases() -> Dictionary:
 	return _effect_aliases
@@ -195,11 +187,6 @@ func _register_effect(def: Dictionary) -> void:
 				arg["choices"] = choices
 			args.append(arg)
 	_ops[ns + "." + fn] = {"name": fn, "args": args}
-
-	# param aliases (non-empty only — empty maps are inert) ----------------
-	var pa = def.get("paramAliases")
-	if pa is Dictionary and not pa.is_empty():
-		_param_aliases[ns + "." + fn] = pa
 
 	# effect aliases (deprecation: hidden + deprecatedBy) ------------------
 	if def.get("hidden") and def.has("deprecatedBy"):

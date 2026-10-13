@@ -107,18 +107,13 @@ class ShaderCoverageTests(unittest.TestCase):
                         isinstance(v.get("type"), str) and v["type"],
                         msg=f"Effect {eff_name} global '{k}' missing valid 'type'",
                     )
-            if "paramAliases" in defn:
-                self.assertIsInstance(
-                    defn["paramAliases"],
-                    dict,
-                    msg=f"Effect {eff_name} 'paramAliases' not a dict",
-                )
-                for alias, target in defn["paramAliases"].items():
-                    self.assertIn(
-                        target,
-                        globals_dict,
-                        msg=f"Effect {eff_name} alias '{alias}' -> '{target}' not found in globals",
-                    )
+            # Upstream retired deprecated parameter aliases (noisemaker a1a3fa2a):
+            # definitions must not carry a 'paramAliases' field at all.
+            self.assertNotIn(
+                "paramAliases",
+                defn,
+                msg=f"Effect {eff_name} still declares retired 'paramAliases'",
+            )
 
     def test_registered_effect_definitions_texture_and_pass_contract(self):
         definitions = sorted(DEFINITIONS.glob("*/*.json"))

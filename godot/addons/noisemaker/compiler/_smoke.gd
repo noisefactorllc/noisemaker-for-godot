@@ -32,8 +32,8 @@ func _init() -> void:
 	var d = Diagnostics.make("S001", null, 1, 2, "foo")
 	_expect(d["code"] == "S001" and d["severity"] == "error" and d["message"] == "Unknown identifier"
 		and d["line"] == 1 and d["column"] == 2 and d["identifier"] == "foo", "diag.make-full")
-	var d2 = Diagnostics.make("S007")
-	_expect(d2["severity"] == "warning" and d2["message"] == "Deprecated parameter alias" and not d2.has("line"), "diag.make-min")
+	var d2 = Diagnostics.make("S008")
+	_expect(d2["severity"] == "warning" and d2["message"] == "Deprecated effect" and not d2.has("line"), "diag.make-min")
 	_expect(Diagnostics.stage("L001") == "lexer" and Diagnostics.stage("L003") == "lexer" and Diagnostics.stage("L004") == "lexer", "diag.lexer-stage")
 	_expect(Diagnostics.stage("P005") == "parser" and Diagnostics.default_message("P005") == "Invalid output operation", "diag.p005-meta")
 	_expect(Diagnostics.stage("P006") == "parser" and Diagnostics.default_message("P006") == "Invalid subchain", "diag.p006-meta")

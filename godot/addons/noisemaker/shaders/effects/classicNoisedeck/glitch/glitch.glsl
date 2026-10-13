@@ -213,6 +213,8 @@ void main() {
 	vec2 uv = gl_FragCoord.xy / res;
 
 	vec4 color = glitch(uv, ar, time, xChonk, yChonk, glitchiness, aspectLens, distortion, aberration);
+	// Quantize the effect color to 8 bits before the post chain (upstream glitch WGSL/GLSL).
+	color.rgb = floor(clamp(color.rgb, vec3(0.0), vec3(1.0)) * 255.0 + vec3(0.5)) / 255.0;
 	if (scanlinesAmt != 0.0) {
 		color = scanlines(color, uv, res, scanlinesAmt, time, int(seed));
 	}

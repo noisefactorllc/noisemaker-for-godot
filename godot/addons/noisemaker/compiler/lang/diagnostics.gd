@@ -32,7 +32,6 @@ const _TABLE := {
 	"S004": ["Cannot assign null or undefined", "error", "semantic"],
 	"S005": ["Illegal chain structure", "error", "semantic"],
 	"S006": ["Starter chain missing write() call", "error", "semantic"],
-	"S007": ["Deprecated parameter alias", "warning", "semantic"],
 	"S008": ["Deprecated effect", "warning", "semantic"],
 	"R001": ["Runtime error", "error", "runtime"],
 }

@@ -29,7 +29,7 @@ func _init(registry) -> void:
 # {"compileError": {stage, diagnostics: [<NM_COMPILE_DIAG lines>]}} instead of a renderable
 # graph — the unknown-effect / malformed-syntax case can no longer reach rendering and surface
 # only as a missing output surface. Structured stage contracts are unchanged: callers may still
-# drive lexer/parser/validator directly, and warning-only diagnostics (S002/S007/S008, P008-P010)
+# drive lexer/parser/validator directly, and warning-only diagnostics (S002/S008, P008-P010)
 # do not reject (the valid corpus carries them).
 func build_graph(source: String, options: Dictionary = {}) -> Dictionary:
 	var tokens := Lexer.lex(source)

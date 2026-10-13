@@ -6,7 +6,7 @@
 //   unity/com.noisemaker.hlsl/Effects/<ns>/<func>.json
 //
 // The emitted shape matches the hand-written Tier-1 files (Effects/synth/*.json):
-//   { name, namespace, func, tags, description, paramAliases,
+//   { name, namespace, func, tags, description,
 //     globals{ <key>: { type, default, uniform, define, min, max, choices } },
 //     passes[ { name, program, inputs, outputs, uniforms } ],
 //   textures{ <id>: { width, height, [depth], [is3D], [filter], [mipmaps], [persistent], format } } }
@@ -196,7 +196,6 @@ function convertEffect (instance, namespace, name, existing) {
   def.starter = !!(mentry && mentry.starter)
   if (instance.tags) def.tags = instance.tags
   if (instance.description) def.description = instance.description
-  def.paramAliases = instance.paramAliases || {}
   def.globals = projectGlobals(instance.globals)
   // PORT-AUTHORED packing layout, carried through untouched. The particle pipeline
   // (flow / pointsEmit / pointsRender / pointsBillboardRender) binds several programs per

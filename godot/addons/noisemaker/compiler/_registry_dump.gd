@@ -12,7 +12,6 @@ func _init() -> void:
 	var out := {
 		"ops": reg.ops_table(),
 		"enums": reg.enums.project(),
-		"paramAliases": reg.param_aliases(),
 		"effectAliases": reg.effect_aliases(),
 		"effectKeys": reg.effect_key_fingerprints(),
 	}

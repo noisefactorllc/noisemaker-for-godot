@@ -18,9 +18,9 @@
 // the runtime (globals.type.define = "NOISE_TYPE"); kept as a bare identifier, never
 // declared or hardcoded.
 //
-// The WGSL binds the param as `noiseScale`, but the runtime define is the definition.js
-// uniform NAME, which is `scale` (paramAliases maps noiseScale->scale). So every WGSL
-// `noiseScale` becomes the bare `scale` here, exactly as the HLSL uniform is named `scale`.
+// The WGSL binds the param as the definition.js uniform NAME, which is `scale`
+// (the deprecated `noiseScale` alias is retired upstream). WGSL `scale` is the
+// bare `scale` here, exactly as the HLSL uniform is named `scale`.
 //
 // RESERVED-NAME COLLISIONS handled (PORTING-GUIDE): the WGSL `getDist` declares
 // `let scale = map_value(...)` locals, but `scale` is an injected `#define scale data[..]`,
@@ -427,7 +427,7 @@ float n3_cubes(vec3 p_in) {
 // ===== Distance function (SDF) =====
 // NOISE_TYPE is the compile-time integer #define; if/else-if chain follows the WGSL order.
 // The WGSL's `let scale = …` locals are renamed `sc` (the global `scale` is an injected
-// #define and cannot name a local). `noiseScale` -> bare `scale`.
+// #define and cannot name a local). WGSL `scale` maps to bare `scale`.
 float n3_getDist(vec3 p) {
 	float d;
 
