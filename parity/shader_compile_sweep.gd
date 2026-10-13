@@ -58,6 +58,8 @@ func _init() -> void:
 	var missing := []
 	var failed := []
 	var compiled := 0
+	var attempted := 0
+	var probe_frames := {}
 
 	for namespace_name in DirAccess.get_directories_at(EFFECTS_DIR):
 		var definition_dir := EFFECTS_DIR.path_join(namespace_name)
@@ -105,9 +107,35 @@ func _init() -> void:
 						var raw_vertex: String = backend.call("_resolve_includes", FileAccess.get_file_as_string(vertex_path))
 						vertex = backend.call("_inject_after_version", raw_vertex, inject)
 
-					var shader: RID = backend.call("_get_shader", "sweep/%s/%d" % [shader_key, compiled], vertex, fragment)
+					var probe_key := "sweep/%s/%d" % [shader_key, attempted]
+					attempted += 1
+					var shader: RID = backend.call("_get_shader", probe_key, vertex, fragment)
 					if not shader.is_valid():
 						failed.append("%s %s" % [shader_key, merged_defines])
+						continue
+
+					# On Metal, shader creation can return a valid RID before the
+					# backend compiles its library. Creating a pipeline checks that stage.
+					var attachment_count := int(pass_spec.get("drawBuffers", 1))
+					if not probe_frames.has(attachment_count):
+						var textures := []
+						for _i in attachment_count:
+							textures.append(backend.call("_make_tex", 32, 32, RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT))
+						probe_frames[attachment_count] = rd.framebuffer_create(textures)
+					var fb: RID = probe_frames[attachment_count]
+					if not fb.is_valid():
+						failed.append("%s %s: framebuffer" % [shader_key, merged_defines])
+						continue
+					var mode := str(pass_spec.get("drawMode", ""))
+					var custom := mode in ["points", "billboards", "triangles"]
+					var primitive := RenderingDevice.RENDER_PRIMITIVE_POINTS if mode == "points" else RenderingDevice.RENDER_PRIMITIVE_TRIANGLES
+					var vfmt: int = backend.get("_vfmt_empty") if custom else backend.get("_vfmt")
+					var pipeline: RID = backend.call("_get_pipeline", probe_key, shader,
+						rd.framebuffer_get_format(fb), attachment_count, primitive,
+						{"enable": false, "key": "rep"}, vfmt, false)
+					if not pipeline.is_valid():
+						failed.append("%s %s: pipeline" % [shader_key, merged_defines])
+						continue
 					compiled += 1
 
 	if not missing.is_empty():
