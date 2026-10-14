@@ -77,7 +77,7 @@ class ParitySummaryManifestTests(unittest.TestCase):
 
 
 class ParitySummaryClassifyTests(unittest.TestCase):
-    """classify(): exact/strict/near/fail/missing per the documented contract."""
+    """classify(): exact/strict/near/fail/missing per the published policy."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -92,7 +92,8 @@ class ParitySummaryClassifyTests(unittest.TestCase):
         j = src.index("PYEOF\n}", i)
         return src[i:j].split("<<'PYEOF'\n", 1)[1]
 
-    def _classify(self, case, deferrals, report=None, golden=b"G", cand=b"G"):
+    def _classify(self, case, report=None, golden=b"G", cand=b"G",
+                  tolerance=2.001, ssim_min=0.98):
         out = self.root / "parity" / "out"
         if report is not None:
             (out / f"{case}.parity-summary.report.json").write_text(json.dumps(report))
@@ -100,38 +101,49 @@ class ParitySummaryClassifyTests(unittest.TestCase):
         (out / f"{case}.candidate.png").write_bytes(cand)
         env = {**os.environ, "PARITY_ROOT": str(self.root)}
         return subprocess.run([sys.executable, "-c", self.classify_src, case,
-                               json.dumps(deferrals)],
+                               str(tolerance), str(ssim_min)],
                               capture_output=True, text=True, env=env,
                               cwd=tempfile.gettempdir()).stdout.strip()
 
+    @staticmethod
+    def _report(case="a", diff=0, ssim=1.0, tolerance=2.001, ssim_min=0.98,
+                passed=True):
+        return {"name": case, "max_abs_diff": diff, "ssim": ssim,
+                "tolerance": tolerance, "ssim_min": ssim_min, "passed": passed}
+
     def test_exact_byte_identical_pass(self):
-        got = self._classify("a", {}, report={"passed": True})
+        got = self._classify("a", report=self._report())
         self.assertEqual(got, "exact")
 
     def test_strict_nonidentical_pass(self):
-        got = self._classify("a", {}, report={"passed": True}, cand=b"H")
+        got = self._classify("a", report=self._report(diff=1), cand=b"H")
         self.assertEqual(got, "strict")
 
-    def test_fail_beyond_recorded_bounds(self):
-        rec = {"max_abs_diff": 5.0, "ssim": 0.99}
-        got = self._classify("a", {"a": rec}, report={"passed": False,
-                                                      "max_abs_diff": 6.0, "ssim": 0.995})
+    def test_fail_beyond_published_bounds(self):
+        got = self._classify("a", report=self._report(diff=7, tolerance=6),
+                             cand=b"H", tolerance=6)
         self.assertEqual(got, "fail")
 
-    def test_near_within_recorded_bounds(self):
-        rec = {"max_abs_diff": 5.0, "ssim": 0.99}
-        got = self._classify("a", {"a": rec}, report={"passed": False,
-                                                      "max_abs_diff": 4.0, "ssim": 0.995})
+    def test_near_within_published_bounds(self):
+        got = self._classify("a", report=self._report(diff=4, tolerance=6),
+                             cand=b"H", tolerance=6)
         self.assertEqual(got, "near")
 
-    def test_near_requires_both_bounds_keys(self):
-        got = self._classify("a", {"a": {"max_abs_diff": 5.0}},
-                             report={"passed": False, "max_abs_diff": 1.0, "ssim": 0.5})
+    def test_near_requires_matching_policy_in_comparator_report(self):
+        got = self._classify("a", report=self._report(diff=4, tolerance=7),
+                             cand=b"H", tolerance=6)
         self.assertEqual(got, "fail")
 
-    def test_fail_without_record(self):
-        got = self._classify("a", {}, report={"passed": False,
-                                              "max_abs_diff": 1.0, "ssim": 1.0})
+    def test_failed_comparator_cannot_become_near(self):
+        got = self._classify("a", report=self._report(diff=4, tolerance=6,
+                                                      passed=False),
+                             cand=b"H", tolerance=6)
+        self.assertEqual(got, "fail")
+
+    def test_nonfinite_metric_cannot_become_near(self):
+        got = self._classify("a", report=self._report(diff=float("nan"),
+                                                      tolerance=6),
+                             cand=b"H", tolerance=6)
         self.assertEqual(got, "fail")
 
     def test_missing_report_counts_missing(self):
@@ -139,35 +151,16 @@ class ParitySummaryClassifyTests(unittest.TestCase):
         (out / "a.golden.png").write_bytes(b"G")
         (out / "a.candidate.png").write_bytes(b"G")
         env = {**os.environ, "PARITY_ROOT": str(self.root)}
-        r = subprocess.run([sys.executable, "-c", self.classify_src, "a", "{}"],
+        r = subprocess.run([sys.executable, "-c", self.classify_src,
+                            "a", "2.001", "0.98"],
                            capture_output=True, text=True, env=env,
                            cwd=tempfile.gettempdir())
         self.assertEqual(r.stdout.strip(), "missing")
 
     def test_cwd_independence(self):
         # The defect this locks: classification must use PARITY_ROOT, not cwd.
-        got = self._classify("a", {}, report={"passed": True})
+        got = self._classify("a", report=self._report())
         self.assertEqual(got, "exact")
-
-    def test_deferred_only_before_render(self):
-        # is_deferred (pre-render) short-circuits a deferred case; classify
-        # itself never returns "defer" without a comparator failure.
-        src = SCRIPT.read_text()
-        i = src.index("is_deferred ()")
-        heredoc = src[i:].split("<<'PYEOF'\n", 1)[1].split("\nPYEOF\n", 1)[0]
-        env = {**os.environ}
-        r = subprocess.run([sys.executable, "-c", heredoc, "a",
-                            '{"a": {"deferred": true}}'],
-                           capture_output=True, text=True, env=env)
-        self.assertEqual(r.stdout.strip(), "yes")
-        r = subprocess.run([sys.executable, "-c", heredoc, "a", "{}"],
-                           capture_output=True, text=True, env=env)
-        self.assertEqual(r.stdout.strip(), "no")
-        # classify with a failing report and a deferred record still defers.
-        got = self._classify("a", {"a": {"deferred": True}},
-                             report={"passed": False, "max_abs_diff": 99.0,
-                                     "ssim": 0.1})
-        self.assertEqual(got, "defer")
 
     def test_empty_manifest_process_substitution_fails_closed(self):
         # The defect this locks: `mapfile < <(cmd)` swallows cmd's failure, so
@@ -189,18 +182,27 @@ class ParitySummaryFreshArtifactTests(unittest.TestCase):
         for directory in ("scripts", "parity/programs", "parity/out", "bin"):
             (self.root / directory).mkdir(parents=True)
         shutil.copy2(SCRIPT, self.root / "scripts/parity-summary")
+        shutil.copy2(ROOT / "parity/sweep.sh", self.root / "parity/sweep.sh")
         (self.root / "parity/programs/a.dsl").write_text("noise(seed: 1).write(o0)\n")
         self._executable("bin/node", """#!/bin/sh
-printf FRESH > "$3/a.golden.png"
-printf '{}' > "$3/a.graph.json"
+case=${2##*/}
+case=${case%.dsl}
+printf FRESH > "$3/$case.golden.png"
+printf '{}' > "$3/$case.graph.json"
 if [ "${MINT_FAIL:-0}" = 1 ]; then exit 1; fi
 """)
         self._executable("bin/godot", "#!/bin/sh\nexit 0\n")
         self._executable("parity/run.sh", """#!/bin/sh
-cp "$PARITY_FIXTURE_ROOT/parity/out/a.golden.png" "$PARITY_FIXTURE_ROOT/parity/out/a.candidate.png"
-if [ "${REPORT_MODE:-write}" = write ]; then
-  printf '{"passed":true}' > "$PARITY_FIXTURE_ROOT/parity/out/a.report.json"
+cp "$PARITY_FIXTURE_ROOT/parity/out/$1.golden.png" "$PARITY_FIXTURE_ROOT/parity/out/$1.candidate.png"
+if [ "${REPORT_MODE:-write}" = write ] || [ "${REPORT_MODE:-write}" = nonzero ]; then
+  printf '{"passed":true,"name":"%s","max_abs_diff":0,"ssim":1,"tolerance":%s,"ssim_min":%s}' "$1" "$2" "$3" > "$PARITY_FIXTURE_ROOT/parity/out/$1.report.json"
+elif [ "${REPORT_MODE:-write}" = near ]; then
+  printf DIFFERENT > "$PARITY_FIXTURE_ROOT/parity/out/$1.candidate.png"
+  printf '{"passed":true,"name":"%s","max_abs_diff":7,"ssim":0.9999,"tolerance":%s,"ssim_min":%s}' "$1" "$2" "$3" > "$PARITY_FIXTURE_ROOT/parity/out/$1.report.json"
+elif [ "${REPORT_MODE:-write}" = malformed ]; then
+  printf 'not-json' > "$PARITY_FIXTURE_ROOT/parity/out/$1.report.json"
 fi
+if [ "${REPORT_MODE:-write}" = nonzero ]; then exit 1; fi
 """)
 
     def _executable(self, relative_path, contents):
@@ -208,7 +210,7 @@ fi
         path.write_text(contents)
         path.chmod(0o755)
 
-    def _run(self, report_mode="write", mint_fail="0", rm_fail=False):
+    def _run(self, report_mode="write", mint_fail="0", rm_fail=False, case="a"):
         if rm_fail:
             self._executable("bin/rm", "#!/bin/sh\nexit 1\n")
         env = {**os.environ,
@@ -219,8 +221,31 @@ fi
                "REPORT_MODE": report_mode,
                "MINT_FAIL": mint_fail,
                "PATH": str(self.root / "bin") + os.pathsep + os.environ["PATH"]}
-        return subprocess.run([str(self.root / "scripts/parity-summary"), "a"],
+        return subprocess.run([str(self.root / "scripts/parity-summary"), case],
                               capture_output=True, text=True, env=env)
+
+    def test_existing_spiral_policy_accepts_rotated_boundary_ties(self):
+        (self.root / "parity/programs/spiralRotated.dsl").write_text(
+            "noise(seed: 1).spiral(rotation: 30).write(o0)\n")
+        result = self._run(report_mode="near", case="spiralRotated")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("[NEAR] spiralRotated", result.stdout)
+        self.assertIn('"executed":1,"exact":0,"strict":0,"near":1', result.stdout)
+        report = json.loads((self.root / "parity/out/spiralRotated.report.json").read_text())
+        self.assertEqual(report["tolerance"], 8)
+        self.assertEqual(report["ssim_min"], 0.99)
+
+    def test_malformed_comparator_report_counts_as_failure(self):
+        result = self._run(report_mode="malformed")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("[FAIL] a", result.stdout)
+        self.assertIn('"fail":1', result.stdout)
+
+    def test_nonzero_runner_cannot_pass_from_report_alone(self):
+        result = self._run(report_mode="nonzero")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("[FAIL] a", result.stdout)
+        self.assertIn('"fail":1', result.stdout)
 
     def test_existing_golden_is_regenerated_from_reference(self):
         out = self.root / "parity/out"
@@ -282,8 +307,8 @@ class ParitySummaryScriptContractTests(unittest.TestCase):
     def test_exit0_requires_all_passed(self):
         src = SCRIPT.read_text()
         self.assertIn('[ "$executed" -eq "$EXPECTED" ]', src)
-        self.assertIn('[ "$((exact+strict))" -eq "$EXPECTED" ]', src)
-        self.assertIn('[ "$near" -eq 0 ]', src)
+        self.assertIn('[ "$((exact+strict+near))" -eq "$EXPECTED" ]', src)
+        self.assertIn('[ "$fail" -eq 0 ]', src)
 
     def test_bash_syntax(self):
         r = subprocess.run(["bash", "-n", str(SCRIPT)], capture_output=True, text=True)

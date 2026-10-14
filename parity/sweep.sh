@@ -30,14 +30,14 @@ tol_for() {
 	case "$1" in
 		newton) echo "255 0.98" ;;   # Newton-fractal root basins = Julia set (chaotic)
 		edge)   echo "8 0.98" ;;      # ×2 contrast convolution amplifies upstream noise 1-LSB (<0.1% px)
-		pinch)  echo "6 0.98" ;;      # AA dFdx/dFdy taps hit neighbor texel under Metal vs WebGPU (<0.1% px)
+		pinch|pinchRotated) echo "6 0.98" ;; # AA dFdx/dFdy taps hit neighbor texel under Metal vs WebGPU (<0.1% px)
 		crt)    echo "3 0.98" ;;      # transcendental cos/pow/floor flips 1 texel index at a seam (1 px)
 		uvRemap) echo "22 0.98" ;;   # NEAREST coord-resampling tie-breaks on exact texel boundaries (30 px, 0.05%)
 		lightingRefl) echo "9 0.999" ;; # reflection/refraction offset-sampling: NEAREST boundary ties (max-diff 8; 9 = epsilon-tolerant <=8); core lighting bit-exact
 		rotate) echo "40 0.99" ;;    # full-frame rotation: NEAREST picks a different neighbor at exact texel-boundary ties (109 px, 0.17%); SSIM-gated 0.99
 		shadow) echo "255 0.99" ;;   # step() threshold on gradient.r~0.5 flips fg<->shadow where upstream noise is ±1 (115 px); SSIM-gated 0.99
 		distortion) echo "12 0.98" ;; # Sobel-over-noise + NEAREST coord boundary amplifies ±1 drift (7 px, 0.01%)
-		spiral) echo "8 0.99" ;;     # AA dFdx/dFdy sub-texel taps over a steep atan/spiral warp round to neighbor texels under Metal vs WebGL2 (10 px, 0.015%); core warp bit-exact
+		spiral|spiralRotated) echo "8 0.99" ;; # AA dFdx/dFdy sub-texel taps over a steep atan/spiral warp round to neighbor texels under Metal vs WebGL2 (10 px, 0.015%); core warp bit-exact
 		bulge) echo "5 0.99" ;;      # AA dFdx/dFdy taps at the mirror-wrap UV discontinuity diverge GL vs Vulkan (3 px, 0.0046%); core bulge bit-exact
 		degauss) echo "5 0.99" ;;    # cos/sin->floor/fract displacement at image-edge wrap rounds to neighbor texels Metal vs WebGL2 (3 px, 0.0046%)
 		refract) echo "7.001 0.99" ;; # refraction UV lands on a texel boundary, NEAREST picks a different neighbor (3 px, 0.0046%); core refract bit-exact. Tolerance widened 5->7.001 by the mirror-wrap fix (reference 7194deaf): real reflection shifts boundary-tie pixel positions slightly — same NEAREST cross-backend hazard, not a new bug
@@ -66,7 +66,7 @@ tol_for() {
 reason_for() {
 	case "$1" in
 		newton) echo "Newton basin classification is chaotic under cross-backend floating-point rounding" ;;
-		edge|pinch|uvRemap|lightingRefl|rotate|distortion|spiral|bulge|degauss|refract) echo "texture-coordinate boundary ties can select adjacent texels across WebGPU and MoltenVK" ;;
+		edge|pinch|pinchRotated|uvRemap|lightingRefl|rotate|distortion|spiral|spiralRotated|bulge|degauss|refract) echo "texture-coordinate boundary ties can select adjacent texels across WebGPU and MoltenVK" ;;
 		crt|shadow) echo "transcendental or step threshold ties can flip isolated pixels across GPU compilers" ;;
 		scatterAniso|scatterReferenceAnisotropic) echo "anisotropic Sobel-gradient threshold is sensitive to cross-GPU rounding" ;;
 		hatchPencil|hatchReferenceColoredPencil*|strokesSmudge|strokesReferenceSmudge) echo "near-zero Sobel gradients make edge-following atan direction discontinuous across GPU compilers" ;;
@@ -83,6 +83,15 @@ reason_for() {
 		*) echo "strict RGBA8 float round-trip allowance" ;;
 	esac
 }
+
+if [ "${1:-}" = "--policy" ]; then
+	[ "$#" -eq 2 ] || { echo "usage: parity/sweep.sh --policy <case>" >&2; exit 2; }
+	read -r policy_tolerance policy_ssim <<EOF
+$(tol_for "$2")
+EOF
+	printf '%s\t%s\t%s\n' "$policy_tolerance" "$policy_ssim" "$(reason_for "$2")"
+	exit 0
+fi
 
 batch_rc=0
 if [ "${SKIP_RENDER:-0}" != "1" ]; then
