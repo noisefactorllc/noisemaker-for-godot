@@ -401,6 +401,19 @@ async function main () {
       process.stderr.write('[parity] uploaded mesh0 triangle fixture (3 vertices)\n')
     }
 
+    if (graph.passes.some(pass => pass.func === 'scope')) {
+      const audio = await page.evaluate(() => {
+        const pipeline = window.__noisemakerRenderingPipeline
+        if (typeof pipeline?.setAudioState !== 'function') return false
+        const waveform = new Float32Array(128)
+        waveform.fill(0.5)
+        pipeline.setAudioState({ waveform, spectrum: new Float32Array(128) })
+        return true
+      })
+      if (!audio) throw new Error('silent waveform fixture failed')
+      process.stderr.write('[parity] supplied silent waveform fixture (128 samples)\n')
+    }
+
     // ---- 3. Render + capture: one pinned frame, or timed samples for statefuls.
     if (opts.runSeconds > 0) {
       // Timed-sampling mode (fluid/feedback sims): step total_frames at 1/600
