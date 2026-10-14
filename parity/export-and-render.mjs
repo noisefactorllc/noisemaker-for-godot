@@ -217,11 +217,30 @@ async function main () {
   const harness = await import(pathToFileURL(HARNESS).href)
   const { BrowserSession } = harness
 
-  const session = new BrowserSession({ backend: opts.backend })
+  // The viewer server port comes from the ambient SHADE_VIEWER_PORT (set by
+  // sandboxed hosts that only allow loopback 43117-43126). If that port is
+  // already held by a leftover process from an earlier run in the same
+  // sandbox, acquireServer fails with EADDRINUSE and the whole mint dies.
+  // Retry once without the pin: acquireServer(0) then walks the fixed
+  // fallback list 43117..43126 and binds the first free one.
+  const pinnedViewerPort = process.env.SHADE_VIEWER_PORT
+  let session
+  try {
+    session = new BrowserSession({ backend: opts.backend })
+    await session.setup()
+  } catch (err) {
+    const portBusy = pinnedViewerPort !== undefined &&
+      /EADDRINUSE|EPERM|listen /.test(String(err))
+    if (!portBusy) throw err
+    process.stderr.write(`[parity] viewer port ${pinnedViewerPort} unavailable (${String(err).split('\n')[0]}), retrying on a free fallback port\n`)
+    try { await session.teardown() } catch {}
+    delete process.env.SHADE_VIEWER_PORT
+    session = new BrowserSession({ backend: opts.backend })
+    await session.setup()
+  }
   let pngBuffer
   let sampled = false
   try {
-    await session.setup()
     const page = session.page
     await session.setBackend(opts.backend)
     const globals = session.globals
