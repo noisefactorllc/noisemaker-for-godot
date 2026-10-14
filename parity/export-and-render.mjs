@@ -33,6 +33,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, resolve, basename, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { resetReferenceState } from './reference_reset.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // Reference (golden) engine path comes from NM_REFERENCE_ROOT. Set
@@ -268,6 +269,14 @@ async function main () {
     // intermittently reverted our resize to ~90px.
     await page.evaluate(() => {
       if (window.__noisemakerSetPaused) window.__noisemakerSetPaused(true)
+      window.__nmAsyncInitErrors = []
+      const reportError = console.error
+      console.error = function (...args) {
+        if (String(args[0]).startsWith('[Pipeline] asyncInit error for ')) {
+          window.__nmAsyncInitErrors.push(String(args[0]))
+        }
+        return reportError.apply(this, args)
+      }
     })
     // Resize the render surface to the requested square (canvas backing + CSS + the
     // pipeline's own surfaces) so the readback is deterministic and matches Unity.
@@ -347,36 +356,12 @@ async function main () {
       // The reference's deterministic renderer tests avoid the race by driving
       // renderer.render(t) directly without ever calling renderer.start().
       //
-      // resize() is not a reset: Pipeline.createSurfaces() preserves matching
-      // textures. Clear the whole backend registry, including iterative graph
-      // textures absent from p.surfaces, then restore canonical ping-pong
-      // orientation and the frame clock. This is deliberately limited to the
-      // discrete protocol; timed sampling has different evolution semantics.
-      const reset = await page.evaluate(() => {
-        const p = window.__noisemakerRenderingPipeline
-        const backend = p?.backend
-        if (!p) return { error: 'no pipeline' }
-        if (!backend?.textures || typeof backend.clearTexture !== 'function') {
-          return { error: 'backend cannot clear textures' }
-        }
-        const textureIds = [...backend.textures.keys()]
-        for (const texId of backend.textures.keys()) backend.clearTexture(texId)
-        const normalizedSurfaces = []
-        if (p.surfaces) {
-          for (const [name, surface] of p.surfaces.entries()) {
-            const readId = `global_${name}_read`
-            const writeId = `global_${name}_write`
-            if (backend.textures.get(readId) && backend.textures.get(writeId)) {
-              surface.read = readId
-              surface.write = writeId
-              normalizedSurfaces.push(name)
-            }
-          }
-        }
-        p.frameIndex = 0
-        p.lastTime = 0
-        return { textureCount: textureIds.length, normalizedSurfaces }
-      })
+      // Keep completed async CPU overlays while clearing prior frame state.
+      const overlayTextureIds = graph.passes
+        .filter(pass => ['fibers', 'scratches', 'strayHair'].includes(pass.func))
+        .map(pass => pass.inputs?.overlayTex)
+        .filter(Boolean)
+      const reset = await page.evaluate(resetReferenceState, overlayTextureIds)
       if (reset.error) throw new Error(`state reset failed: ${reset.error}`)
       process.stderr.write(`[parity] reset ${reset.textureCount} textures and ${reset.normalizedSurfaces.length} ping-pong surfaces before the 8-frame protocol\n`)
     }

@@ -30,20 +30,89 @@ class HarnessContractTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp)
 
+    def test_reference_reset_waits_for_overlay_and_preserves_its_texture(self):
+        module = (REPO / "parity" / "reference_reset.mjs").as_uri()
+        script = f"""
+import assert from 'node:assert/strict'
+import {{ resetReferenceState }} from {json.dumps(module)}
+
+let finishTrace
+const trace = new Promise(resolve => {{ finishTrace = resolve }})
+const textures = new Map([
+  ['node_1_overlayTex', {{ handle: 'overlay', width: 2, height: 2, completed: false }}],
+  ['global_o0_read', 'old-frame'],
+  ['global_o0_write', 'old-frame']
+])
+const cleared = []
+const surface = {{ read: 'swapped', write: 'swapped' }}
+const gl = {{
+  FRAMEBUFFER: 1, COLOR_ATTACHMENT0: 2, TEXTURE_2D: 3,
+  FRAMEBUFFER_COMPLETE: 4, RGBA: 5, UNSIGNED_BYTE: 6,
+  FRAMEBUFFER_BINDING: 7,
+  createFramebuffer: () => 'temporary-fbo',
+  bindFramebuffer: () => {{}},
+  framebufferTexture2D: () => {{}},
+  checkFramebufferStatus: () => 4,
+  getParameter: () => null,
+  readPixels: (x, y, width, height, format, type, pixels) => {{
+    if (textures.get('node_1_overlayTex').completed) pixels[3] = 255
+  }},
+  deleteFramebuffer: () => {{}}
+}}
+const pipeline = {{
+  backend: {{ gl, textures, clearTexture (id) {{ cleared.push(id); textures.set(id, 'clear') }} }},
+  surfaces: new Map([['o0', surface]]),
+  frameIndex: 12,
+  lastTime: 0.8,
+  whenAsyncInitsSettled: () => trace
+}}
+globalThis.window = {{ __noisemakerRenderingPipeline: pipeline, __nmAsyncInitErrors: [] }}
+const reset = resetReferenceState(['node_1_overlayTex'])
+await new Promise(resolve => setImmediate(resolve))
+assert.deepEqual(cleared, [], 'reset cleared textures before the trace settled')
+textures.get('node_1_overlayTex').completed = true
+finishTrace()
+const result = await reset
+assert.equal(result.error, undefined)
+assert.equal(result.textureCount, 2)
+assert.equal(textures.get('node_1_overlayTex').completed, true)
+assert.deepEqual(cleared, ['global_o0_read', 'global_o0_write'])
+assert.deepEqual(surface, {{ read: 'global_o0_read', write: 'global_o0_write' }})
+assert.equal(pipeline.frameIndex, 0)
+assert.equal(pipeline.lastTime, 0)
+delete pipeline.whenAsyncInitsSettled
+cleared.length = 0
+const missingWait = await resetReferenceState(['node_1_overlayTex'])
+assert.match(missingWait.error, /cannot wait for async overlays/)
+assert.deepEqual(cleared, [], 'missing wait API must fail before clearing textures')
+pipeline.whenAsyncInitsSettled = async () => {{}}
+textures.get('node_1_overlayTex').completed = false
+const blankOverlay = await resetReferenceState(['node_1_overlayTex'])
+assert.match(blankOverlay.error, /blank async overlay/)
+assert.deepEqual(cleared, [], 'blank overlay must fail before clearing textures')
+textures.get('node_1_overlayTex').completed = true
+window.__nmAsyncInitErrors.push('[Pipeline] asyncInit error for node_1: trace failed')
+const partialOverlay = await resetReferenceState(['node_1_overlayTex'])
+assert.match(partialOverlay.error, /async overlay failed/)
+assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
+"""
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_exporter_waits_for_settled_graph_and_resets_full_pipeline_state(self):
         source = (REPO / "parity" / "export-and-render.mjs").read_text()
 
         self.assertIn("p.graph.id !== base && p.isCompiling === false", source)
         self.assertIn("}, baselineId, { timeout: STATUS_TIMEOUT })", source)
-        self.assertIn("for (const texId of backend.textures.keys())", source)
-        self.assertIn("backend.clearTexture(texId)", source)
-        self.assertIn("surface.read = readId", source)
-        self.assertIn("surface.write = writeId", source)
-        self.assertIn("p.frameIndex = 0", source)
-        self.assertIn("p.lastTime = 0", source)
+        self.assertIn("page.evaluate(resetReferenceState, overlayTextureIds)", source)
+        self.assertIn(".includes(pass.func)", source)
         self.assertLess(
             source.index("if (window.__noisemakerSetPausedTime)"),
-            source.index("p.lastTime = 0"),
+            source.index("page.evaluate(resetReferenceState, overlayTextureIds)"),
         )
 
     def test_ledger_reports_3d_effect_namespaces_and_explicit_modes(self):
