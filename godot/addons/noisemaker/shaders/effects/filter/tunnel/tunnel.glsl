@@ -36,7 +36,11 @@ void main() {
     float ar = fullRes.x / fullRes.y;
     if (aspectLens != 0.0) { centered.x *= ar; }
     
-    float a = atan(centered.y, centered.x);
+    float a = centered.x > 0.0
+        ? atan(centered.y / centered.x)
+        : (centered.x < 0.0
+            ? atan(centered.y / centered.x) + (centered.y >= 0.0 ? PI : -PI)
+            : atan(centered.y, centered.x));
     float r;
     
     if (int(shape) == 0) {
