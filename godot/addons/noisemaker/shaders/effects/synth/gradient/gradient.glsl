@@ -135,7 +135,9 @@ void main() {
 
     if (int(gradientType) == 0) {
         // Conic/angular gradient
-        float a = atan(rotatedCentered.y, rotatedCentered.x);
+        float a = rotatedCentered.x > 0.0
+            ? atan(rotatedCentered.y / rotatedCentered.x)
+            : atan(rotatedCentered.y, rotatedCentered.x);
         t = (a + PI) / TAU;
         t = fract(t * float(int(repeat)) + timeOffset);
         color = blendColors(t);
