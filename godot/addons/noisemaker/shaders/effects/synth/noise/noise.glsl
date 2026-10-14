@@ -69,7 +69,7 @@ float random(vec2 st) {
 }
 
 float map(float value, float inMin, float inMax, float outMin, float outMax) {
-    return outMin + (outMax - outMin) * (value - inMin) / (inMax - inMin);
+    return mix(outMin, outMax, (value - inMin) / (inMax - inMin));
 }
 
 float periodicFunction(float p) {
