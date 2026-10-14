@@ -400,13 +400,56 @@ async function main () {
         }, cpuOverlays)
       }
       // Keep completed CPU overlays and text while clearing prior frame state.
-      const overlayTextureIds = graph.passes
+      const overlayBindings = graph.passes
         .filter(pass => ['fibers', 'scratches', 'strayHair', 'text'].includes(pass.func))
-        .map(pass => pass.inputs?.overlayTex || pass.inputs?.textTex)
-        .filter(Boolean)
+        .map(pass => pass.inputs?.textTex
+          ? { id: pass.inputs.textTex, uniform: 'textTex' }
+          : { id: pass.inputs?.overlayTex, uniform: 'overlayTex' })
+        .filter(binding => binding.id)
+      const overlayTextureIds = overlayBindings.map(binding => binding.id)
       const reset = await page.evaluate(resetReferenceState, overlayTextureIds)
       if (reset.error) throw new Error(`state reset failed: ${reset.error}`)
       process.stderr.write(`[parity] reset ${reset.textureCount} textures and ${reset.normalizedSurfaces.length} ping-pong surfaces before the 8-frame protocol\n`)
+      if (overlayTextureIds.length && opts.backend === 'webgl2') {
+        const overlays = await page.evaluate(ids => {
+          const backend = window.__noisemakerRenderingPipeline?.backend
+          const gl = backend?.gl
+          if (!gl) throw new Error('external overlay readback requires WebGL2')
+          const previous = gl.getParameter(gl.FRAMEBUFFER_BINDING)
+          const fbo = gl.createFramebuffer()
+          const result = []
+          try {
+            for (const id of ids) {
+              const texture = backend.textures?.get(id)
+              if (!texture?.handle) throw new Error(`missing external overlay ${id}`)
+              gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
+              gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+                gl.TEXTURE_2D, texture.handle, 0)
+              if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+                throw new Error(`incomplete external overlay ${id}`)
+              }
+              const pixels = new Uint8Array(texture.width * texture.height * 4)
+              gl.readPixels(0, 0, texture.width, texture.height, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixels)
+              result.push({ id, width: texture.width, height: texture.height,
+                pixels: Array.from(pixels) })
+            }
+          } finally {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, previous)
+            gl.deleteFramebuffer(fbo)
+          }
+          return result
+        }, overlayTextureIds)
+        for (let index = 0; index < overlays.length; index++) {
+          const overlay = overlays[index]
+          const path = join(opts.outDir,
+            `${programName}.external.${overlayBindings[index].uniform}.${index}.png`)
+          // readPixels row zero is the GL bottom row. Preserve that byte order;
+          // the Godot uploader consumes this PNG without another Y flip.
+          writeFileSync(path, encodePng(overlay.width, overlay.height, Buffer.from(overlay.pixels)))
+          process.stderr.write(`[parity] wrote ${path}\n`)
+        }
+      }
     }
 
     if (graph.passes.some(pass => pass.func === 'meshRender')) {

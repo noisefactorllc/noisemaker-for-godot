@@ -124,6 +124,10 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 
 	var backend := Backend.new()
 	backend.setup(rd, "res://addons/noisemaker", Vector2i(size, size))
+	if not _upload_external_overlays(backend, graph, out_path):
+		backend.close()
+		rd.free()
+		return false
 	if media_fixture and not _upload_media_fixture(backend, graph):
 		backend.close()
 		rd.free()
@@ -136,6 +140,32 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 	backend.close()
 	rd.free()
 	return ok
+
+
+func _upload_external_overlays(backend: Backend, graph: Dictionary, out_path: String) -> bool:
+	var bindings := []
+	for pass_data in graph.get("passes", []):
+		var func_name := str(pass_data.get("func", ""))
+		if func_name != "text" and func_name != "fibers" \
+				and func_name != "scratches" and func_name != "strayHair":
+			continue
+		var inputs: Dictionary = pass_data.get("inputs", {})
+		var uniform_name := "textTex" if inputs.has("textTex") else "overlayTex"
+		var texture_id := str(inputs.get(uniform_name, ""))
+		if texture_id != "":
+			bindings.append({"uniform": uniform_name, "texture_id": texture_id})
+	var prefix := out_path.get_basename().trim_suffix(".candidate")
+	for index in range(bindings.size()):
+		var binding: Dictionary = bindings[index]
+		var path: String = prefix + ".external." + binding["uniform"] + "." + str(index) + ".png"
+		if not FileAccess.file_exists(path):
+			printerr("missing external overlay: ", path)
+			return false
+		var image := Image.new()
+		if image.load(path) != OK or not backend.upload_external_texture(binding["texture_id"], image, false):
+			printerr("external overlay upload failed: ", path)
+			return false
+	return true
 
 
 func _upload_media_fixture(backend: Backend, graph: Dictionary) -> bool:

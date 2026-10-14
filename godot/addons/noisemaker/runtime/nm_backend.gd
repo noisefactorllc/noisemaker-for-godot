@@ -132,6 +132,7 @@ var _vfmt_empty: int        # no vertex format for procedural point/billboard/me
 var _shaders := {}
 var _pipelines := {}
 var _textures := {}
+var _external_texture_ids := {}
 var _depth_textures := {}
 var _tex_dims := {}         # texId -> Vector2i(w,h); count:"input" deposit draws derive agent count = w*h
 var _tex_fmt := {}          # texId -> RenderingDevice DATA_FORMAT_*; lets the snapshot read the render surface in its real format (rgba8 vs rgba16f)
@@ -361,6 +362,7 @@ func close(options := {}) -> void:
 				rd.free_rid(rid)
 	# Drop every cache map so no stale handle record survives teardown.
 	_textures.clear()
+	_external_texture_ids.clear()
 	_depth_textures.clear()
 	_tex_dims.clear()
 	_tex_fmt.clear()
@@ -599,6 +601,31 @@ func _make_sampled_float_tex(w: int, h: int, values: PackedFloat32Array) -> RID:
 	_owned_textures[rid] = true
 	return rid
 
+func upload_external_texture(tex_id: String, source: Image, flip_y: bool = true) -> bool:
+	if source == null or source.is_empty() or tex_id.is_empty():
+		return false
+	var image := source.duplicate() as Image
+	image.convert(Image.FORMAT_RGBA8)
+	if flip_y:
+		image.flip_y()
+	var tf := RDTextureFormat.new()
+	tf.width = image.get_width()
+	tf.height = image.get_height()
+	tf.format = RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM
+	tf.usage_bits = RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT
+	var rid := rd.texture_create(tf, RDTextureView.new(), [image.get_data()])
+	if not rid.is_valid():
+		return false
+	if _textures.has(tex_id):
+		_free_owned(_textures[tex_id])
+	_textures[tex_id] = rid
+	_external_texture_ids[tex_id] = true
+	_owned_textures[rid] = true
+	_tex_dims[tex_id] = image.get_size()
+	_tex_fmt[tex_id] = tf.format
+	_tex_mip[tex_id] = 1
+	return true
+
 func _depth_texture(size: Vector2i) -> RID:
 	if _depth_textures.has(size):
 		return _depth_textures[size]
@@ -747,6 +774,11 @@ func allocate_textures(graph: Dictionary) -> void:
 	_mip_targets.clear()
 	for tex_id in texs:
 		var spec: Dictionary = texs[tex_id]
+		if _external_texture_ids.has(tex_id) and _textures.has(tex_id):
+			_tex_dims[tex_id] = prev_dims[tex_id]
+			_tex_fmt[tex_id] = prev_fmt[tex_id]
+			_tex_mip[tex_id] = 1
+			continue
 		var w := _resolve_dim(spec.get("width", "screen"), screen.x, merged)
 		var h := _resolve_dim(spec.get("height", "screen"), screen.y, merged)
 		var fmt := _data_format(str(spec.get("format", "rgba16f")))
@@ -2526,7 +2558,10 @@ func execute_pass(p: Dictionary) -> bool:
 			# (reference legacyDefault 'mipmap' for textures with a mip chain).
 			# _tex_mip is keyed by texId — select via the resolved READ texId.
 			var read_id := _read_tex_id(tid)
-			u.add_id(_mip_sampler if _tex_mip.get(read_id, 1) > 1 else _sampler)
+			# External canvas textures use LINEAR min/mag filtering in the reference.
+			# Effect render targets retain NEAREST.
+			var external_canvas: bool = s["name"] == "textTex" or s["name"] == "overlayTex"
+			u.add_id(_mip_sampler if external_canvas or _tex_mip.get(read_id, 1) > 1 else _sampler)
 			u.add_id(_resolve_read(tid))
 			set0_uniforms.append(u)
 	var set0 := rd.uniform_set_create(set0_uniforms, shader, 0)
