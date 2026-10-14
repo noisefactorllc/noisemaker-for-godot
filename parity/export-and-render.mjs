@@ -381,6 +381,26 @@ async function main () {
       process.stderr.write(`[parity] reset ${reset.textureCount} textures and ${reset.normalizedSurfaces.length} ping-pong surfaces before the 8-frame protocol\n`)
     }
 
+    if (graph.passes.some(pass => pass.func === 'meshRender')) {
+      const mesh = await page.evaluate(() => {
+        const backend = window.__noisemakerRenderingPipeline?.backend
+        if (typeof backend?.uploadMeshData !== 'function') return { success: false }
+        return backend.uploadMeshData(
+          'mesh0',
+          new Float32Array([
+            -0.6, -0.5, 0, 1,
+             0.6, -0.5, 0, 1,
+             0.0,  0.6, 0, 1
+          ]),
+          new Float32Array([0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0]),
+          new Float32Array(12),
+          3, 1, 3
+        )
+      })
+      if (!mesh.success || mesh.vertexCount !== 3) throw new Error('mesh fixture upload failed')
+      process.stderr.write('[parity] uploaded mesh0 triangle fixture (3 vertices)\n')
+    }
+
     // ---- 3. Render + capture: one pinned frame, or timed samples for statefuls.
     if (opts.runSeconds > 0) {
       // Timed-sampling mode (fluid/feedback sims): step total_frames at 1/600
