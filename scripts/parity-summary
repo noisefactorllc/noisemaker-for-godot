@@ -153,13 +153,16 @@ EXPECTED=${#CASES[@]}
 
 classify () { # $1 = case; $2/$3 = published tolerance/SSIM
   local case="$1"
-  PARITY_ROOT="$ROOT" "$PY" - "$case" "$2" "$3" <<'PYEOF'
+  PARITY_ROOT="$ROOT" "$PY" - "$case" "$2" "$3" "${4:-}" <<'PYEOF'
 import json, sys, os, math
 case, tolerance, ssim_min = sys.argv[1], float(sys.argv[2]), float(sys.argv[3])
+sample = sys.argv[4]
 root = os.environ["PARITY_ROOT"]
-report_path = os.path.join(root, "parity", "out", case + ".parity-summary.report.json")
-gold_path = os.path.join(root, "parity", "out", case + ".golden.png")
-cand_path = os.path.join(root, "parity", "out", case + ".candidate.png")
+report_name = (case + ".report.t" + sample + ".json" if sample else
+               case + ".parity-summary.report.json")
+report_path = os.path.join(root, "parity", "out", report_name)
+gold_path = os.path.join(root, "parity", "out", case + ".golden" + (".t" + sample if sample else "") + ".png")
+cand_path = os.path.join(root, "parity", "out", case + ".candidate" + (".t" + sample if sample else "") + ".png")
 if not all(os.path.exists(path) for path in (report_path, gold_path, cand_path)):
     print("missing"); raise SystemExit
 try:
@@ -170,7 +173,7 @@ try:
                       and float(report["ssim_min"]) == ssim_min)
 except (OSError, KeyError, TypeError, ValueError, OverflowError):
     print("fail"); raise SystemExit
-if (report.get("name") != case or report.get("passed") is not True
+if (report.get("name") != case + ("_t" + sample if sample else "") or report.get("passed") is not True
         or not policy_matches or not math.isfinite(max_diff)
         or not math.isfinite(ssim) or max_diff > tolerance or ssim < ssim_min):
     print("fail"); raise SystemExit
@@ -196,7 +199,7 @@ for case in "${CASES[@]}"; do
   if ! policy_line="$(bash "$ROOT/parity/sweep.sh" --policy "$case")"; then
     fail=$((fail+1)); echo "[FAIL] $case: policy lookup failed"; continue
   fi
-  IFS=$'\t' read -r case_tol case_ssim case_reason <<< "$policy_line"
+  IFS=$'\t' read -r case_tol case_ssim case_reason case_run case_every <<< "$policy_line"
   if [ -z "$case_tol" ] || [ -z "$case_ssim" ]; then
     fail=$((fail+1)); echo "[FAIL] $case: policy lookup returned no bounds"; continue
   fi
@@ -206,23 +209,71 @@ for case in "${CASES[@]}"; do
   if [ ! -f "$prog" ]; then
     skip=$((skip+1)); echo "[SKIP] $case: no parity/programs/$case.dsl"; continue
   fi
-  if ! rm -f "$gold" "$graph"; then
+  if ! rm -f "$gold" "$graph" "$ROOT/parity/out/$case.golden.t"*.png \
+      "$ROOT/parity/out/$case.candidate.t"*.png "$ROOT/parity/out/$case.report.t"*.json; then
     skip=$((skip+1)); echo "[SKIP] $case: cannot clear previous golden and graph"; continue
   fi
   if command -v node >/dev/null 2>&1; then
     echo "[MINT] $case (reference $NM_REFERENCE_ROOT)"
+    mint_args=(--size 256 --backend webgl2)
+    if [ "${case_run:-0}" -gt 0 ]; then
+      mint_args+=(--run-seconds "$case_run" --sample-every "$case_every")
+    fi
     if ! node "$ROOT/parity/export-and-render.mjs" "$prog" "$ROOT/parity/out" \
-        --size 256 --backend webgl2 > "$ROOT/parity/out/$case.mint.log" 2>&1; then
-      if ! rm -f "$gold" "$graph"; then
+        "${mint_args[@]}" > "$ROOT/parity/out/$case.mint.log" 2>&1; then
+      if ! rm -f "$gold" "$graph" "$ROOT/parity/out/$case.golden.t"*.png; then
         skip=$((skip+1)); echo "[SKIP] $case: failed mint left artifacts that could not be cleared"; continue
       fi
     fi
   fi
-  if [ ! -f "$gold" ] || [ ! -f "$graph" ]; then
+  if [ ! -f "$graph" ] || { [ "${case_run:-0}" -eq 0 ] && [ ! -f "$gold" ]; }; then
     skip=$((skip+1)); echo "[SKIP] $case: current golden and graph could not be minted"; continue
   fi
   if [ -z "$GODOT_BIN" ]; then
     skip=$((skip+1)); echo "[SKIP] $case: no Godot binary (set GODOT)"; continue
+  fi
+  if [ "${case_run:-0}" -gt 0 ]; then
+    echo "[RENDER] $case (${case_run}s every ${case_every}s)"
+    if GODOT="$GODOT_BIN" bash "$ROOT/parity/run_samples.sh" "$case" "$case_tol" \
+        "$case_ssim" "$case_run" "$case_every" 256 \
+        > "$ROOT/parity/out/$case.parity-summary.log" 2>&1; then
+      run_rc=0
+    else
+      run_rc=$?
+    fi
+    sample_bucket=exact
+    t=$case_every
+    while [ "$t" -le "$case_run" ]; do
+      if [ ! -f "$ROOT/parity/out/$case.golden.t$t.png" ] || \
+         [ ! -f "$ROOT/parity/out/$case.candidate.t$t.png" ]; then
+        sample_bucket=missing; break
+      fi
+      if [ ! -f "$ROOT/parity/out/$case.report.t$t.json" ]; then
+        sample_bucket=fail; break
+      fi
+      sample_result="$(classify "$case" "$case_tol" "$case_ssim" "$t")"
+      case "$sample_result" in
+        exact) ;;
+        strict) [ "$sample_bucket" = exact ] && sample_bucket=strict ;;
+        near) sample_bucket=near ;;
+        *) sample_bucket=fail; break ;;
+      esac
+      t=$((t + case_every))
+    done
+    if [ "$sample_bucket" = missing ]; then
+      missing=$((missing+1)); echo "[MISSING] $case: timed sample missing"
+    elif [ "$run_rc" -ne 0 ] || [ "$sample_bucket" = fail ]; then
+      fail=$((fail+1)); executed=$((executed+1))
+      echo "[FAIL] $case: timed samples failed (runner exit $run_rc)"
+    else
+      executed=$((executed+1))
+      case "$sample_bucket" in
+        exact) exact=$((exact+1)); echo "[PASS] $case (timed exact)" ;;
+        strict) strict=$((strict+1)); echo "[PASS] $case (timed strict)" ;;
+        near) near=$((near+1)); echo "[NEAR] $case (timed: $case_reason)" ;;
+      esac
+    fi
+    continue
   fi
   echo "[RENDER] $case"
   if ! rm -f "$ROOT/parity/out/$case.parity-summary.report.json" "$ROOT/parity/out/$case.report.json"; then

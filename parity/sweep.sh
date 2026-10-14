@@ -14,7 +14,7 @@ if [ -z "${LEDGER_PATH:-}" ]; then
 		LEDGER_PATH="parity/ledger.json"
 	else
 		LEDGER_PATH="parity/out/ledger.$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m).json"
-		echo "[LEDGER] unqualified host: writing $LEDGER_PATH, not parity/ledger.json"
+		echo "[LEDGER] unqualified host: writing $LEDGER_PATH, not parity/ledger.json" >&2
 	fi
 fi
 RESULTS="$(mktemp -t noisemaker-for-godot-ledger.XXXXXX)"
@@ -28,6 +28,8 @@ record_result() {
 # cross-device; gate them on structural SSIM. (bash 3.2 compatible — no assoc arrays.)
 tol_for() {
 	case "$1" in
+		temporalAberration) echo "2.001 0.98" ;;
+		navierStokes) echo "10.001 0.999" ;;
 		newton) echo "255 0.98" ;;   # Newton-fractal root basins = Julia set (chaotic)
 		edge)   echo "8 0.98" ;;      # ×2 contrast convolution amplifies upstream noise 1-LSB (<0.1% px)
 		pinch|pinchRotated) echo "6 0.98" ;; # AA dFdx/dFdy taps hit neighbor texel under Metal vs WebGPU (<0.1% px)
@@ -65,6 +67,8 @@ tol_for() {
 
 reason_for() {
 	case "$1" in
+		temporalAberration) echo "timed delay-line samples all passed after deterministic warmup" ;;
+		navierStokes) echo "timed fluid-state samples all passed" ;;
 		newton) echo "Newton basin classification is chaotic under cross-backend floating-point rounding" ;;
 		edge|pinch|pinchRotated|uvRemap|lightingRefl|rotate|distortion|spiral|spiralRotated|bulge|degauss|refract) echo "texture-coordinate boundary ties can select adjacent texels across WebGPU and MoltenVK" ;;
 		crt|shadow) echo "transcendental or step threshold ties can flip isolated pixels across GPU compilers" ;;
@@ -89,7 +93,12 @@ if [ "${1:-}" = "--policy" ]; then
 	read -r policy_tolerance policy_ssim <<EOF
 $(tol_for "$2")
 EOF
-	printf '%s\t%s\t%s\n' "$policy_tolerance" "$policy_ssim" "$(reason_for "$2")"
+	case "$2" in
+		temporalAberration) policy_run=30; policy_every=10 ;;
+		navierStokes) policy_run=30; policy_every=5 ;;
+		*) policy_run=0; policy_every=0 ;;
+	esac
+	printf '%s\t%s\t%s\t%s\t%s\n' "$policy_tolerance" "$policy_ssim" "$(reason_for "$2")" "$policy_run" "$policy_every"
 	exit 0
 fi
 
@@ -119,10 +128,11 @@ for dsl in "$ROOT"/parity/programs/*.dsl; do
 	# fluid-state samples rather than from a misleading single frame.
 	case "$name" in
 		temporalAberration|navierStokes)
-			case "$name" in
-				temporalAberration) timed_tol=2.001; timed_ssim=0.98; timed_every=10; timed_reason="timed delay-line samples all passed after deterministic warmup" ;;
-				navierStokes) timed_tol=10.001; timed_ssim=0.999; timed_every=5; timed_reason="timed fluid-state samples all passed" ;;
-			esac
+			read -r timed_tol timed_ssim <<EOF
+$(tol_for "$name")
+EOF
+			case "$name" in temporalAberration) timed_every=10 ;; navierStokes) timed_every=5 ;; esac
+			timed_reason="$(reason_for "$name")"
 			if timed_output=$(SKIP_RENDER=1 GODOT="$GODOT" bash "$ROOT/parity/run_samples.sh" "$name" "$timed_tol" "$timed_ssim" 30 "$timed_every" 256 2>&1); then timed_rc=0; else timed_rc=$?; fi
 			r=$(printf '%s\n' "$timed_output" | grep -E "=== SAMPLES:" | tail -1)
 			echo "$r"

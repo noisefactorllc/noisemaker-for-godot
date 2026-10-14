@@ -101,7 +101,7 @@ class ParitySummaryClassifyTests(unittest.TestCase):
         (out / f"{case}.candidate.png").write_bytes(cand)
         env = {**os.environ, "PARITY_ROOT": str(self.root)}
         return subprocess.run([sys.executable, "-c", self.classify_src, case,
-                               str(tolerance), str(ssim_min)],
+                               str(tolerance), str(ssim_min), ""],
                               capture_output=True, text=True, env=env,
                               cwd=tempfile.gettempdir()).stdout.strip()
 
@@ -152,7 +152,7 @@ class ParitySummaryClassifyTests(unittest.TestCase):
         (out / "a.candidate.png").write_bytes(b"G")
         env = {**os.environ, "PARITY_ROOT": str(self.root)}
         r = subprocess.run([sys.executable, "-c", self.classify_src,
-                            "a", "2.001", "0.98"],
+                            "a", "2.001", "0.98", ""],
                            capture_output=True, text=True, env=env,
                            cwd=tempfile.gettempdir())
         self.assertEqual(r.stdout.strip(), "missing")
@@ -187,8 +187,23 @@ class ParitySummaryFreshArtifactTests(unittest.TestCase):
         self._executable("bin/node", """#!/bin/sh
 case=${2##*/}
 case=${case%.dsl}
-printf FRESH > "$3/$case.golden.png"
 printf '{}' > "$3/$case.graph.json"
+shift 3
+run=0; every=0
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = --run-seconds ]; then run=$2; shift 2
+  elif [ "$1" = --sample-every ]; then every=$2; shift 2
+  else shift; fi
+done
+if [ "$run" -gt 0 ] && [ "$every" -gt 0 ]; then
+  t=$every
+  while [ "$t" -le "$run" ]; do
+    printf FRESH > "$PARITY_FIXTURE_ROOT/parity/out/$case.golden.t$t.png"
+    t=$((t + every))
+  done
+else
+  printf FRESH > "$PARITY_FIXTURE_ROOT/parity/out/$case.golden.png"
+fi
 if [ "${MINT_FAIL:-0}" = 1 ]; then exit 1; fi
 """)
         self._executable("bin/godot", "#!/bin/sh\nexit 0\n")
@@ -204,13 +219,32 @@ elif [ "${REPORT_MODE:-write}" = malformed ]; then
 fi
 if [ "${REPORT_MODE:-write}" = nonzero ]; then exit 1; fi
 """)
+        self._executable("parity/run_samples.sh", """#!/bin/sh
+name=$1; tol=$2; ssim=$3; run=$4; every=$5
+t=$every
+while [ "$t" -le "$run" ]; do
+  if [ "$t" = "${TIMED_NEAR_SAMPLE:-}" ]; then
+    printf DIFFERENT > "$PARITY_FIXTURE_ROOT/parity/out/$name.candidate.t$t.png"
+    printf '{"passed":true,"name":"%s_t%s","max_abs_diff":7,"ssim":0.9999,"tolerance":%s,"ssim_min":%s}' "$name" "$t" "$tol" "$ssim" > "$PARITY_FIXTURE_ROOT/parity/out/$name.report.t$t.json"
+  elif [ "$t" = "${TIMED_BAD_SAMPLE:-}" ]; then
+    printf DIFFERENT > "$PARITY_FIXTURE_ROOT/parity/out/$name.candidate.t$t.png"
+    printf '{"passed":true,"name":"%s_t%s","max_abs_diff":11,"ssim":0.9999,"tolerance":%s,"ssim_min":%s}' "$name" "$t" "$tol" "$ssim" > "$PARITY_FIXTURE_ROOT/parity/out/$name.report.t$t.json"
+  else
+    printf FRESH > "$PARITY_FIXTURE_ROOT/parity/out/$name.candidate.t$t.png"
+    printf '{"passed":true,"name":"%s_t%s","max_abs_diff":0,"ssim":1,"tolerance":%s,"ssim_min":%s}' "$name" "$t" "$tol" "$ssim" > "$PARITY_FIXTURE_ROOT/parity/out/$name.report.t$t.json"
+  fi
+  t=$((t + every))
+done
+echo "=== SAMPLES: $name $((run/every))/$((run/every)) pass ==="
+""")
 
     def _executable(self, relative_path, contents):
         path = self.root / relative_path
         path.write_text(contents)
         path.chmod(0o755)
 
-    def _run(self, report_mode="write", mint_fail="0", rm_fail=False, case="a"):
+    def _run(self, report_mode="write", mint_fail="0", rm_fail=False, case="a",
+             timed_near_sample="", timed_bad_sample=""):
         if rm_fail:
             self._executable("bin/rm", "#!/bin/sh\nexit 1\n")
         env = {**os.environ,
@@ -220,6 +254,8 @@ if [ "${REPORT_MODE:-write}" = nonzero ]; then exit 1; fi
                "PARITY_FIXTURE_ROOT": str(self.root),
                "REPORT_MODE": report_mode,
                "MINT_FAIL": mint_fail,
+               "TIMED_NEAR_SAMPLE": timed_near_sample,
+               "TIMED_BAD_SAMPLE": timed_bad_sample,
                "PATH": str(self.root / "bin") + os.pathsep + os.environ["PATH"]}
         return subprocess.run([str(self.root / "scripts/parity-summary"), case],
                               capture_output=True, text=True, env=env)
@@ -234,6 +270,47 @@ if [ "${REPORT_MODE:-write}" = nonzero ]; then exit 1; fi
         report = json.loads((self.root / "parity/out/spiralRotated.report.json").read_text())
         self.assertEqual(report["tolerance"], 8)
         self.assertEqual(report["ssim_min"], 0.99)
+
+    def test_policy_lookup_has_one_machine_readable_line(self):
+        self._executable("bin/uname", "#!/bin/sh\nif [ \"$1\" = -s ]; then echo Linux; else echo x86_64; fi\n")
+        env = {**os.environ, "PATH": str(self.root / "bin") + os.pathsep + os.environ["PATH"]}
+        result = subprocess.run(["bash", str(self.root / "parity/sweep.sh"),
+                                 "--policy", "spiral"], capture_output=True, text=True,
+                                env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(result.stdout.splitlines()), 1, result.stdout)
+        self.assertEqual(result.stdout.split("\t")[:2], ["8", "0.99"])
+
+    def test_timed_case_uses_sweep_sample_policy(self):
+        (self.root / "parity/programs/navierStokes.dsl").write_text("noise(seed: 1).write(o0)\n")
+        result = self._run(case="navierStokes")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('"expected":1,"executed":1,"exact":1', result.stdout)
+        self.assertTrue((self.root / "parity/out/navierStokes.report.t30.json").exists())
+        self.assertFalse((self.root / "parity/out/navierStokes.report.json").exists())
+        report = json.loads((self.root / "parity/out/navierStokes.report.t30.json").read_text())
+        self.assertEqual(report["tolerance"], 10.001)
+        self.assertEqual(report["ssim_min"], 0.999)
+        self.assertFalse((self.root / "parity/out/navierStokes.golden.png").exists())
+
+    def test_timed_case_accepts_near_sample_within_named_policy(self):
+        (self.root / "parity/programs/navierStokes.dsl").write_text("noise(seed: 1).write(o0)\n")
+        result = self._run(case="navierStokes", timed_near_sample="25")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('"near":1', result.stdout)
+
+    def test_timed_case_rejects_sample_beyond_named_policy(self):
+        (self.root / "parity/programs/navierStokes.dsl").write_text("noise(seed: 1).write(o0)\n")
+        result = self._run(case="navierStokes", timed_bad_sample="25")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('"fail":1', result.stdout)
+
+    def test_timed_case_rejects_missing_sample_after_render(self):
+        (self.root / "parity/programs/temporalAberration.dsl").write_text("noise(seed: 1).write(o0)\n")
+        self._executable("parity/run_samples.sh", "#!/bin/sh\nexit 0\n")
+        result = self._run(case="temporalAberration")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('"missing":1', result.stdout)
 
     def test_malformed_comparator_report_counts_as_failure(self):
         result = self._run(report_mode="malformed")
