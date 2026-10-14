@@ -384,6 +384,21 @@ async function main () {
           input.dispatchEvent(new Event('input', { bubbles: true }))
         })
       }
+      const cpuOverlays = graph.passes
+        .filter(pass => ['fibers', 'scratches', 'strayHair'].includes(pass.func))
+        .map(pass => ({ nodeId: pass.nodeId, effectKey: pass.effectKey, uniforms: pass.uniforms }))
+      if (cpuOverlays.length) {
+        await page.evaluate(async passes => {
+          const pipeline = window.__noisemakerRenderingPipeline
+          if (!pipeline?.checkAsyncRegen || !pipeline?.whenAsyncInitsSettled) {
+            throw new Error('async overlay regeneration unavailable')
+          }
+          for (const pass of passes) {
+            pipeline.checkAsyncRegen(pass.nodeId, pass.effectKey, pass.uniforms)
+          }
+          await pipeline.whenAsyncInitsSettled()
+        }, cpuOverlays)
+      }
       // Keep completed CPU overlays and text while clearing prior frame state.
       const overlayTextureIds = graph.passes
         .filter(pass => ['fibers', 'scratches', 'strayHair', 'text'].includes(pass.func))
