@@ -29,9 +29,11 @@ CAND="$ROOT/parity/out/$NAME.candidate.png"
 
 if [ "${SKIP_RENDER:-0}" != "1" ]; then
 	rm -f "$CAND"
+	render_args=(--graph "$GRAPH" --out "$CAND" --size "$SIZE")
+	[ "$NAME" != "media" ] || render_args+=(--media-fixture)
 	set +e
 	render_log=$("$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
-		--position 5000,5000 -- --graph "$GRAPH" --out "$CAND" --size "$SIZE" 2>&1)
+		--position 5000,5000 -- "${render_args[@]}" 2>&1)
 	render_rc=$?
 	set -e
 	# "ERROR" (Godot ERR_FAIL_* engine messages) must be surfaced: a failed

@@ -418,6 +418,42 @@ async function main () {
       process.stderr.write('[parity] supplied silent waveform fixture (128 samples)\n')
     }
 
+    if (programName === 'media') {
+      const mediaPasses = graph.passes
+        .filter(pass => pass.func === 'media')
+        .map(pass => ({ id: pass.id, textureId: pass.inputs?.imageTex, imageSize: pass.uniforms?.imageSize }))
+      const uploaded = await page.evaluate((passes) => {
+        const renderer = window.__noisemakerCanvasRenderer
+        const runtimePasses = window.__noisemakerRenderingPipeline?.graph?.passes
+        if (typeof renderer?.updateTextureFromSource !== 'function') return false
+        if (!runtimePasses) return false
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = 64
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return false
+        const image = ctx.createImageData(64, 64)
+        for (let y = 0; y < 64; y++) {
+          for (let x = 0; x < 64; x++) {
+            const i = (y * 64 + x) * 4
+            image.data[i] = x * 4
+            image.data[i + 1] = y * 4
+            image.data[i + 2] = (x ^ y) * 4
+            image.data[i + 3] = 255
+          }
+        }
+        ctx.putImageData(image, 0, 0)
+        return passes.every(pass => {
+          const runtimePass = runtimePasses.find(item => item.id === pass.id)
+          if (!runtimePass || !pass.textureId || !Array.isArray(pass.imageSize)) return false
+          runtimePass.uniforms.imageSize = pass.imageSize
+          const result = renderer.updateTextureFromSource(pass.textureId, canvas)
+          return result.width === 64 && result.height === 64
+        })
+      }, mediaPasses)
+      if (!mediaPasses.length || !uploaded) throw new Error('media fixture upload failed')
+      process.stderr.write(`[parity] uploaded media image fixture to ${mediaPasses.map(pass => pass.textureId).join(', ')}\n`)
+    }
+
     // ---- 3. Render + capture: one pinned frame, or timed samples for statefuls.
     if (opts.runSeconds > 0) {
       // Timed-sampling mode (fluid/feedback sims): step total_frames at 1/600

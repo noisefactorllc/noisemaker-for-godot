@@ -26,6 +26,7 @@ func _init() -> void:
 	var run_seconds := 0       # >0 => timed-sampling mode for stateful sims
 	var sample_every_sec := 5
 	var texture_pooling := false
+	var media_fixture := false
 	var i := 0
 	while i < a.size():
 		match a[i]:
@@ -45,6 +46,8 @@ func _init() -> void:
 				sample_every_sec = int(a[i + 1]); i += 2
 			"--texture-pooling":
 				texture_pooling = true; i += 1
+			"--media-fixture":
+				media_fixture = true; i += 1
 			_:
 				i += 1
 	if batch_manifest_path != "":
@@ -53,7 +56,7 @@ func _init() -> void:
 	if (graph_path == "" and dsl_path == "") or out_path == "":
 		printerr("usage: -- (--dsl <dsl> | --graph <json>) --out <png> [--size 256] [--run-seconds N --sample-every S] | --batch-manifest <json>")
 		quit(1); return
-	var ok := _render_request(graph_path, dsl_path, out_path, size, run_seconds, sample_every_sec, texture_pooling)
+	var ok := _render_request(graph_path, dsl_path, out_path, size, run_seconds, sample_every_sec, texture_pooling, media_fixture)
 	quit(0 if ok else 1)
 
 
@@ -80,7 +83,8 @@ func _run_batch(manifest_path: String) -> void:
 
 
 func _render_request(graph_path: String, dsl_path: String, out_path: String, size: int,
-		run_seconds: int, sample_every_sec: int, texture_pooling: bool = false) -> bool:
+		run_seconds: int, sample_every_sec: int, texture_pooling: bool = false,
+		media_fixture: bool = false) -> bool:
 	if (graph_path == "" and dsl_path == "") or out_path == "":
 		printerr("bad render request: graph/dsl and out are required")
 		return false
@@ -120,6 +124,10 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 
 	var backend := Backend.new()
 	backend.setup(rd, "res://addons/noisemaker", Vector2i(size, size))
+	if media_fixture and not _upload_media_fixture(backend, graph):
+		backend.close()
+		rd.free()
+		return false
 	var ok := _render_with_backend(backend, graph, out_path, run_seconds, sample_every_sec,
 		texture_pooling)
 	# Release the backend's GPU handles, then the device. A batch creates one device per
@@ -128,6 +136,42 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 	backend.close()
 	rd.free()
 	return ok
+
+
+func _upload_media_fixture(backend: Backend, graph: Dictionary) -> bool:
+	var texture_ids := {}
+	for pass_data in graph.get("passes", []):
+		if pass_data.get("func", "") == "media":
+			var texture_id := str(pass_data.get("inputs", {}).get("imageTex", ""))
+			if texture_id != "":
+				texture_ids[texture_id] = true
+	if texture_ids.is_empty():
+		printerr("media fixture: graph has no image texture")
+		return false
+	var pixels := PackedByteArray()
+	pixels.resize(64 * 64 * 4)
+	for y in 64:
+		for x in 64:
+			var i := (y * 64 + x) * 4
+			pixels[i] = x * 4
+			pixels[i + 1] = (63 - y) * 4
+			pixels[i + 2] = (x ^ (63 - y)) * 4
+			pixels[i + 3] = 255
+	for texture_id in texture_ids:
+		var format := RDTextureFormat.new()
+		format.width = 64
+		format.height = 64
+		format.format = RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM
+		format.usage_bits = RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT
+		var rid: RID = backend.rd.texture_create(format, RDTextureView.new(), [pixels])
+		if not rid.is_valid():
+			printerr("media fixture: texture allocation failed")
+			return false
+		backend._owned_textures[rid] = true
+		backend._textures[texture_id] = rid
+		backend._tex_dims[texture_id] = Vector2i(64, 64)
+	print("NM_MEDIA_FIXTURE textures=", texture_ids.size())
+	return true
 
 
 func _render_with_backend(backend: Backend, graph: Dictionary, out_path: String, run_seconds: int,
