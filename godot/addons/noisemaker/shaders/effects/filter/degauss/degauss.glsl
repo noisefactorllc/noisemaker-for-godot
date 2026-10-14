@@ -188,7 +188,7 @@ float compute_noise_value(
     float freq_x = max(freq.y, 1.0);
     float freq_y = max(freq.x, 1.0);
 
-    vec2 uv = vec2(
+    precise vec2 uv = vec2(
         (float(coord.x) / width_safe) * freq_x,
         (float(coord.y) / height_safe) * freq_y
     );
@@ -197,13 +197,13 @@ float compute_noise_value(
     float z_base = cos(angle) * speed_;
     float channel_offset = float(channel) * 37.0;
     float seed_offset = float(int(seed)) * 73.0;
-    vec3 base_seed = vec3(
+    precise vec3 base_seed = vec3(
         17.0 + channel_offset + seed_offset,
         29.0 + channel_offset * 1.3 + seed_offset * 1.1,
         47.0 + channel_offset * 1.7 + seed_offset * 0.7
     );
 
-    float base_noise = simplex_noise(vec3(
+    precise float base_noise = simplex_noise(vec3(
         uv.x + base_seed.x,
         uv.y + base_seed.y,
         z_base + base_seed.z
@@ -301,15 +301,15 @@ float warped_channel_value(
     float time_,
     float speed_
 ) {
-    float noise_value = compute_noise_value(coord, width, height, freq, time_, speed_, channel);
-    float centered = (noise_value * 2.0 - 1.0) * mask;
-    float angle = centered * TAU;
+    precise float noise_value = compute_noise_value(coord, width, height, freq, time_, speed_, channel);
+    precise float centered = (noise_value * 2.0 - 1.0) * mask;
+    precise float angle = centered * TAU;
     // Offset in GLOBAL pixel space (fullResolution), not tile resolution:
     // the untiled reference and every tile must displace by the same
     // absolute print-pixel amount or the tiled wobble is renderScale× too
     // small and tiles seam against the full render. width/height are the
     // full-resolution dims passed by main().
-    vec2 offset = vec2(cos(angle), sin(angle)) * displacement_ * vec2(width, height);
+    precise vec2 offset = vec2(cos(angle), sin(angle)) * displacement_ * vec2(width, height);
 
     // Rotate offset by direction
     float dirRad = direction * TAU / 360.0;
@@ -317,7 +317,7 @@ float warped_channel_value(
     float ds = sin(dirRad);
     offset = vec2(offset.x * dc - offset.y * ds, offset.x * ds + offset.y * dc);
     
-    vec2 sample_pos = base_pos + offset;
+    precise vec2 sample_pos = base_pos + offset;
     vec4 sampled = sample_bilinear(sample_pos, resolution.x, resolution.y);
     
     if (channel == 0u) return sampled.r;
