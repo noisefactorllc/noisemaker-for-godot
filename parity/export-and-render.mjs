@@ -375,10 +375,19 @@ async function main () {
       // The reference's deterministic renderer tests avoid the race by driving
       // renderer.render(t) directly without ever calling renderer.start().
       //
-      // Keep completed async CPU overlays while clearing prior frame state.
+      // Resizing recreates external textures. Repaint text through the demo's
+      // existing control path after the final resize so its golden has glyphs.
+      if (graph.passes.some(pass => pass.func === 'text')) {
+        await page.evaluate(() => {
+          const input = document.querySelector('.control-group[data-param-key="text"] textarea')
+          if (!input) throw new Error('text control unavailable after resize')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+        })
+      }
+      // Keep completed CPU overlays and text while clearing prior frame state.
       const overlayTextureIds = graph.passes
-        .filter(pass => ['fibers', 'scratches', 'strayHair'].includes(pass.func))
-        .map(pass => pass.inputs?.overlayTex)
+        .filter(pass => ['fibers', 'scratches', 'strayHair', 'text'].includes(pass.func))
+        .map(pass => pass.inputs?.overlayTex || pass.inputs?.textTex)
         .filter(Boolean)
       const reset = await page.evaluate(resetReferenceState, overlayTextureIds)
       if (reset.error) throw new Error(`state reset failed: ${reset.error}`)
