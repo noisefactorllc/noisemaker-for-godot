@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -178,6 +179,91 @@ class ParitySummaryClassifyTests(unittest.TestCase):
     def test_reportless_candidate_is_fail_not_missing(self):
         src = SCRIPT.read_text()
         self.assertIn("comparator wrote no report", src)
+
+
+class ParitySummaryFreshArtifactTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        for directory in ("scripts", "parity/programs", "parity/out", "bin"):
+            (self.root / directory).mkdir(parents=True)
+        shutil.copy2(SCRIPT, self.root / "scripts/parity-summary")
+        (self.root / "parity/programs/a.dsl").write_text("noise(seed: 1).write(o0)\n")
+        self._executable("bin/node", """#!/bin/sh
+printf FRESH > "$3/a.golden.png"
+printf '{}' > "$3/a.graph.json"
+if [ "${MINT_FAIL:-0}" = 1 ]; then exit 1; fi
+""")
+        self._executable("bin/godot", "#!/bin/sh\nexit 0\n")
+        self._executable("parity/run.sh", """#!/bin/sh
+cp "$PARITY_FIXTURE_ROOT/parity/out/a.golden.png" "$PARITY_FIXTURE_ROOT/parity/out/a.candidate.png"
+if [ "${REPORT_MODE:-write}" = write ]; then
+  printf '{"passed":true}' > "$PARITY_FIXTURE_ROOT/parity/out/a.report.json"
+fi
+""")
+
+    def _executable(self, relative_path, contents):
+        path = self.root / relative_path
+        path.write_text(contents)
+        path.chmod(0o755)
+
+    def _run(self, report_mode="write", mint_fail="0", rm_fail=False):
+        if rm_fail:
+            self._executable("bin/rm", "#!/bin/sh\nexit 1\n")
+        env = {**os.environ,
+               "NM_REFERENCE_ROOT": str(self.root / "reference"),
+               "GODOT": str(self.root / "bin/godot"),
+               "PYTHON": sys.executable,
+               "PARITY_FIXTURE_ROOT": str(self.root),
+               "REPORT_MODE": report_mode,
+               "MINT_FAIL": mint_fail,
+               "PATH": str(self.root / "bin") + os.pathsep + os.environ["PATH"]}
+        return subprocess.run([str(self.root / "scripts/parity-summary"), "a"],
+                              capture_output=True, text=True, env=env)
+
+    def test_existing_golden_is_regenerated_from_reference(self):
+        out = self.root / "parity/out"
+        (out / "a.golden.png").write_bytes(b"STALE")
+        (out / "a.graph.json").write_text("stale")
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((out / "a.golden.png").read_bytes(), b"FRESH")
+        self.assertEqual((out / "a.graph.json").read_text(), "{}")
+        self.assertIn("[MINT] a", result.stdout)
+        self.assertFalse((out / ".parity-summary.lock").exists())
+
+    def test_missing_new_report_cannot_reuse_previous_report(self):
+        out = self.root / "parity/out"
+        (out / "a.report.json").write_text('{"passed":true}')
+        result = self._run(report_mode="omit")
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("comparator wrote no report", result.stdout)
+
+    def test_failed_mint_cannot_leave_partial_golden_for_comparison(self):
+        out = self.root / "parity/out"
+        (out / "a.golden.png").write_bytes(b"STALE")
+        result = self._run(mint_fail="1")
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("[SKIP] a", result.stdout)
+        self.assertFalse((out / "a.golden.png").exists())
+
+    def test_failed_cleanup_cannot_compare_old_artifacts(self):
+        out = self.root / "parity/out"
+        (out / "a.golden.png").write_bytes(b"STALE")
+        (out / "a.graph.json").write_text("stale")
+        result = self._run(mint_fail="1", rm_fail=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("[PASS] a", result.stdout)
+
+    def test_existing_run_lock_prevents_shared_artifact_comparison(self):
+        out = self.root / "parity/out"
+        (out / ".parity-summary.lock").mkdir()
+        (out / "a.golden.png").write_bytes(b"STALE")
+        result = self._run()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("[RENDER] a", result.stdout)
+        self.assertEqual((out / "a.golden.png").read_bytes(), b"STALE")
 
 
 class ParitySummaryScriptContractTests(unittest.TestCase):

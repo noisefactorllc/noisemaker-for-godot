@@ -8,6 +8,8 @@ PATH, so no network and no real tags are involved. Exit codes: 0 proceed,
 
 import os
 import pathlib
+import shlex
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -46,7 +48,8 @@ def make_bindir(with_git=True):
         target = subprocess.run(
             ["which", tool], capture_output=True, text=True, check=True
         ).stdout.strip()
-        (bindir / tool).symlink_to(target)
+        (bindir / tool).write_text(f"#!/bin/sh\nexec {shlex.quote(target)} \"$@\"\n")
+        (bindir / tool).chmod(0o755)
     if with_git:
         fake_git = bindir / "git"
         fake_git.write_text(
@@ -79,8 +82,6 @@ def run_gate(tags, sha=SHA, git_rc=0, url=URL, with_git=True):
             timeout=60,
         )
     finally:
-        import shutil
-
         shutil.rmtree(bindir.parent, ignore_errors=True)
 
 

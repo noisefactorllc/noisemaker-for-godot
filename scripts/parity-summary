@@ -23,7 +23,7 @@
 #             from rendering in this environment ({"<case>": "deferred"}).
 #   skip    — the case cannot execute here: no parity/programs/<case>.dsl, no
 #             Godot binary (GODOT env, /Applications/Godot.app, or godot in
-#             PATH), or no node to mint a missing golden.
+#             PATH), or no node to mint a current golden.
 #   fail    — rendered and compared, comparator exit 1, not covered by a
 #             recorded tolerated mismatch.
 #   missing — expected but no candidate PNG was produced.
@@ -34,8 +34,8 @@
 #
 # Environment: the reference engine checkout (the goldens' authority) comes
 # from NM_REFERENCE_ROOT; when it is unset, the entrypoint pin-clones the
-# reference itself at the bound revision (see below). Missing goldens are
-# minted fresh via parity/export-and-render.mjs at that revision.
+# reference itself at the bound revision (see below). Goldens and graphs are
+# minted fresh via parity/export-and-render.mjs on every run at that revision.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TOL="2.001"
@@ -208,30 +208,45 @@ PYEOF
 
 exact=0; strict=0; near=0; defer=0; skip=0; fail=0; missing=0; executed=0
 mkdir -p "$ROOT/parity/out"
+LOCKDIR="$ROOT/parity/out/.parity-summary.lock"
+if ! mkdir "$LOCKDIR" 2>/dev/null; then
+  echo "parity-summary: output directory is held by another run ($LOCKDIR)" >&2
+  echo "PARITY-SUMMARY {\"expected\":$EXPECTED,\"executed\":0,\"exact\":0,\"strict\":0,\"near\":0,\"defer\":0,\"skip\":$EXPECTED,\"fail\":0,\"missing\":0}"
+  exit 2
+fi
+trap 'rmdir "$LOCKDIR" 2>/dev/null || true' EXIT
 for case in "${CASES[@]}"; do
   if [ "$(is_deferred "$case")" = "yes" ]; then
     defer=$((defer+1)); echo "[DEFER] $case"; continue
   fi
   prog="$ROOT/parity/programs/$case.dsl"
   gold="$ROOT/parity/out/$case.golden.png"
+  graph="$ROOT/parity/out/$case.graph.json"
   if [ ! -f "$prog" ]; then
     skip=$((skip+1)); echo "[SKIP] $case: no parity/programs/$case.dsl"; continue
   fi
-  if [ ! -f "$gold" ]; then
-    if command -v node >/dev/null 2>&1; then
-      echo "[MINT] $case (reference $NM_REFERENCE_ROOT)"
-      node "$ROOT/parity/export-and-render.mjs" "$prog" "$ROOT/parity/out" \
-        --size 256 --backend webgl2 >/dev/null 2>&1 || true
+  if ! rm -f "$gold" "$graph"; then
+    skip=$((skip+1)); echo "[SKIP] $case: cannot clear previous golden and graph"; continue
+  fi
+  if command -v node >/dev/null 2>&1; then
+    echo "[MINT] $case (reference $NM_REFERENCE_ROOT)"
+    if ! node "$ROOT/parity/export-and-render.mjs" "$prog" "$ROOT/parity/out" \
+        --size 256 --backend webgl2 > "$ROOT/parity/out/$case.mint.log" 2>&1; then
+      if ! rm -f "$gold" "$graph"; then
+        skip=$((skip+1)); echo "[SKIP] $case: failed mint left artifacts that could not be cleared"; continue
+      fi
     fi
   fi
-  if [ ! -f "$gold" ]; then
-    skip=$((skip+1)); echo "[SKIP] $case: no golden and it could not be minted"; continue
+  if [ ! -f "$gold" ] || [ ! -f "$graph" ]; then
+    skip=$((skip+1)); echo "[SKIP] $case: current golden and graph could not be minted"; continue
   fi
   if [ -z "$GODOT_BIN" ]; then
     skip=$((skip+1)); echo "[SKIP] $case: no Godot binary (set GODOT)"; continue
   fi
   echo "[RENDER] $case"
-  rm -f "$ROOT/parity/out/$case.parity-summary.report.json"
+  if ! rm -f "$ROOT/parity/out/$case.parity-summary.report.json" "$ROOT/parity/out/$case.report.json"; then
+    skip=$((skip+1)); echo "[SKIP] $case: cannot clear previous comparator reports"; continue
+  fi
   if GODOT="$GODOT_BIN" bash "$ROOT/parity/run.sh" "$case" "$TOL" "$SSIM_MIN" 256 \
       > "$ROOT/parity/out/$case.parity-summary.log" 2>&1; then
     :
