@@ -302,7 +302,12 @@ void main() {
     // angle; only applied in shadows.
     vec2 grad = lumGradient(uv);
     float gradMag = length(grad);
-    float edgeAngle = (gradMag > 1e-5) ? (degrees(atan(grad.y, grad.x)) + 90.0) : 45.0;
+    float gradientAngle = grad.x > 0.0
+        ? atan(grad.y / grad.x)
+        : (grad.x < 0.0
+            ? atan(grad.y / grad.x) + (grad.y >= 0.0 ? 3.14159265359 : -3.14159265359)
+            : atan(grad.y, grad.x));
+    float edgeAngle = (gradMag > 1e-5) ? (degrees(gradientAngle) + 90.0) : 45.0;
     vec2 dir = rotate2D(vec2(1.0, 0.0), edgeAngle);
     float L = runBase * strokeVariation(gc, dir, runBase);
     vec4 layer = brushStrokeField(uv, gc, dir, runBase);
