@@ -527,8 +527,8 @@ vec3 errorDiffusion(vec2 globalCoord, float cellSize, ivec2 texSize) {
         for (int c = -FS_APRON_MAX; c < FS_BLOCK + FS_RPAD; c++) {
             if (c >= -apronX && !(lastRow && c >= lx)) {
                 vec3 src = fsFetchCell(blockOrigin + ivec2(c, r), cellSize, texSize);
-                vec3 v = clamp(src + errRow[c + FS_APRON_MAX + 1] + rightErr + bias, 0.0, 1.0);
-                vec3 err = v - fsQuantize(v);
+                precise vec3 v = clamp(src + errRow[c + FS_APRON_MAX + 1] + rightErr + bias, 0.0, 1.0);
+                precise vec3 err = v - fsQuantize(v);
                 rightErr = err * (7.0 / 16.0);
                 errRow[c + FS_APRON_MAX] += err * (3.0 / 16.0);
                 errRow[c + FS_APRON_MAX + 1] = diag + err * (5.0 / 16.0);
@@ -549,7 +549,7 @@ vec3 errorDiffusion(vec2 globalCoord, float cellSize, ivec2 texSize) {
     // This fragment's own pixel, carrying the diffused error so per-pixel
     // detail survives when a cell spans multiple pixels
     vec3 src = texelFetch(inputTex, ivec2(gl_FragCoord.xy), 0).rgb;
-    vec3 v = clamp(src + carried + bias, 0.0, 1.0);
+    precise vec3 v = clamp(src + carried + bias, 0.0, 1.0);
     return fsQuantize(v);
 }
 
