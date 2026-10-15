@@ -257,7 +257,7 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
         else:
             self.assertFalse((parity / "ledger.json").exists(), result.stdout)
             self.assertEqual(len(host_ledgers), 1, result.stdout + result.stderr)
-            self.assertIn("unqualified host", result.stdout)
+            self.assertIn("unqualified host", result.stderr)
 
     def test_sweep_counts_a_required_dsl_with_no_golden_as_failure(self):
         parity = self.tmp / "parity"
