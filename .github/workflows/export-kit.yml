@@ -19,13 +19,21 @@ concurrency:
 jobs:
   parity:
     if: github.ref == 'refs/heads/main'
-    runs-on: macos-15
+    runs-on:
+      group: noisemaker-gpu
+      labels: [noisemaker-gpu]
     timeout-minutes: 180
     env:
       GODOT_RELEASE: 4.7-stable
       GODOT_ARCHIVE: Godot_v4.7-stable_macos.universal.zip
       GODOT_SHA512: 0d5d635e6d78d4c2b1286586ca62af249609c2f70815b35437049f08476714d08b913faaf8c10f37313c932ee24c4f87a829899c84fa248f788fb612b8f79229
     steps:
+      - name: Require qualified M4 host
+        run: |
+          set -euo pipefail
+          test "$(sysctl -n machdep.cpu.brand_string)" = 'Apple M4'
+          test "$(sysctl -n hw.model)" = 'Mac16,12'
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -43,6 +51,56 @@ jobs:
           python3 -m venv parity/.venv
           parity/.venv/bin/python -m pip install numpy pillow
           npx --yes playwright@1.63.0 install chromium
+
+      - name: Materialize pinned reference as regular files
+        run: |
+          set -euo pipefail
+          pin="$(sed -n 's/^  PIN=//p' scripts/parity-summary)"
+          [[ "$pin" =~ ^[0-9a-f]{40}$ ]]
+          bare="$RUNNER_TEMP/noisemaker-reference.git"
+          reference="$RUNNER_TEMP/noisemaker-reference"
+          git clone -q --bare https://github.com/noisefactorllc/noisemaker "$bare"
+          git -C "$bare" cat-file -e "$pin^{commit}"
+          python3 - "$bare" "$pin" "$reference" <<'PY'
+          from pathlib import Path
+          import shutil
+          import subprocess
+          import sys
+
+          bare, pin, root = sys.argv[1:]
+          root = Path(root)
+          entries = subprocess.check_output(
+              ['git', '-C', bare, 'ls-tree', '-rz', pin]).split(b'\0')
+          links = []
+          for entry in filter(None, entries):
+              metadata, name = entry.split(b'\t', 1)
+              mode, kind, oid = metadata.decode('ascii').split()
+              path = name.decode('utf-8')
+              if mode == '120000':
+                  links.append(path)
+                  continue
+              if mode not in ('100644', '100755') or kind != 'blob':
+                  raise SystemExit(f'unsupported reference entry: {path} ({mode} {kind})')
+              destination = root / path
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              destination.write_bytes(subprocess.check_output(
+                  ['git', '-C', bare, 'cat-file', 'blob', oid]))
+              if mode == '100755':
+                  destination.chmod(0o755)
+          if links != ['shaders/share']:
+              raise SystemExit(f'unexpected reference links: {links}')
+          target = subprocess.check_output(
+              ['git', '-C', bare, 'show', f'{pin}:shaders/share']).decode().strip()
+          if target != '../share':
+              raise SystemExit(f'unexpected shaders/share target: {target}')
+          shutil.copytree(root / 'share', root / 'shaders' / 'share')
+          PY
+          npm install --prefix "$reference" --no-save --no-bin-links --ignore-scripts --package-lock=false --omit=dev playwright@1.63.0
+          if find "$reference" -type l -print -quit | grep -q .; then
+            echo 'reference contains a symbolic link' >&2
+            exit 1
+          fi
+          echo "NM_REFERENCE_ROOT=$reference" >> "$GITHUB_ENV"
 
       - name: Download and verify Godot
         run: |
