@@ -67,6 +67,8 @@ jobs:
     needs: parity
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -95,8 +97,24 @@ jobs:
           owner: noisefactorllc
           repositories: scaffold
 
-      - name: Dispatch export-kit-release
+      - name: Reserve this SHA before dispatch
         if: steps.gate.outputs.release == 'true'
+        id: reserve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          scripts/export-kit-reserve
+          rc=$?
+          set -e
+          case "$rc" in
+            0) echo "release=true" >> "$GITHUB_OUTPUT" ;;
+            1) echo "release=false" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$rc" ;;
+          esac
+
+      - name: Dispatch export-kit-release
+        if: steps.reserve.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |

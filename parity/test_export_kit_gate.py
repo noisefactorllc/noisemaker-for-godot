@@ -16,6 +16,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 GATE = ROOT / "scripts" / "export-kit-gate"
+RESERVE = ROOT / "scripts" / "export-kit-reserve"
 
 SHA = "a" * 40
 OTHER = "b" * 40
@@ -129,6 +130,70 @@ class ExportKitGateTests(unittest.TestCase):
 
     def test_ls_remote_failure_fails_closed(self):
         self.assertEqual(run_gate(LIGHTWEIGHT_AT_SHA, git_rc=128).returncode, 2)
+
+
+class ExportKitReservationTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.directory = pathlib.Path(self.tmp.name)
+        self.state = self.directory / "reservation"
+        self.calls = self.directory / "calls"
+        fake_gh = self.directory / "gh"
+        fake_gh.write_text("""#!/bin/sh
+printf '%s\\n' "$*" >> "$FAKE_CALLS"
+case "$*" in
+  *'-X POST'*)
+    if [ "$FAKE_POST_MODE" = fail ]; then exit 1; fi
+    if [ -f "$FAKE_STATE" ]; then exit 1; fi
+    printf '%s' "$FAKE_SHA" > "$FAKE_STATE"
+    if [ "$FAKE_POST_MODE" = write_then_fail ]; then exit 1; fi
+    printf '%s\\n' "$FAKE_SHA"
+    ;;
+  *)
+    if [ -f "$FAKE_STATE" ]; then cat "$FAKE_STATE"; else exit 1; fi
+    ;;
+esac
+""")
+        fake_gh.chmod(0o755)
+
+    def run_reserve(self, *, sha=SHA, repo="noisefactorllc/noisemaker-for-godot",
+                    post_mode="normal"):
+        env = {**os.environ,
+               "PATH": str(self.directory) + os.pathsep + os.environ["PATH"],
+               "GITHUB_SHA": sha, "GITHUB_REPOSITORY": repo,
+               "FAKE_SHA": sha, "FAKE_STATE": str(self.state),
+               "FAKE_CALLS": str(self.calls), "FAKE_POST_MODE": post_mode}
+        return subprocess.run([str(RESERVE)], capture_output=True, text=True,
+                              env=env)
+
+    def test_new_sha_is_reserved_once(self):
+        result = self.run_reserve()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.state.read_text(), SHA)
+        self.assertIn(f"refs/tags/export-kit-pending-{SHA}", self.calls.read_text())
+        self.assertEqual(self.run_reserve().returncode, 1)
+
+    def test_ambiguous_create_with_existing_exact_ref_skips_dispatch(self):
+        result = self.run_reserve(post_mode="write_then_fail")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+
+    def test_create_failure_without_ref_fails_closed(self):
+        result = self.run_reserve(post_mode="fail")
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+
+    def test_existing_ref_at_wrong_sha_fails_closed(self):
+        self.state.write_text(OTHER)
+        result = self.run_reserve()
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+
+    def test_invalid_source_context_never_calls_api(self):
+        for sha, repo in (("abc", "noisefactorllc/noisemaker-for-godot"),
+                          (SHA, "other/repo")):
+            with self.subTest(sha=sha, repo=repo):
+                result = self.run_reserve(sha=sha, repo=repo)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertFalse(self.calls.exists())
 
 
 if __name__ == "__main__":
