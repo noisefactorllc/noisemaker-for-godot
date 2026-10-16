@@ -46,6 +46,7 @@ GODOT_WINDOWED=(
 	parity.test_missing_effects_live
 	parity.test_shader_compile
 	parity.test_shader_import
+	parity.test_tiled_render
 )
 
 fail() {

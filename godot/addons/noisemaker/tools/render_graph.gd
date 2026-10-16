@@ -27,6 +27,9 @@ func _init() -> void:
 	var sample_every_sec := 5
 	var texture_pooling := false
 	var media_fixture := false
+	var render_scale := 1
+	var tiles := Vector2i.ZERO # nonzero => tiled-export mode: stitch tile canvases
+	var tile_margin := 0
 	var i := 0
 	while i < a.size():
 		match a[i]:
@@ -48,6 +51,13 @@ func _init() -> void:
 				texture_pooling = true; i += 1
 			"--media-fixture":
 				media_fixture = true; i += 1
+			"--render-scale":
+				render_scale = int(a[i + 1]); i += 2
+			"--tiles":
+				var parts: PackedStringArray = a[i + 1].split("x")
+				tiles = Vector2i(int(parts[0]), int(parts[1])); i += 2
+			"--tile-margin":
+				tile_margin = int(a[i + 1]); i += 2
 			_:
 				i += 1
 	if batch_manifest_path != "":
@@ -56,7 +66,8 @@ func _init() -> void:
 	if (graph_path == "" and dsl_path == "") or out_path == "":
 		printerr("usage: -- (--dsl <dsl> | --graph <json>) --out <png> [--size 256] [--run-seconds N --sample-every S] | --batch-manifest <json>")
 		quit(1); return
-	var ok := _render_request(graph_path, dsl_path, out_path, size, run_seconds, sample_every_sec, texture_pooling, media_fixture)
+	var ok := _render_request(graph_path, dsl_path, out_path, size, run_seconds, sample_every_sec,
+			texture_pooling, media_fixture, render_scale, tiles, tile_margin)
 	quit(0 if ok else 1)
 
 
@@ -84,7 +95,8 @@ func _run_batch(manifest_path: String) -> void:
 
 func _render_request(graph_path: String, dsl_path: String, out_path: String, size: int,
 		run_seconds: int, sample_every_sec: int, texture_pooling: bool = false,
-		media_fixture: bool = false) -> bool:
+		media_fixture: bool = false, render_scale: int = 1,
+		tiles: Vector2i = Vector2i.ZERO, tile_margin: int = 0) -> bool:
 	if (graph_path == "" and dsl_path == "") or out_path == "":
 		printerr("bad render request: graph/dsl and out are required")
 		return false
@@ -122,8 +134,21 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 		printerr("RD_NULL: RenderingDevice unavailable (run non-headless, with a window)")
 		return false
 
+	if tiles != Vector2i.ZERO:
+		# Tiled-export mode: the graph renders once untiled at the full render
+		# size, then once per tile at the canvas size, and the tile interiors are
+		# stitched into <out>. The untiled frame lands next to <out> so a checker
+		# can compare stitched against untiled directly.
+		var tiled_ok := _render_tiled(rd, graph, out_path, size, render_scale, tiles,
+				tile_margin)
+		rd.free()
+		return tiled_ok
+
+	var full_px := Vector2i(size * render_scale, size * render_scale)
 	var backend := Backend.new()
-	backend.setup(rd, "res://addons/noisemaker", Vector2i(size, size))
+	backend.setup(rd, "res://addons/noisemaker", full_px)
+	if render_scale != 1:
+		backend._render_scale = float(render_scale)
 	if not _upload_external_overlays(backend, graph, out_path):
 		backend.close()
 		rd.free()
@@ -140,6 +165,76 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 	backend.close()
 	rd.free()
 	return ok
+
+
+# Tiled-export renderer (the reference's calculateTileGrid): render the full frame
+# untiled at full size * render_scale, then render the same graph per tile on a
+# canvas of (tile + 2*margin) * render_scale with the backend's tile context set,
+# crop each canvas's interior, and stitch the interiors into the full frame. The
+# untiled frame lands at <out-base>.untiled.png; <out> receives the stitch.
+func _render_tiled(rd: RenderingDevice, graph: Dictionary, out_path: String, size: int,
+		render_scale: int, tiles: Vector2i, tile_margin: int) -> bool:
+	var full := Vector2i(size, size)
+	if full.x % tiles.x != 0 or full.y % tiles.y != 0:
+		printerr("tiles: full size ", full, " must be a multiple of the tile size ", tiles)
+		return false
+	var full_px := Vector2i(full.x * render_scale, full.y * render_scale)
+	var canvas_px := Vector2i((tiles.x + 2 * tile_margin) * render_scale,
+			(tiles.y + 2 * tile_margin) * render_scale)
+	var untiled_path := out_path.get_basename().trim_suffix(".candidate") + ".untiled.png"
+
+	var ubackend := Backend.new()
+	ubackend.setup(rd, "res://addons/noisemaker", full_px)
+	if render_scale != 1:
+		ubackend._render_scale = float(render_scale)
+	if not _upload_external_overlays(ubackend, graph, out_path):
+		ubackend.close()
+		return false
+	ubackend.render(graph)
+	var untiled_ok := ubackend.save_surface_png(untiled_path)
+	ubackend.close()
+	if not untiled_ok:
+		printerr("tiles: untiled reference render failed")
+		return false
+
+	var stitched := Image.create(full_px.x, full_px.y, false, Image.FORMAT_RGBA8)
+	var cols := full.x / tiles.x
+	var rows := full.y / tiles.y
+	for j in rows:
+		for i in cols:
+			# tileOffset is the canvas origin in full-render pixels, GL space:
+			# the canvas extends tile_margin pixels beyond the tile on every side.
+			var origin := Vector2(float((i * tiles.x - tile_margin) * render_scale),
+					float((j * tiles.y - tile_margin) * render_scale))
+			var backend := Backend.new()
+			backend.setup(rd, "res://addons/noisemaker", canvas_px)
+			if render_scale != 1:
+				backend._render_scale = float(render_scale)
+			backend.set_tile_context(full_px, origin)
+			if not _upload_external_overlays(backend, graph, out_path):
+				backend.close()
+				return false
+			backend.render(graph)
+			var canvas_img: Image = backend._snapshot_surface()
+			backend.close()
+			if canvas_img == null:
+				printerr("tiles: canvas readback failed for tile ", i, ",", j)
+				return false
+			# _snapshot_surface is top-down; the canvas is symmetric around its
+			# center, so the tile interior is the central (tile*rs) square on
+			# both axes regardless of the flip.
+			var crop := canvas_img.get_region(Rect2i(tile_margin * render_scale,
+					tile_margin * render_scale, tiles.x * render_scale,
+					tiles.y * render_scale))
+			# GL rows run bottom-up; place tile row j so the stitch matches the
+			# flipped untiled frame.
+			var dst := Vector2i(i * tiles.x * render_scale,
+					full_px.y - (j + 1) * tiles.y * render_scale)
+			stitched.blit_rect(crop, Rect2i(Vector2i.ZERO, crop.get_size()), dst)
+	var save_ok: bool = stitched.save_png(out_path) == OK
+	print("NM_TILED tiles=", cols, "x", rows, " canvas=", canvas_px, " full=", full_px,
+			" untiled=", untiled_path, " out=", out_path, " ok=", save_ok)
+	return save_ok
 
 
 func _upload_external_overlays(backend: Backend, graph: Dictionary, out_path: String) -> bool:

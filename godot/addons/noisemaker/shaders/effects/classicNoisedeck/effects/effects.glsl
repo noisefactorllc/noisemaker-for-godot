@@ -30,6 +30,14 @@ layout(location = 0) out vec4 frag;
 const float FX_PI = 3.14159265359;
 const float FX_TAU = 6.28318530718;
 
+// The reference maps a full-image coordinate into this tile's input texture as
+// (uv * fullResolution - tileOffset) / textureSize. Untiled, tileOffset is 0
+// and fullResolution is the render size. The division by the texture size is
+// x * rcp(size), which need not return uv exactly; compute it the same way.
+vec2 inputCoord(vec2 uv) {
+	return (uv * fullResolution - tileOffset) / vec2(textureSize(inputTex, 0));
+}
+
 float mapRange(float value, float inMin, float inMax, float outMin, float outMax) {
 	// The final division lowers differently: Dawn computes x * rcp(span)
 	// (approximate reciprocal), ANGLE a correctly-rounded divide, so mapped
@@ -144,7 +152,7 @@ vec3 pixellate(vec2 uv_in, float sizeIn) {
 	float dy = size / fullResolution.y;
 	vec2 uv = uv_in - 0.5;
 	vec2 coord = vec2(dx * floor(uv.x / dx), dy * floor(uv.y / dy)) + 0.5;
-	return texture(inputTex, coord).rgb;
+	return texture(inputTex, inputCoord(coord)).rgb;
 }
 
 vec3 desaturate(vec3 color) {
@@ -249,7 +257,9 @@ vec3 cga(vec4 color, vec2 st, vec2 globalCoord) {
 	float sx = floor(st.x / d) * d;
 	d = ar / amount;
 	float sy = floor(st.y / d) * d;
-	vec4 base = texture(inputTex, vec2(sx, sy));
+	// The block grid is globally anchored, so the snapped block center is a
+	// full-image coordinate; map it into this tile's input texture.
+	vec4 base = texture(inputTex, inputCoord(vec2(sx, sy)));
 	float lum = 0.2126 * base.r + 0.7152 * base.g + 0.0722 * base.b;
 	float o = floor(6.0 * lum);
 	vec3 black = vec3(0.0);
@@ -303,12 +313,14 @@ vec3 subpixel(vec2 st, float scaleIn) {
 }
 
 vec3 bloomFn(vec2 st) {
+	// Bloom samples a small neighborhood of the full-image coordinate st, so
+	// every tap maps through the tile mapping (identity untiled).
 	vec3 sum = vec3(0.0);
-	vec3 orig = texture(inputTex, st).rgb;
+	vec3 orig = texture(inputTex, inputCoord(st)).rgb;
 	float strength = mapRange(effectAmt, 0.0, 20.0, 0.0, 0.25);
 	for (int i = -4; i < 4; i++) {
 		for (int j = -3; j < 3; j++) {
-			sum += texture(inputTex, st + vec2(float(j), float(i)) * 0.004).rgb * strength;
+			sum += texture(inputTex, inputCoord(st + vec2(float(j), float(i)) * 0.004)).rgb * strength;
 		}
 	}
 	vec3 color;
@@ -349,7 +361,7 @@ vec3 zoomBlur(vec2 st) {
 			vec2 tapBudget = vec2(256.0) * invFullResolution;
 			tapB = min(max(tapB, -tapBudget), tapBudget);
 		}
-		vec4 tex = texture(inputTex, st + tapB);
+		vec4 tex = texture(inputTex, inputCoord(st + tapB));
 		products[int(t)] = min(max(tex.rgb * weight, vec3(-1e38)), vec3(1e38));
 		total += min(max(weight, -1e38), 1e38);
 	}

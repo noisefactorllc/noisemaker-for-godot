@@ -141,6 +141,12 @@ var _synth_cache := {}      # "ns/fn" -> synthesized layout
 var render_surface_tex := ""
 var _time := 0.25
 var _render_scale := 1.0
+# Tiled-export context (the reference's calculateTileGrid): when set, fullResolution
+# reports the full render size and tileOffset the current tile canvas's origin in
+# full-render pixels, while resolution and the pass targets stay at the canvas size.
+# ZERO disables tiling (fullResolution == screen, tileOffset == 0).
+var _tile_full_resolution := Vector2i.ZERO
+var _tile_offset := Vector2.ZERO
 # Timed-sampling mode (stateful-sim parity, reference 30s/5s): real per-frame deltaTime
 # and frame index, threaded into _engine_value. Both stay 0 on the default single-frame
 # path, so the 90 isolation effects render byte-identically.
@@ -208,6 +214,15 @@ func get_pass_stats() -> Dictionary:
 
 func render_surface_texture() -> RID:
 	return _textures.get(render_surface_tex, RID())
+
+# Select the tiled-export context for subsequent passes: render targets keep the
+# canvas size while fullResolution and tileOffset place the canvas inside the full
+# render. tileOffset is the canvas origin in full-render pixels, in GL (bottom-left)
+# coordinates, matching the reference's calculateTileGrid. Passing full_resolution
+# Vector2i.ZERO clears the context.
+func set_tile_context(full_resolution: Vector2i, tile_offset: Vector2) -> void:
+	_tile_full_resolution = full_resolution
+	_tile_offset = tile_offset
 
 func setup(p_rd: RenderingDevice, p_addon_dir: String, p_screen: Vector2i) -> void:
 	if _closed:
@@ -1761,10 +1776,14 @@ func _synth_header(layout: Dictionary) -> String:
 
 func _engine_value(name: String) -> Array:
 	match name:
-		"resolution", "fullResolution":
+		"resolution":
+			return [float(screen.x), float(screen.y)]
+		"fullResolution":
+			if _tile_full_resolution != Vector2i.ZERO:
+				return [float(_tile_full_resolution.x), float(_tile_full_resolution.y)]
 			return [float(screen.x), float(screen.y)]
 		"tileOffset":
-			return [0.0, 0.0]
+			return [_tile_offset.x, _tile_offset.y]
 		"time":
 			return [_time]
 		"aspectRatio":
@@ -1775,12 +1794,18 @@ func _engine_value(name: String) -> Array:
 				aspect_inv = 1.0 / (float(screen.x) / float(screen.y))
 			return [aspect_inv]
 		"invFullResolution":
+			# The CPU reciprocal of fullResolution (reference pipeline.js
+			# getUniforms): under tiling fullResolution is the full render
+			# size, not the canvas size.
+			var full := _tile_full_resolution
+			if full == Vector2i.ZERO:
+				full = screen
 			var inv_w := 1.0
 			var inv_h := 1.0
-			if screen.x != 0:
-				inv_w = 1.0 / float(screen.x)
-			if screen.y != 0:
-				inv_h = 1.0 / float(screen.y)
+			if full.x != 0:
+				inv_w = 1.0 / float(full.x)
+			if full.y != 0:
+				inv_h = 1.0 / float(full.y)
 			return [inv_w, inv_h]
 		"renderScale":
 			return [_render_scale]
