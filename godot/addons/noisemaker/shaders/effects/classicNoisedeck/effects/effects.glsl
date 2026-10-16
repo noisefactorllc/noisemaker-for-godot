@@ -142,16 +142,18 @@ vec3 posterizeFn(vec3 color, float levIn) {
 
 vec3 pixellate(vec2 uv_in, float sizeIn) {
 	float size = sizeIn;
-	if (size < 1.0) { return texture(inputTex, uv_in).rgb; }
+	if (size < 1.0) { return texture(inputTex, inputCoord(uv_in)).rgb; }
 	size *= 4.0;
 	// The block grid is anchored to the full image, so its cell size is a
 	// fraction of fullResolution (the tile size under tiling). Untiled the
 	// two resolutions are equal, so this is byte-identical to the previous
-	// resolution-based grid.
-	float dx = size / fullResolution.x;
-	float dy = size / fullResolution.y;
-	vec2 uv = uv_in - 0.5;
-	vec2 coord = vec2(dx * floor(uv.x / dx), dy * floor(uv.y / dy)) + 0.5;
+	// resolution-based grid. The reference multiplies by the reciprocal
+	// instead of dividing; keep its exact rounding.
+	float dx = size * (1.0 / fullResolution.x);
+	float dy = size * (1.0 / fullResolution.y);
+	uv_in -= 0.5;
+	vec2 coord = vec2(dx * floor(uv_in.x / dx), dy * floor(uv_in.y / dy));
+	coord += 0.5;
 	return texture(inputTex, inputCoord(coord)).rgb;
 }
 

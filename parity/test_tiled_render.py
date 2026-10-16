@@ -11,10 +11,19 @@ contract (max_abs_diff and SSIM thresholds). The band is excluded because a
 sample that reaches past the full image clamps untiled but finds real margin
 content under tiling.
 
+The gate renders at a power-of-two render scale (full 256, canvas 128) on
+purpose: pixellate's block centers land on exact texel boundaries, and with
+the pipeline's nearest-neighbor sampler the picked texel there depends on the
+rounding of the final coordinate division. Untiled that division is by the
+full size and tiled by the canvas size, so at non-binary sizes the two chains
+can pick opposite texels of a boundary pair; with exact binary divisions both
+chains agree bit-for-bit, which keeps the proof on the tile mapping itself.
+
 A missing Godot binary is a hard setup failure, not a skip: a runner without
 the engine must fail loudly rather than report a silent 0-test pass.
 """
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -48,11 +57,15 @@ CASES = {
     "bloom": HEADER + f"{NOISE}.effects(effect: 220, effectAmt: 10).write(o0)\nrender(o0)",
     # glyphMap detects tiling from fullResolution and clamps its cell size.
     "glyphMap": HEADER + f"{NOISE}.glyphMap().write(o0)\nrender(o0)",
+    # pixellate grids blocks over fullResolution when size >= 1.
+    "pixellate": HEADER + f"{NOISE}.effects(effect: 100, effectAmt: 2).write(o0)\nrender(o0)",
+    # pixellate's size < 1 branch samples through the tile input mapping.
+    "pixellateSubOne": HEADER + f"{NOISE}.effects(effect: 100, effectAmt: 0.5).write(o0)\nrender(o0)",
 }
 SIZE = 128          # full-frame base pixels (4x4 grid)
 TILE = 32           # tile base pixels
 MARGIN = 16         # canvas margin base pixels on each side
-RENDER_SCALE = 3    # canvas renders at 192 px, the full frame at 384 px
+RENDER_SCALE = 2    # canvas renders at 128 px, the full frame at 256 px
 TOLERANCE = 2.001
 SSIM_MIN = 0.98
 
@@ -98,16 +111,19 @@ def max_abs_diff(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.max(np.abs(a - b)) * 255.0)
 
 
-def global_ssim(a: np.ndarray, b: np.ndarray) -> float:
-    def luma(x):
-        return 0.299 * x[..., 0] + 0.587 * x[..., 1] + 0.114 * x[..., 2]
+_TILED_COMPARE_SPEC = importlib.util.spec_from_file_location(
+    "nm_tiled_compare", Path(__file__).resolve().parent / "compare.py")
+_TILED_COMPARE = importlib.util.module_from_spec(_TILED_COMPARE_SPEC)
+_TILED_COMPARE_SPEC.loader.exec_module(_TILED_COMPARE)
 
-    la, lb = luma(a).ravel(), luma(b).ravel()
-    mu_a, mu_b = la.mean(), lb.mean()
-    var_a, var_b = la.var(), lb.var()
-    cov = ((la - mu_a) * (lb - mu_b)).mean()
-    denom = np.sqrt(var_a * var_b) + 1e-9
-    return float((cov + 0.0) / denom)
+
+def global_ssim(a: np.ndarray, b: np.ndarray) -> float:
+    """The parity comparator's SSIM, loaded from parity/compare.py.
+
+    Loading the function by path keeps this gate identical to the published
+    SSIM gate instead of a drifted copy.
+    """
+    return _TILED_COMPARE.global_ssim(a, b)
 
 
 class TiledRenderTests(unittest.TestCase):
