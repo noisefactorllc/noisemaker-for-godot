@@ -1,9 +1,8 @@
 name: Export kit
 
-# Public repo: holds NO deploy credentials. Dispatches scaffold's
-# export-kit-release.yml, which builds this repo's export kit at this exact
-# SHA and ships it to kits.noisedeck.app. See scaffold
-# docs/runbook/export-kits.md.
+# Public repo: holds NO deploy credentials. Dispatches the export-kit
+# release workflow, which builds this repo's export kit at this exact
+# SHA and ships it to kits.noisedeck.app.
 
 on:
   workflow_dispatch:
@@ -143,7 +142,21 @@ jobs:
           [ "$rc" -eq 0 ] || exit "$rc"
           echo "release=true" >> "$GITHUB_OUTPUT"
 
-      - name: Mint scaffold-dispatch token
+      - name: Check the release dispatch configuration
+        if: steps.gate.outputs.release == 'true'
+        env:
+          RELEASE_REPOSITORY: ${{ secrets.RELEASE_REPOSITORY }}
+          EXPORT_KIT_RELEASE_WORKFLOW: ${{ secrets.EXPORT_KIT_RELEASE_WORKFLOW }}
+        run: |
+          missing=""
+          [ -n "$RELEASE_REPOSITORY" ] || missing="$missing RELEASE_REPOSITORY"
+          [ -n "$EXPORT_KIT_RELEASE_WORKFLOW" ] || missing="$missing EXPORT_KIT_RELEASE_WORKFLOW"
+          if [ -n "$missing" ]; then
+            echo "::error::The release dispatch is not configured. Empty or unset secret(s):$missing"
+            exit 1
+          fi
+
+      - name: Mint release-dispatch token
         if: steps.gate.outputs.release == 'true'
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
@@ -151,7 +164,7 @@ jobs:
           app-id: 2959521
           private-key: ${{ secrets.EHSRE_APP_PRIVATE_KEY }}
           owner: noisefactorllc
-          repositories: scaffold
+          repositories: ${{ secrets.RELEASE_REPOSITORY }}
 
       - name: Reserve this SHA before dispatch
         if: steps.gate.outputs.release == 'true'
@@ -169,13 +182,15 @@ jobs:
             *) exit "$rc" ;;
           esac
 
-      - name: Dispatch export-kit-release
+      - name: Dispatch the export-kit release
         if: steps.reserve.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_REPOSITORY: ${{ secrets.RELEASE_REPOSITORY }}
+          EXPORT_KIT_RELEASE_WORKFLOW: ${{ secrets.EXPORT_KIT_RELEASE_WORKFLOW }}
         run: |
-          gh workflow run export-kit-release.yml \
-            --repo noisefactorllc/scaffold \
+          gh workflow run "$EXPORT_KIT_RELEASE_WORKFLOW" \
+            --repo "$GITHUB_REPOSITORY_OWNER/$RELEASE_REPOSITORY" \
             --ref main \
             -f kit=godot \
             -f sha=${{ github.sha }}
