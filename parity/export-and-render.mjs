@@ -30,7 +30,7 @@
 // and the reference repo at $NM_REFERENCE_ROOT (its shaders/ and demo/ trees).
 // See parity/README.md.
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { dirname, resolve, basename, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { resetReferenceState } from './reference_reset.mjs'
@@ -48,6 +48,52 @@ const REFERENCE_ROOT = resolve(process.env.NM_REFERENCE_ROOT)
 
 const HARNESS = join(REFERENCE_ROOT, 'vendor', 'shade-mcp', 'harness', 'index.js')
 const EXPORT_GRAPH = join(__dirname, '..', 'tools', 'export-graph.mjs')
+
+// The demo page's boot awaits a UI-helper module served from the project's CDN
+// (handfish.noisefactor.io). Some mint environments deny that fetch
+// (net::ERR_ACCESS_DENIED), which aborts the page boot before the renderer
+// global appears, and no golden can be minted. When SHADE_REMOTE_UI_CACHE
+// points at a directory holding fetchable copies of those URLs (keyed by their
+// URL path), the helper is served from there; otherwise the request passes
+// through unchanged. The patched launch is the same module instance the
+// vendored harness imports, so its chromium launches inherit the route. The
+// helper only decorates controls and toasts; it never affects the rendered
+// frame, so a cached copy is pixel-equivalent to the live one.
+const playwright = await import(pathToFileURL(join(REFERENCE_ROOT, 'node_modules', 'playwright', 'index.mjs')).href)
+const chromiumLaunch = playwright.chromium.launch.bind(playwright.chromium)
+playwright.chromium.launch = async function (launchOptions) {
+  const browser = await chromiumLaunch(launchOptions)
+  const cacheDir = process.env.SHADE_REMOTE_UI_CACHE
+  if (!cacheDir) return browser
+  const debug = process.env.SHADE_REMOTE_UI_DEBUG === '1'
+  const serveCached = (context) => context.route(/handfish\.noisefactor\.io\//, (route) => {
+    const url = new URL(route.request().url())
+    const parts = [url.pathname.replace(/^\/+/, '').replace(/[^A-Za-z0-9._-]+/g, '_')]
+    if (url.search) parts.push(url.search.slice(1).replace(/[^A-Za-z0-9._-]+/g, '_'))
+    const cached = join(cacheDir, parts.join('_'))
+    if (debug) process.stderr.write(`[parity] remote-ui ${url} -> ${existsSync(cached) ? 'cache' : 'passthrough'}\n`)
+    if (existsSync(cached)) {
+      const type = url.pathname.endsWith('.css') ? 'text/css' : 'application/javascript'
+      return route.fulfill({ status: 200, contentType: type, body: readFileSync(cached) })
+    }
+    return route.fallback()
+  })
+  // Register the route inside newContext, awaited, so it is active before the
+  // harness creates its page and navigates (a browser-level 'context' event
+  // listener can race the page's first requests).
+  return new Proxy(browser, {
+    get (target, prop, receiver) {
+      if (prop === 'newContext') {
+        return async (...args) => {
+          const context = await target.newContext(...args)
+          await serveCached(context)
+          return context
+        }
+      }
+      return Reflect.get(target, prop, receiver)
+    }
+  })
+}
 
 // Self-contained PNG encoder (Node built-in zlib only) so the harness has NO
 // external npm dependency (pngjs is a reference devDep that may not be installed).
@@ -231,7 +277,18 @@ async function main () {
   } catch (err) {
     const portBusy = pinnedViewerPort !== undefined &&
       /EADDRINUSE|EPERM|listen /.test(String(err))
-    if (!portBusy) throw err
+    if (!portBusy) {
+      // Surface the page's own console/errors: a failed demo boot (for example
+      // a denied network fetch during startup) shows up here, not in the
+      // Playwright timeout.
+      const messages = ((session && session.consoleMessages) || [])
+        .map((m) => `${m.type}: ${m.text}`).slice(0, 20)
+      if (messages.length) {
+        process.stderr.write('[parity] page console during failed boot:\n' +
+          messages.map((m) => '  ' + m).join('\n') + '\n')
+      }
+      throw err
+    }
     process.stderr.write(`[parity] viewer port ${pinnedViewerPort} unavailable (${String(err).split('\n')[0]}), retrying on a free fallback port\n`)
     try { await session.teardown() } catch {}
     delete process.env.SHADE_VIEWER_PORT

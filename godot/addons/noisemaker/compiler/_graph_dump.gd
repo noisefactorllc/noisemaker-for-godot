@@ -14,6 +14,12 @@ func _init() -> void:
 	for f in OS.get_cmdline_user_args():
 		var src := FileAccess.get_file_as_string(f)
 		var graph = Orchestrator.new(reg).build_graph(src)
-		out[f] = {"ok": true, "out": graph}
+		if graph is Dictionary and graph.has("compileError"):
+			# compileGraph throws a plain {code, errors|diagnostics} object for a
+			# rejected program; the oracle stringifies it ("[object Object]"). The
+			# gate compares only the ok flag for files both sides reject.
+			out[f] = {"ok": false, "error": "[object Object]"}
+		else:
+			out[f] = {"ok": true, "out": graph}
 	print("GRAPHDUMP:", JSON.stringify(out))
 	quit(0)

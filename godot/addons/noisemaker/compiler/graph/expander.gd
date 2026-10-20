@@ -172,6 +172,13 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 	var plans: Array = compilation_result.get("plans", [])
 	for plan_index in range(plans.size()):
 		var plan = plans[plan_index]
+		# Branch, Break, Continue and Return plans have no chain. The parser
+		# and validator accept them, but the runtime does not execute them.
+		if not (plan.get("chain") is Array):
+			var keywords := {"Branch": "if", "Break": "break", "Continue": "continue", "Return": "return"}
+			var keyword: String = keywords.get(str(plan.get("type")), str(plan.get("type")))
+			_errors.push_back({"message": "The runtime does not yet execute control flow ('%s')" % keyword})
+			continue
 		var current_input = null
 		var current_input3d = null
 		var current_input_geo = null

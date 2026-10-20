@@ -13,6 +13,10 @@ static func _strip_internal_keys(val):
 		for k in val:
 			if k == "subchainArgumentDiagnostics":
 				continue
+			# The reference stores the let's statement order non-enumerable
+			# (unparse-only); keep it out of the dumped AST the same way.
+			if k == "planIndex":
+				continue
 			if k == "position" and (val[k] is Dictionary and val[k].has("start") and val[k].has("end")):
 				continue
 			d[k] = _strip_internal_keys(val[k])

@@ -47,6 +47,10 @@ var _symbols: Dictionary
 var _enums_project: Dictionary   # effect-choice enum tree (reg.enums.project())
 var _enums_std: Dictionary       # standard enum tree (reg.enums.std())
 var _reported_automation_cycles: Dictionary
+var _top_level_vars: Array       # ast.vars, declared in statement order
+var _next_var: int               # index of the first not-yet-declared let
+var _pending_lets: Dictionary    # names of the lets that come after the current statement
+var _reads_before_let: Dictionary  # Ident positions that already have their read-before-let S003
 
 func _init(registry) -> void:
 	reg = registry
@@ -58,6 +62,10 @@ func validate(ast: Dictionary) -> Dictionary:
 	_temp_index = 0
 	_symbols = {}
 	_reported_automation_cycles = {}
+	_top_level_vars = (ast["vars"] if ast.get("vars") is Array else [])
+	_next_var = 0
+	_pending_lets = {}
+	_reads_before_let = {}
 	_enums_project = reg.enums.project()
 	_enums_std = reg.enums.std()
 
@@ -73,15 +81,18 @@ func validate(ast: Dictionary) -> Dictionary:
 
 	var plans: Array = []
 
-	# var declarations populate the symbol table
-	if ast.get("vars") is Array:
-		for v in ast["vars"]:
-			_bind_var(v)
-
-	for stmt in (ast.get("plans", []) if ast.get("plans") is Array else []):
-		var compiled = _compile_stmt(stmt)
+	# Statements compile in order. Each one sees the lets written before it,
+	# and the latest assignment of a name wins. Lets that come after the
+	# last statement are still declared, so their own checks run.
+	var statements: Array = (ast.get("plans", []) if ast.get("plans") is Array else [])
+	var index := 0
+	while index < statements.size():
+		_declare_vars_before(index)
+		var compiled = _compile_stmt(statements[index])
 		if compiled != null:
 			plans.push_back(compiled)
+		index += 1
+	_declare_vars_before(9223372036854775807)
 
 	var result := {
 		"plans": plans,
@@ -97,6 +108,11 @@ func validate(ast: Dictionary) -> Dictionary:
 # ---------------------------------------------------------------- diagnostics
 
 func _push_diag(code: String, node, message = null) -> void:
+	# An identifier that already has its read-before-let S003 gets no further
+	# diagnostics (matched by its source position; the reference matches the
+	# node object, and one source position is one node).
+	if node is Dictionary and node.has("position") and _reads_before_let.has(node["position"]):
+		return
 	if message == null:
 		message = Diagnostics.default_message(code)
 	var ident_name = _extract_identifier_name(node)
@@ -137,6 +153,40 @@ func _extract_identifier_name(node):
 	if node.get("value"):
 		return _js_value_string(node.get("value"))
 	return "[%s]" % [node.get("type") if node.get("type") != null else "unknown"]
+
+# Top-level lets are declared in statement order (see validate). `_pending_lets`
+# holds the names of the lets that come after the current statement.
+func _declare_vars_before(plan_index: int) -> void:
+	while _next_var < _top_level_vars.size() and int(_top_level_vars[_next_var].get("planIndex", 0)) <= plan_index:
+		_declare_var(_top_level_vars[_next_var])
+		_next_var += 1
+	_pending_lets = {}
+	for i in range(_next_var, _top_level_vars.size()):
+		_pending_lets[_top_level_vars[i]["name"]] = true
+
+# A statement that reads a variable before any let assigns it gets S003
+# "Variable used before assignment" at the identifier. Other diagnostics for
+# that identifier node are not added.
+func _report_reads_before_let(node) -> void:
+	if _pending_lets.is_empty():
+		return
+	if node is Array:
+		for item in node:
+			_report_reads_before_let(item)
+		return
+	if node == null or not (node is Dictionary):
+		return
+	if node.get("type") == "Ident" and _pending_lets.has(node.get("name")) and not _symbols.has(node.get("name")):
+		if not _reads_before_let.has(node.get("position")):
+			var position = node.get("position")
+			if position is Dictionary:
+				_push_diag("S003", {"type": "Ident", "name": node["name"], "loc": {"line": position["line"], "column": position["column"]}})
+			else:
+				_push_diag("S003", {"type": "Ident", "name": node["name"]})
+			_reads_before_let[node.get("position")] = true
+		return
+	for value in node.values():
+		_report_reads_before_let(value)
 
 # ---------------------------------------------------------------- helpers
 
@@ -380,7 +430,7 @@ func _substitute(node, resolving: Array = []):
 		return _resolve_call(mapped_call)
 	return node
 
-func _bind_var(v: Dictionary) -> void:
+func _declare_var(v: Dictionary) -> void:
 	var expr = _substitute(_clone(v.get("expr")), [v.get("name")])
 	if expr is Dictionary and _is_starter_chain(expr):
 		var head = _first_chain_call(expr)
@@ -477,10 +527,12 @@ func _compile_stmt(stmt):
 		return null
 	var t = stmt.get("type")
 	if t == "IfStmt":
+		_report_reads_before_let(stmt.get("condition"))
 		var cond = _eval_condition(stmt.get("condition"))
 		var then_branch = _compile_block(stmt.get("then"))
 		var elif_list: Array = []
 		for e in (stmt.get("elif", []) if stmt.get("elif") is Array else []):
+			_report_reads_before_let(e.get("condition"))
 			elif_list.push_back({"cond": _eval_condition(e.get("condition")), "then": _compile_block(e.get("then"))})
 		var else_branch = _compile_block(stmt.get("else"))
 		return {"type": "Branch", "cond": cond, "then": then_branch, "elif": elif_list, "else": else_branch}
@@ -491,22 +543,40 @@ func _compile_stmt(stmt):
 	if t == "Return":
 		var node := {"type": "Return"}
 		if stmt.get("value") != null:
+			_report_reads_before_let(stmt["value"])
 			node["value"] = _eval_expr(stmt["value"])
 		return node
 	return _compile_chain_statement(stmt)
 
 func _compile_block(body) -> Array:
 	var result: Array = []
+	# A `let` inside a block applies to the rest of that block only, so a
+	# block cannot change how statements outside it compile.
+	var shadowed: Dictionary = {}
 	for s in (body if body is Array else []):
+		if s is Dictionary and s.get("type") == "VarAssign":
+			if not shadowed.has(s.get("name")):
+				shadowed[s["name"]] = {"value": _symbols[s["name"]]} if _symbols.has(s["name"]) else null
+			_declare_var(s)
+			# Kept as the parser node, like the top-level `vars` entries.
+			result.push_back(s)
+			continue
 		var compiled = _compile_stmt(s)
 		if compiled != null:
 			result.push_back(compiled)
+	for name in shadowed:
+		var previous = shadowed[name]
+		if previous != null:
+			_symbols[name] = previous["value"]
+		else:
+			_symbols.erase(name)
 	return result
 
 func _compile_chain_statement(stmt: Dictionary):
 	var chain: Array = []
 	var states: Array = []
 
+	_report_reads_before_let(stmt.get("chain"))
 	var chain_node := {"type": "Chain", "chain": stmt.get("chain")}
 	var has_write = stmt.get("write") != null or stmt.get("write3d") != null
 	if not has_write and _is_starter_chain(chain_node):
@@ -765,6 +835,23 @@ func _resolve_args(call: Dictionary, original: Dictionary, spec: Dictionary, op_
 		var dtype = def.get("type")
 		if dtype == "surface":
 			_resolve_surface_arg(node, def, args, arg_key, call, chain, states, write_name)
+		elif node is Dictionary and node.get("type") == "Call" and node.get("args") is Array \
+				and node["args"].size() == (2 if node.get("name") == "vec2" else 4) \
+				and ((dtype == "vec2" and node.get("name") == "vec2") \
+					or (dtype == "color" and node.get("name") == "vec4" and def.get("default") is Array and def["default"].size() == 4)):
+			# vec2(x, y) on a vec2 parameter, and vec4(x, y, z, w) on a
+			# vec4 parameter (the registry registers vec4 parameters as
+			# `color`; their default keeps its four components). Any other
+			# form, including a wrong component count, takes the branches
+			# below.
+			var value: Array = []
+			for a in node["args"]:
+				if a.get("type") == "Number":
+					value.push_back(a.get("value"))
+				else:
+					_push_diag("S002", a, "Argument out of range for '%s' in %s()" % [dname, call.get("name")])
+					value.push_back(0)
+			args[arg_key] = value
 		elif dtype == "color":
 			if node is Dictionary and node.get("type") == "String":
 				_push_diag("S001", node, "String literal not allowed for color parameter '%s'" % [dname])
@@ -909,7 +996,8 @@ func _resolve_boolean_arg(node, def: Dictionary, dname):
 	if node is Dictionary and node.get("type") == "Number":
 		return node.get("value") != 0
 	if node is Dictionary and node.get("type") == "Func":
-		return {}  # {fn:(state)=>!!fn} -> {} after JSON
+		# {fn:(state)=>!!fn, _ast} -> {_ast} after JSON (the live fn drops)
+		return {"_ast": node}
 	if node is Dictionary and node.get("type") == "Ident" and STATE_VALUES.has(node.get("name")):
 		return {}  # {fn:(state)=>!!state[key]} -> {} after JSON
 	if node is Dictionary and node.get("type") == "Ident" and not STATE_VALUES.has(node.get("name")):
@@ -1020,12 +1108,12 @@ func _resolve_numeric_arg(node, def: Dictionary, dname, call: Dictionary, spec: 
 			value = {"_varRef": node["_varRef"], "value": value}
 		return value
 	if node is Dictionary and node.get("type") == "Func":
-		var v := {}
+		var v := {"_ast": node}  # {fn, min, max, _ast} -> {min, max, _ast} after JSON
 		if def.get("min") != null:
 			v["min"] = def.get("min")
 		if def.get("max") != null:
 			v["max"] = def.get("max")
-		return v  # {fn, min, max} -> {min,max} after JSON
+		return v
 	if node is Dictionary and node.get("type") == "Oscillator":
 		return _compile_automation_descriptor(node)
 	if node is Dictionary and node.get("type") == "Midi":
@@ -1048,12 +1136,13 @@ func _resolve_numeric_arg(node, def: Dictionary, dname, call: Dictionary, spec: 
 		_push_diag("S001", node, "Cannot resolve enum value for '%s': '%s'" % [dname, (".".join(node["path"]) if node.get("path") is Array else (node.get("name") if node.get("name") else "unknown"))])
 		return def.get("default")
 	if node is Dictionary and node.get("type") == "Ident" and STATE_VALUES.has(node.get("name")) and not _is_own_choice(def, node.get("name")):
-		var v := {}
+		# {fn:(state)=>state[key], min, max, _ast} -> {min, max, _ast} after JSON
+		var v := {"_ast": node}
 		if def.get("min") != null:
 			v["min"] = def.get("min")
 		if def.get("max") != null:
 			v["max"] = def.get("max")
-		return v  # {fn:(state)=>state[key], min, max} -> {min,max} after JSON
+		return v
 	if node is Dictionary and node.get("type") == "Ident" and def.get("enum"):
 		var prefix = EnumPaths.normalize_member_path(def.get("enum"))
 		var path = (prefix + [node.get("name")]) if prefix != null else [node.get("name")]

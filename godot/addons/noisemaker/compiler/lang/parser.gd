@@ -498,6 +498,10 @@ func _parse_program() -> Dictionary:
 			stmt["leadingComments"] = leading_comments
 		if stmt != null and stmt is Dictionary:
 			if stmt.get("type") == "VarAssign":
+				# Statement order: the number of plans written before this
+				# let. The validator declares lets in this order; the parity
+				# dumps strip the key (the reference stores it non-enumerable).
+				stmt["planIndex"] = plans.size()
 				vars.push_back(stmt)
 			else:
 				plans.push_back(stmt)
@@ -572,8 +576,19 @@ func _validate_namespace(token) -> void:
 func _parse_block() -> Array:
 	_expect("LBRACE", "Expect '{'")
 	var body: Array = []
-	while _peek().type != "RBRACE" and not _err:
+	while true:
+		if _err:
+			break
+		# Comments attach to the next statement, as at top level.
+		var leading_comments := _collect_comments()
+		if _peek().type == "RBRACE":
+			# Comments before '}' have no statement. The reference keeps them
+			# on the block as a non-enumerable trailingComments list (unparse
+			# only); nothing in this port consumes them, so they are dropped.
+			break
 		var stmt = _parse_statement()
+		if leading_comments.size() > 0 and stmt:
+			stmt["leadingComments"] = leading_comments
 		body.push_back(stmt)
 		while _peek().type == "SEMICOLON":
 			_advance()
@@ -1128,7 +1143,12 @@ func _parse_primary():
 				path.push_back(next.lexeme)
 			if path.size() > 1:
 				return {"type": "Member", "path": path}
-			return {"type": "Ident", "name": path[0]}
+			var ident := {"type": "Ident", "name": path[0]}
+			# Private source position for structured diagnostics; the parity
+			# dumps strip it (the reference stores it non-enumerable).
+			if token.position != null:
+				ident["position"] = token.position.duplicate()
+			return ident
 		"OUTPUT_REF":
 			_advance()
 			return {"type": "OutputRef", "name": token.lexeme}

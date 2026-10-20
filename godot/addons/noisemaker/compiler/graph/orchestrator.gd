@@ -53,6 +53,11 @@ func build_graph(source: String, options: Dictionary = {}) -> Dictionary:
 	if not errors.is_empty():
 		return _compile_rejection("validate", errors)
 	var expanded = Expander.new(reg).expand(validated, options)
+	# compileGraph rejects when the expander reports errors (compiler.js
+	# ERR_EXPANSION_FAILED): e.g. control-flow plans the runtime cannot execute.
+	var expand_errors: Array = expanded.get("errors", []) if expanded.get("errors") is Array else []
+	if not expand_errors.is_empty():
+		return _compile_rejection("expand", expand_errors)
 	var passes: Array = expanded["passes"]
 	var programs: Dictionary = expanded["programs"]
 	var allocations := Resources.allocate_resources(passes)
