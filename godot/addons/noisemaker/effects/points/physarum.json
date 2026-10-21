@@ -8,6 +8,10 @@
   ],
   "description": "Physarum slime mold simulation",
   "globals": {
+    "fieldTex": {
+      "type": "surface",
+      "default": "inputTex"
+    },
     "moveSpeed": {
       "type": "float",
       "default": 1.78,
@@ -86,7 +90,7 @@
         "velTex": "global_vel",
         "rgbaTex": "global_rgba",
         "trailTex": "global_physarum_pheromone",
-        "inputTex": "inputTex"
+        "inputTex": "fieldTex"
       },
       "uniforms": {
         "moveSpeed": "moveSpeed",

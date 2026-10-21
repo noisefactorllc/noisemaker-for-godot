@@ -8,6 +8,10 @@
   ],
   "description": "Type-based attraction/repulsion particle simulation",
   "globals": {
+    "diffuseTex": {
+      "type": "surface",
+      "default": "inputTex"
+    },
     "stateSize": {
       "type": "int",
       "default": 256,
@@ -112,7 +116,7 @@
         "rgbaTex": "global_rgba",
         "dataTex": "global_life_data",
         "forceMatrix": "forceMatrix",
-        "inputTex": "inputTex"
+        "inputTex": "diffuseTex"
       },
       "uniforms": {
         "typeCount": "typeCount",

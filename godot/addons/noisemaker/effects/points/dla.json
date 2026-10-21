@@ -8,6 +8,10 @@
   ],
   "description": "Diffusion-limited aggregation",
   "globals": {
+    "fieldTex": {
+      "type": "surface",
+      "default": "inputTex"
+    },
     "stateSize": {
       "type": "int",
       "default": 256,
@@ -96,7 +100,7 @@
         "velTex": "global_vel",
         "rgbaTex": "global_rgba",
         "gridTex": "global_dla_grid",
-        "inputTex": "inputTex"
+        "inputTex": "fieldTex"
       },
       "uniforms": {
         "stride": "stride",

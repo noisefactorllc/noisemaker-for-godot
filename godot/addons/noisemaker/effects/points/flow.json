@@ -8,6 +8,10 @@
   ],
   "description": "Agent-based luminosity flow field with behaviors",
   "globals": {
+    "fieldTex": {
+      "type": "surface",
+      "default": "inputTex"
+    },
     "stateSize": {
       "type": "int",
       "default": 256,
@@ -111,7 +115,7 @@
         "xyzTex": "global_xyz",
         "velTex": "global_vel",
         "rgbaTex": "global_rgba",
-        "inputTex": "inputTex"
+        "inputTex": "fieldTex"
       },
       "uniforms": {
         "behavior": "behavior",

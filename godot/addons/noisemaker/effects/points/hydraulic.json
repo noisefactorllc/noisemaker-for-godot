@@ -8,6 +8,10 @@
   ],
   "description": "Hydraulic erosion flow simulation (gradient descent)",
   "globals": {
+    "heightTex": {
+      "type": "surface",
+      "default": "inputTex"
+    },
     "stride": {
       "type": "float",
       "default": 10,
@@ -41,7 +45,7 @@
         "xyzTex": "global_xyz",
         "velTex": "global_vel",
         "rgbaTex": "global_rgba",
-        "inputTex": "inputTex"
+        "inputTex": "heightTex"
       },
       "uniforms": {
         "stride": "stride",
