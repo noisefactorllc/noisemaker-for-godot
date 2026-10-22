@@ -236,6 +236,7 @@ function convertEffect (instance, namespace, name, existing) {
   if (instance.outputRgba !== undefined) def.outputRgba = instance.outputRgba
   if (instance.hidden) def.hidden = true
   if (instance.deprecatedBy) def.deprecatedBy = instance.deprecatedBy
+  if (instance.paramAliases) def.paramAliases = instance.paramAliases
 
   return def
 }

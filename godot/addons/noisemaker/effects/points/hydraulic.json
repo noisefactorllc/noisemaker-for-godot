@@ -10,7 +10,13 @@
   "globals": {
     "heightTex": {
       "type": "surface",
-      "default": "inputTex"
+      "default": "none",
+      "colorModeUniform": "fieldActive"
+    },
+    "diffuseTex": {
+      "type": "surface",
+      "default": "none",
+      "colorModeUniform": "diffuseActive"
     },
     "stride": {
       "type": "float",
@@ -45,9 +51,14 @@
         "xyzTex": "global_xyz",
         "velTex": "global_vel",
         "rgbaTex": "global_rgba",
-        "inputTex": "heightTex"
+        "inputTex": "inputTex",
+        "heightTex": "heightTex",
+        "diffuseTex": "diffuseTex",
+        "baseColorTex": "global_hydraulic_base_color"
       },
       "uniforms": {
+        "diffuseActive": "diffuseActive",
+        "fieldActive": "fieldActive",
         "stride": "stride",
         "quantize": "quantize",
         "inverse": "inverse",
@@ -56,9 +67,10 @@
       "outputs": {
         "outXYZ": "global_xyz",
         "outVel": "global_vel",
-        "outRGBA": "global_rgba"
+        "outRGBA": "global_rgba",
+        "outBaseColor": "global_hydraulic_base_color"
       },
-      "drawBuffers": 3
+      "drawBuffers": 4
     },
     {
       "name": "passthrough",
@@ -71,5 +83,17 @@
       }
     }
   ],
-  "textures": {}
+  "textures": {
+    "global_hydraulic_base_color": {
+      "width": {
+        "param": "stateSize",
+        "inherit": true
+      },
+      "height": {
+        "param": "stateSize",
+        "inherit": true
+      },
+      "format": "rgba8"
+    }
+  }
 }

@@ -7,7 +7,8 @@
 //   NM_REFERENCE_ROOT=/path/to/noisemaker GODOT=/path/to/Godot node parity/check_validate.mjs [file...]
 import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { readdirSync, existsSync } from 'node:fs'
+import { readdirSync, existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { execFileSync } from 'node:child_process'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -33,6 +34,16 @@ if (files.length === 0) files = [...gather(join(REPO, 'parity', 'programs')), ..
 files = [...new Set(files.map(f => resolve(f)))].sort()
 if (files.length === 0) { console.error('no DSL files found'); process.exit(2) }
 
+// The alias corpus case (physarum fieldTex -> heightTex, noisemaker 27a2b58f)
+// is validated here but kept out of the standing gather: upstream's graph step
+// predates alias resolution and rejects the deprecated name outright.
+const aliasDir = mkdtempSync(join(tmpdir(), 'nm-alias-'))
+const aliasProgram = join(aliasDir, 'param_aliases_validate.dsl')
+writeFileSync(aliasProgram,
+    'search synth, points, render\n\nnoise(seed: 2, speed: 0).pointsEmit(stateSize: x64)' +
+    '.physarum(fieldTex: read(o0)).pointsRender(density: 0, inputIntensity: 100, intensity: 0).write(o0)\nrender(o0)\n')
+files.push(aliasProgram)
+
 const oracle = JSON.parse(execFileSync('node', [join(REPO, 'tools', 'dump-validate.mjs'), EFFECTS_DIR, ...files],
     { encoding: 'utf8', maxBuffer: 1 << 28 }))
 
@@ -42,6 +53,7 @@ const candRaw = execFileSync(GODOT, ['--headless', '--path', join(REPO, 'godot')
 const markerLine = candRaw.split('\n').find(l => l.startsWith('VALIDATEDUMP:'))
 if (!markerLine) { console.error('no VALIDATEDUMP output. tail:\n' + candRaw.slice(-2000)); process.exit(2) }
 const cand = JSON.parse(markerLine.slice('VALIDATEDUMP:'.length))
+rmSync(aliasDir, { recursive: true, force: true })
 
 function numEq(a, b) {
     if (a === b) return true

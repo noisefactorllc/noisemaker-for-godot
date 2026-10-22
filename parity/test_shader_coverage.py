@@ -107,13 +107,25 @@ class ShaderCoverageTests(unittest.TestCase):
                         isinstance(v.get("type"), str) and v["type"],
                         msg=f"Effect {eff_name} global '{k}' missing valid 'type'",
                     )
-            # Upstream retired deprecated parameter aliases (noisemaker a1a3fa2a):
-            # definitions must not carry a 'paramAliases' field at all.
-            self.assertNotIn(
-                "paramAliases",
-                defn,
-                msg=f"Effect {eff_name} still declares retired 'paramAliases'",
-            )
+            # Upstream retired deprecated parameter aliases (noisemaker a1a3fa2a)
+            # but reintroduced them for the fieldTex -> heightTex rename
+            # (noisemaker 27a2b58f); the converter carries 'paramAliases' through
+            # and the validator resolves them with an S007 deprecation warning.
+            # Each alias target must name a declared global (upstream
+            # effect-validator.js enforces the same shape).
+            aliases = defn.get("paramAliases")
+            if aliases is not None:
+                self.assertIsInstance(aliases, dict, msg=f"Effect {eff_name} paramAliases not a dict")
+                for alias_name, target in aliases.items():
+                    self.assertIsInstance(target, str)
+                    self.assertTrue(
+                        target, msg=f"Effect {eff_name} paramAliases['{alias_name}'] must be a non-empty string"
+                    )
+                    self.assertIn(
+                        target,
+                        globals_dict,
+                        msg=f"Effect {eff_name} paramAliases['{alias_name}'] references unknown global '{target}'",
+                    )
 
     def test_registered_effect_definitions_texture_and_pass_contract(self):
         definitions = sorted(DEFINITIONS.glob("*/*.json"))

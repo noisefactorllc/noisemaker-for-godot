@@ -27,6 +27,7 @@ const ALLOWED_STRING_PARAMS := [
 	"midi.name", "midi.id", "audio.name", "audio.id",
 ]
 const STATE_SURFACES := ["time", "frame", "mouse", "resolution", "seed", "a"]
+const ALIAS_EOL_DATE := "2027-06-01"
 const STATE_VALUES := ["time", "frame", "mouse", "resolution", "seed", "a", "u1", "u2", "u3", "u4", "s1", "s2", "b1", "b2", "a1", "a2", "deltaTime"]
 const SURFACE_PASSTHROUGH_CALLS := ["read"]
 const AUTOMATION_FIELDS := {
@@ -787,12 +788,43 @@ func _ref3d(node, vol_or_geo_kind: String, default_kind: String):
 func _arg(arr, i):
 	return arr[i] if (arr is Array and i < arr.size()) else null
 
+# Mutates `kwargs` in place, mapping deprecated aliases to their new names and
+# emitting a deprecation warning per hit. Mirrors the reference resolveParamAliases.
+func _resolve_param_aliases(op_name: String, kwargs: Dictionary) -> Array:
+	var warnings: Array = []
+	var aliases: Dictionary = reg.param_aliases().get(op_name, {})
+	if aliases.is_empty():
+		return warnings
+
+	for old_name in aliases.keys():
+		if not kwargs.has(old_name):
+			continue
+
+		var new_name: String = aliases[old_name]
+
+		# If the new name is NOT already present, migrate the value.
+		if not kwargs.has(new_name):
+			kwargs[new_name] = kwargs[old_name]
+
+		# Always remove the old key.
+		kwargs.erase(old_name)
+
+		# Always produce a warning.
+		warnings.append(
+			"param '%s' is deprecated, use '%s' instead. Aliases will be removed on %s." % [old_name, new_name, ALIAS_EOL_DATE]
+		)
+
+	return warnings
+
 # Resolve every spec arg of a call into the compiled `args` dict (+ optional argSources sidecar),
 # pushing diagnostics. Mirrors the per-type dispatch in the reference processChain.
 func _resolve_args(call: Dictionary, original: Dictionary, spec: Dictionary, op_name: String, chain: Array, states: Array, write_name) -> Dictionary:
 	var args := {}
 	var arg_sources = null
 	var kw = call.get("kwargs") if call.get("kwargs") is Dictionary else null
+	if kw != null:
+		for w in _resolve_param_aliases(op_name, kw):
+			_push_diag("S007", call, w)
 	var seen := {}
 	var spec_args: Array = spec.get("args", []) if spec.get("args") is Array else []
 	var call_args = call.get("args", [])

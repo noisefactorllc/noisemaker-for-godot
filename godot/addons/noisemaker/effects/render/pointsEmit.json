@@ -8,10 +8,6 @@
   ],
   "description": "Initialize and maintain agent state for particle systems",
   "globals": {
-    "diffuseTex": {
-      "type": "surface",
-      "default": "inputTex"
-    },
     "stateSize": {
       "type": "int",
       "default": 256,
@@ -102,7 +98,7 @@
         "xyzTex": "global_xyz",
         "velTex": "global_vel",
         "rgbaTex": "global_rgba",
-        "inputTex": "diffuseTex"
+        "inputTex": "inputTex"
       },
       "uniforms": {
         "layoutMode": "layout",

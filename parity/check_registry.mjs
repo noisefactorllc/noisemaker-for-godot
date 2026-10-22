@@ -65,7 +65,7 @@ function firstDiff(a, b, path) {
     return `${path}: (object differs)`
 }
 
-const sections = ['ops', 'enums', 'effectAliases', 'effectKeys']
+const sections = ['ops', 'enums', 'effectAliases', 'paramAliases', 'effectKeys']
 let allPass = true
 console.log('REGISTRY PARITY:')
 for (const s of sections) {

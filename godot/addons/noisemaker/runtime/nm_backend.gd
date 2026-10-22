@@ -1729,6 +1729,23 @@ func _synth_layout(ns: String, fn: String, globals: Dictionary) -> Dictionary:
 	# invFullResolution's slot 3 (see ENGINE_SYNTH).
 	var slot := 4
 	var cursor := 0
+	# colorModeUniform globals (surface maps like diffuseTex/heightTex) drive a
+	# synthetic *_active float uniform that the shader reads but that has no
+	# scalar global of its own. Pack them alongside the other synthesized
+	# uniforms so the generated Params block exposes them.
+	for gk in globals:
+		var g = globals[gk]
+		var cm := str(g.get("colorModeUniform", ""))
+		if cm == "" or layout.has(cm):
+			continue
+		if cursor + 1 > 4:
+			slot += 1
+			cursor = 0
+		layout[cm] = {"slot": slot, "components": letters[cursor]}
+		cursor += 1
+		if cursor >= 4:
+			slot += 1
+			cursor = 0
 	for gk in globals:
 		var g = globals[gk]
 		if not g.has("uniform"):

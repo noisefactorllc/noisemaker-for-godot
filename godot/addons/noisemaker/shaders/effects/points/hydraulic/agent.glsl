@@ -5,6 +5,9 @@
 
 // Input state from pipeline (from pointsEmit)
 layout(set = 0, binding = 4) uniform sampler2D inputTex;  // Source texture for gradient descent
+layout(set = 0, binding = 5) uniform sampler2D heightTex; // Optional field texture
+layout(set = 0, binding = 6) uniform sampler2D diffuseTex; // Optional diffuse map
+layout(set = 0, binding = 7) uniform sampler2D baseColorTex; // Base agent color kept while a diffuse map is active
 layout(set = 0, binding = 1) uniform sampler2D xyzTex;    // [x, y, z, alive]
 layout(set = 0, binding = 2) uniform sampler2D velTex;    // [x_dir, y_dir, inertia, 0]
 layout(set = 0, binding = 3) uniform sampler2D rgbaTex;   // [r, g, b, a]
@@ -13,6 +16,35 @@ layout(set = 0, binding = 3) uniform sampler2D rgbaTex;   // [r, g, b, a]
 layout(location = 0) out vec4 outXYZ;
 layout(location = 1) out vec4 outVel;
 layout(location = 2) out vec4 outRGBA;
+layout(location = 3) out vec4 outBaseColor;
+
+
+vec4 selectedDiffuse(vec2 uv) {
+    ivec2 size = textureSize(diffuseTex, 0);
+    ivec2 pixel = clamp(ivec2(clamp(uv, vec2(0.0), vec2(0.999999)) * vec2(size)), ivec2(0), size - 1);
+    return texelFetch(diffuseTex, pixel, 0);
+}
+
+// Color render/pointsEmit gives an agent spawned at pos.
+vec4 spawnColor(vec2 pos) {
+    ivec2 dims = textureSize(inputTex, 0);
+    vec4 sampled = texelFetch(inputTex, ivec2(pos * vec2(dims)), 0);
+    return sampled.a > 0.0 ? sampled : vec4(1.0);
+}
+
+// The agent's color without a diffuse map. baseColorTex keeps it (alpha > 0)
+// while a diffuse map is active and is cleared otherwise, so this is rgba
+// unless the agent still carries a diffuse color and has not respawned.
+vec4 baseColor(ivec2 coord, vec4 rgba, vec2 pos) {
+    vec4 kept = texelFetch(baseColorTex, coord, 0);
+    if (kept.a == 0.0) return rgba;
+    vec4 spawnDelta = abs(round(rgba * 255.0) - round(clamp(spawnColor(pos), 0.0, 1.0) * 255.0));
+    return all(lessThanEqual(spawnDelta, vec4(1.0))) ? rgba : kept;
+}
+
+vec4 keptBaseColor(vec4 base) {
+    return diffuseActive > 0.5 ? vec4(base.rgb, max(base.a, 1.0 / 255.0)) : vec4(0.0);
+}
 
 // === ORIGINAL HFLOW HELPER FUNCTIONS (PRESERVED EXACTLY) ===
 
@@ -65,7 +97,7 @@ float oklab_l(vec3 rgb) {
 vec4 fetch_texel(int x, int y, int width, int height) {
     int wrapped_x = wrap_int(x, width);
     int wrapped_y = wrap_int(y, height);
-    return texelFetch(inputTex, ivec2(wrapped_x, wrapped_y), 0);
+    return fieldActive > 0.5 ? texelFetch(heightTex, ivec2(wrapped_x, wrapped_y), 0) : texelFetch(inputTex, ivec2(wrapped_x, wrapped_y), 0);
 }
 
 float luminance_at(int x, int y, int width, int height) {
@@ -83,6 +115,7 @@ void main() {
     vec4 xyz = texelFetch(xyzTex, coord, 0);
     vec4 vel = texelFetch(velTex, coord, 0);
     vec4 rgba = texelFetch(rgbaTex, coord, 0);
+    vec4 base = baseColor(coord, rgba, xyz.xy);
 
     // Extract components
     // xyz stores normalized coords [0,1], convert to pixel coords for algorithm
@@ -111,6 +144,7 @@ void main() {
         outXYZ = xyz;
         outVel = vel;
         outRGBA = rgba;
+        outBaseColor = keptBaseColor(base);
         return;
     }
 
@@ -189,5 +223,6 @@ void main() {
 
     outXYZ = vec4(newPx, newPy, xyz.z, alive);
     outVel = vec4(normVx, normVy, vz, seed_f);
-    outRGBA = rgba;
+    outRGBA = diffuseActive > 0.5 ? selectedDiffuse(outXYZ.xy) : base;
+    outBaseColor = keptBaseColor(base);
 }

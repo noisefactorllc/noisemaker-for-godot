@@ -73,7 +73,7 @@ func _init(registry) -> void:
 	_surface_ref_re = RegEx.new()
 	_surface_ref_re.compile("^(?:o|vol|geo|xyz|vel|rgba)[0-7]$")
 	_particle_tex_re = RegEx.new()
-	_particle_tex_re.compile("^global_(xyz|vel|rgba|points_trail|life_data)$")
+	_particle_tex_re.compile("^global_(xyz|vel|rgba|points_trail|life_data|[a-z]+_base_color)$")
 
 # ---------------------------------------------------------------- helpers
 
@@ -786,7 +786,11 @@ func _scope_dim_spec(dim_spec, scope_suffix: String, scoped_param_map: Dictionar
 		var original_param = dim_spec["param"]
 		var dimension_scope = _cur_particle_pipeline_id if (original_param == "stateSize" and _cur_particle_pipeline_id != null and not tex_name.begins_with("global_")) else scope_suffix
 		var scoped_param = "volumeSize_%s" % _chain_scope_id if original_param == "volumeSize" else "%s_%s" % [original_param, dimension_scope]
-		scoped_param_map[original_param] = scoped_param
+		# An inherited dimension reads the scope's value and never writes this
+		# effect's own value over it, so it records no mapping (upstream skips
+		# dimSpec.inherit when tracking scoped params).
+		if not dim_spec.get("inherit", false):
+			scoped_param_map[original_param] = scoped_param
 		var d = dim_spec.duplicate(true)
 		d["param"] = scoped_param
 		return d

@@ -44,6 +44,7 @@ var enums: Enums
 var _effects: Dictionary        # lookup key -> effect def (Dictionary)
 var _ops: Dictionary            # "<ns>.<func>" -> {name, args}
 var _effect_aliases: Dictionary # "<ns>.<func>" -> replacement name
+var _param_aliases: Dictionary  # "<ns>.<func>" -> { oldParamName: newParamName }
 var _starter_ops: Dictionary    # set of "<ns>.<func>" that are starters (value = true)
 var _define_map: Dictionary     # "<ns>.<func>" -> {globalKey: DEFINE_NAME} for compile-time defines
 var _loaded := false
@@ -53,6 +54,7 @@ func _init() -> void:
 	_effects = {}
 	_ops = {}
 	_effect_aliases = {}
+	_param_aliases = {}
 	_starter_ops = {}
 	_define_map = {}
 
@@ -82,6 +84,9 @@ func define_map() -> Dictionary:
 
 func effect_aliases() -> Dictionary:
 	return _effect_aliases
+
+func param_aliases() -> Dictionary:
+	return _param_aliases
 
 # Map every registered lookup key to its def's "<ns>.<func>" fingerprint (for parity inspection).
 func effect_key_fingerprints() -> Dictionary:
@@ -191,6 +196,10 @@ func _register_effect(def: Dictionary) -> void:
 	# effect aliases (deprecation: hidden + deprecatedBy) ------------------
 	if def.get("hidden") and def.has("deprecatedBy"):
 		_effect_aliases[ns + "." + fn] = def["deprecatedBy"]
+
+	# param aliases (deprecation: paramAliases) ----------------------------
+	if def.get("paramAliases") is Dictionary:
+		_param_aliases[ns + "." + fn] = def["paramAliases"]
 
 	# starter set (pass-rule; ns.func only — mirrors export-graph) ---------
 	if _is_starter_def(def):

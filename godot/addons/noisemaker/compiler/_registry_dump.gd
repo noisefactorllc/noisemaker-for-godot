@@ -13,6 +13,7 @@ func _init() -> void:
 		"ops": reg.ops_table(),
 		"enums": reg.enums.project(),
 		"effectAliases": reg.effect_aliases(),
+		"paramAliases": reg.param_aliases(),
 		"effectKeys": reg.effect_key_fingerprints(),
 	}
 	print("REGDUMP:", JSON.stringify(out))

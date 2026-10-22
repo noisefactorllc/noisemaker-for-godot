@@ -49,6 +49,51 @@ GODOT_WINDOWED=(
 	parity.test_tiled_render
 )
 
+# Focused-test selection: the supervisor passes this candidate's changed paths
+# in NM_CHANGED_FILES (one per line). When it is set, run only the suites whose
+# module sources exercise those paths; when unset, run everything as before.
+# If no suite references any changed path, keep the full group so coverage
+# cannot silently shrink.
+select_suites() {
+	local entry module path matched c
+	local -a selected=()
+	if [[ -z "${NM_CHANGED_FILES:-}" ]]; then
+		printf '%s\n' "$@"
+		return
+	fi
+	local -a changed=()
+	while IFS= read -r c; do
+		[[ -n "$c" ]] && changed+=("$c")
+	done <<< "$NM_CHANGED_FILES"
+	for entry in "$@"; do
+		module="${entry#parity.}"
+		module="${module%%.*}"
+		path="parity/${module}.py"
+		matched=0
+		for c in "${changed[@]}"; do
+			if grep -qF -e "$c" -e "$(basename "$c")" "$path"; then
+				matched=1
+				break
+			fi
+		done
+		# Definition-driven suites glob the whole effects tree, so they
+		# exercise any changed shader or effect JSON without naming it.
+		if [[ $matched -eq 0 && "$path" == parity/test_shader_coverage.py ]]; then
+			for c in "${changed[@]}"; do
+				case "$c" in
+					*shaders/effects/*|*effects/*|*.glsl|*.json) matched=1; break ;;
+				esac
+			done
+		fi
+		[[ $matched -eq 1 ]] && selected+=("$entry")
+	done
+	if [[ "${#selected[@]}" -eq 0 ]]; then
+		printf '%s\n' "$@"
+		return
+	fi
+	printf '%s\n' "${selected[@]}"
+}
+
 fail() {
 	echo "scripts/test: $*" >&2
 	exit 1
@@ -117,7 +162,9 @@ run_engine_free() {
 	command -v node >/dev/null || fail "node is required"
 	echo "node: $(node --version)"
 	echo "== engine-free suites"
-	run_unittest "${ENGINE_FREE[@]}"
+	local engine_free=()
+	while IFS= read -r line; do engine_free+=("$line"); done < <(select_suites "${ENGINE_FREE[@]}")
+	run_unittest "${engine_free[@]}"
 }
 
 run_godot_headless() {
@@ -137,7 +184,25 @@ run_godot_headless() {
 	grep -qx 'SMOKE: ALL PASS' <<<"$smoke" || fail "compiler smoke did not report SMOKE: ALL PASS"
 
 	echo "== Godot headless suites"
-	run_unittest "${GODOT_HEADLESS[@]}"
+	local godot_headless=()
+	while IFS= read -r line; do godot_headless+=("$line"); done < <(select_suites "${GODOT_HEADLESS[@]}")
+	run_unittest "${godot_headless[@]}"
+
+	if [[ -n "${NM_REFERENCE_ROOT:-}" && -d "$NM_REFERENCE_ROOT" ]]; then
+		echo "== parity gates (reference: $NM_REFERENCE_ROOT)"
+		local gate
+		for gate in check_definitions.mjs check_registry.mjs check_validate.mjs check_expand.mjs; do
+			echo "-- $gate"
+			local gate_out
+			if ! gate_out="$(node "parity/$gate" 2>&1)"; then
+				printf '%s\n' "$gate_out" | tail -n 20
+				fail "$gate failed"
+			fi
+			printf '%s\n' "$gate_out" | tail -n 2
+		done
+	else
+		echo "== parity gates skipped (set NM_REFERENCE_ROOT to a noisemaker checkout)"
+	fi
 }
 
 check_classification

@@ -15,6 +15,7 @@ layout(set = 0, binding = 3) uniform sampler2D rgbaTex;     // [r, g, b, a]
 layout(set = 0, binding = 4) uniform sampler2D dataTex;     // [typeId, mass, 0, 0] - internal
 layout(set = 0, binding = 5) uniform sampler2D forceMatrix; // [strength, prefDist, curveShape, 1]
 layout(set = 0, binding = 6) uniform sampler2D inputTex;    // Source texture for color sampling
+layout(set = 0, binding = 7) uniform sampler2D diffuseTex;  // Optional diffuse map
 
 // Output state (MRT with 4 outputs)
 layout(location = 0) out vec4 outXYZ;
@@ -280,7 +281,9 @@ void main() {
     outXYZ = vec4(pos, 0.0, 1.0);
     outVel = vec4(velocity, age, seed);
 
-	if (useTypeColor != 0.0) {
+	if (diffuseActive > 0.5) {
+        outRGBA = texture(diffuseTex, pos);
+    } else if (useTypeColor != 0.0) {
 		outRGBA = vec4(typeColor(int(typeId), int(typeCount)), 1.0);
     } else {
         outRGBA = texture(inputTex, pos);

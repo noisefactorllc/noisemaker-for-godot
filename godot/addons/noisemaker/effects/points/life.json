@@ -10,7 +10,8 @@
   "globals": {
     "diffuseTex": {
       "type": "surface",
-      "default": "inputTex"
+      "default": "none",
+      "colorModeUniform": "diffuseActive"
     },
     "stateSize": {
       "type": "int",
@@ -116,9 +117,11 @@
         "rgbaTex": "global_rgba",
         "dataTex": "global_life_data",
         "forceMatrix": "forceMatrix",
-        "inputTex": "diffuseTex"
+        "inputTex": "inputTex",
+        "diffuseTex": "diffuseTex"
       },
       "uniforms": {
+        "diffuseActive": "diffuseActive",
         "typeCount": "typeCount",
         "attractionScale": "attractionScale",
         "repulsionScale": "repulsionScale",
