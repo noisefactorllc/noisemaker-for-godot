@@ -110,6 +110,48 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("DIMENSION_TEST: PASS", result.stdout, result.stdout + result.stderr)
 
+    def test_base_color_memory_sizes_like_points_emit_state_when_state_size_is_a_function(self):
+        # Upstream 32d8d3e6: the runtime does not evaluate a function-valued
+        # stateSize, so each texture falls back to its spec's own default.
+        # pointsEmit's state and the behaviors' base color memory are
+        # attachments of one agent pass, so both must fall back to the same
+        # size; numeric values resolve exactly as before.
+        script = """
+            extends SceneTree
+
+            func read_definition(path: String) -> Dictionary:
+                var file := FileAccess.open(path, FileAccess.READ)
+                var parsed = JSON.parse_string(file.get_as_text())
+                file.close()
+                return parsed
+
+            func _init() -> void:
+                var backend = load("res://addons/noisemaker/runtime/nm_backend.gd").new()
+                var flow := read_definition("res://addons/noisemaker/effects/points/flow.json")
+                var points_emit := read_definition("res://addons/noisemaker/effects/render/pointsEmit.json")
+                var flow_spec: Dictionary = flow["textures"]["global_flow_base_color"]["width"]
+                var state_spec: Dictionary = points_emit["textures"]["global_xyz"]["width"]
+                var func_value := {"type": "Func", "src": "128"}
+                var by_function := [
+                    backend.call("_resolve_dim", flow_spec, 512, {"stateSize": func_value}),
+                    backend.call("_resolve_dim", state_spec, 512, {"stateSize": func_value}),
+                ]
+                var by_number := [
+                    backend.call("_resolve_dim", flow_spec, 512, {"stateSize": 128}),
+                    backend.call("_resolve_dim", state_spec, 512, {"stateSize": 128}),
+                ]
+                if by_function == [256, 256] and by_number == [128, 128]:
+                    print("BASE_COLOR_SIZE_TEST: PASS")
+                    quit(0)
+                else:
+                    print("BASE_COLOR_SIZE_TEST: by_function=", by_function, " by_number=", by_number)
+                    quit(1)
+        """
+        result = self._run_godot_script(script)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("BASE_COLOR_SIZE_TEST: PASS", result.stdout, result.stdout + result.stderr)
+
     def test_volume_uniforms_clamp_power_of_two_to_texture_limit(self):
         script = """
             extends SceneTree
