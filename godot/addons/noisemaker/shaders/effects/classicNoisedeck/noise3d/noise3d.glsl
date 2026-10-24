@@ -72,9 +72,9 @@ uvec3 n3_pcg(uvec3 v_in) {
 
 vec3 n3_prng(vec3 p) {
 	vec3 q = p;
-	q.x = (q.x < 0.0) ? (-q.x * 2.0 + 1.0) : (q.x * 2.0);
-	q.y = (q.y < 0.0) ? (-q.y * 2.0 + 1.0) : (q.y * 2.0);
-	q.z = (q.z < 0.0) ? (-q.z * 2.0 + 1.0) : (q.z * 2.0);
+	// Select per component, like the WGSL select(): a software rasterizer
+	// builds each float ternary as a branch, and loops of them build for minutes.
+	q = mix(-q * 2.0 + 1.0, q * 2.0, greaterThanEqual(q, vec3(0.0)));
 	return vec3(n3_pcg(uvec3(q))) / float(0xffffffffu);
 }
 

@@ -55,9 +55,9 @@ uvec3 pcg(uvec3 v_in) {
 
 vec3 prng(vec3 p_in) {
 	vec3 p = p_in;
-	if (p.x >= 0.0) { p.x = p.x * 2.0; } else { p.x = -p.x * 2.0 + 1.0; }
-	if (p.y >= 0.0) { p.y = p.y * 2.0; } else { p.y = -p.y * 2.0 + 1.0; }
-	if (p.z >= 0.0) { p.z = p.z * 2.0; } else { p.z = -p.z * 2.0 + 1.0; }
+	// Select per component, like the WGSL select(): a software rasterizer
+	// builds each float ternary as a branch, and loops of them build for minutes.
+	p = mix(-p * 2.0 + 1.0, p * 2.0, greaterThanEqual(p, vec3(0.0)));
 	return vec3(pcg(uvec3(uint(p.x), uint(p.y), uint(p.z)))) / float(0xffffffffu);
 }
 
