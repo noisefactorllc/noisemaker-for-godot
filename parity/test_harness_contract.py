@@ -763,6 +763,33 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("no candidate", (result.stdout + result.stderr).lower())
 
+    def test_runner_deletes_stale_artifacts_before_missing_graph_exit(self):
+        parity = self.tmp / "parity"
+        (parity / "out").mkdir(parents=True)
+        (parity / ".venv" / "bin").mkdir(parents=True)
+        shutil.copy2(REPO / "parity" / "run.sh", parity / "run.sh")
+        stale_candidate = parity / "out" / "chrome.candidate.png"
+        stale_report = parity / "out" / "chrome.report.json"
+        stale_candidate.write_bytes(b"STALE")
+        stale_report.write_text("{}\n")
+
+        result = subprocess.run(
+            ["bash", str(parity / "run.sh"), "chrome", "0", "0.999"],
+            env={**os.environ, "GODOT": "/bin/false"},
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("missing graph", result.stdout + result.stderr)
+        self.assertFalse(
+            stale_candidate.exists(),
+            "run.sh kept the stale candidate after exiting on a missing graph",
+        )
+        self.assertFalse(
+            stale_report.exists(),
+            "run.sh kept the stale report after exiting on a missing graph",
+        )
+
     def _run_samples_with_fake_renderer(self, renderer_body, stale_candidates=False, compare_body=None):
         parity = self.tmp / "parity"
         (parity / "out").mkdir(parents=True)

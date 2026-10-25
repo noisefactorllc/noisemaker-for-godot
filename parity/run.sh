@@ -23,12 +23,19 @@ PY="$ROOT/parity/.venv/bin/python"
 GRAPH="$ROOT/parity/out/$NAME.graph.json"
 GOLD="$ROOT/parity/out/$NAME.golden.png"
 CAND="$ROOT/parity/out/$NAME.candidate.png"
+REPORT="$ROOT/parity/out/$NAME.report.json"
+
+# Delete the stale candidate and report before any early exit (a missing graph
+# or golden below) so a later classification cannot read an earlier run's
+# artifacts. With SKIP_RENDER=1 the existing candidate is intentionally reused.
+if [ "${SKIP_RENDER:-0}" != "1" ]; then
+	rm -f "$CAND" "$REPORT"
+fi
 
 [ -f "$GRAPH" ] || { echo "missing graph: $GRAPH (run: node tools/export-graph.mjs --file parity/programs/$NAME.dsl $GRAPH)"; exit 2; }
 [ -f "$GOLD" ]  || { echo "missing golden: $GOLD (run the reference harness)"; exit 2; }
 
 if [ "${SKIP_RENDER:-0}" != "1" ]; then
-	rm -f "$CAND"
 	render_args=(--graph "$GRAPH" --out "$CAND" --size "$SIZE")
 	[ "$NAME" != "media" ] || render_args+=(--media-fixture)
 	set +e
