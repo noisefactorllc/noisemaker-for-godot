@@ -27,6 +27,7 @@ ENGINE_FREE=(
 	parity.test_export_kit_gate
 	parity.test_harness_contract
 	parity.test_parity_summary
+	parity.test_doc_count_claims
 	parity.test_shader_coverage
 )
 GODOT_HEADLESS=(
