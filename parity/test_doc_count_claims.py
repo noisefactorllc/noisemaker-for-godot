@@ -11,8 +11,8 @@ The engine-free gate never reports a skip.
 The scan covers tracked docs only: the files git ls-files lists for
 *.md, *.txt, *.cfg and export-kit/*. It matches the count phrasings
 those claims use: "the N effects" and "N effect definitions". Subset
-counts are not catalog claims and stay unscanned. One example is the
-~18-effects drift class in docs/CHAOS-GATE.md.
+counts are not catalog claims and stay unscanned. docs/CHAOS-GATE.md
+documents one such drift class.
 """
 import json
 import os
