@@ -856,7 +856,7 @@ class AddonNoticeTests(unittest.TestCase):
     def test_upstream_engine_notice_ships_with_the_addon(self):
         notice = (self.ADDON / "LICENSE-noisemaker.txt").read_bytes()
         self.assertTrue(notice.startswith(b"MIT License\n"), notice[:40])
-        self.assertIn(b"Copyright (c) 2017-2025 Noise Factor LLC", notice)
+        self.assertIn(b"Copyright (c) 2017-2026 Noise Factor LLC", notice)
         self.assertNotIn(b"\r", notice)
 
 
