@@ -30,6 +30,13 @@ import { readdirSync, statSync, mkdirSync, writeFileSync, readFileSync, existsSy
 import { join, dirname, resolve, basename } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+const argv = process.argv.slice(2)
+const unsupportedFlag = argv.find(arg => arg.startsWith('-') && arg !== '--dry-run')
+if (unsupportedFlag !== undefined) {
+  process.stderr.write(`[convert] FAILED: unsupported flag: ${unsupportedFlag}\n`)
+  process.exit(1)
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // Reference engine path comes from NM_REFERENCE_ROOT (a checkout of the Noisemaker
 // reference repo); this repo does not assume a sibling checkout.
@@ -263,7 +270,6 @@ function* enumerateEffects (filter) {
 }
 
 async function main () {
-  const argv = process.argv.slice(2)
   const dryRun = argv.includes('--dry-run')
   const filter = argv.find(a => !a.startsWith('--')) || null
 

@@ -2,6 +2,7 @@
 """App-free regression tests for the shell parity gate contract."""
 
 import os
+import hashlib
 import importlib.util
 import json
 import shutil
@@ -21,6 +22,90 @@ def load_ledger_writer():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+class DefinitionConverterCliTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="nm-godot-converter-")
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.tool = self.root / "tools" / "convert-definitions.mjs"
+        self.tool.parent.mkdir()
+        shutil.copy2(REPO / "tools" / "convert-definitions.mjs", self.tool)
+        self.reference = self.root / "reference"
+        effects = self.reference / "shaders" / "effects"
+        effects.mkdir(parents=True)
+        (self.reference / "package.json").write_text('{"type":"module"}')
+        manifest = {}
+        for name in ("probe", "other"):
+            effect = effects / "synth" / name
+            effect.mkdir(parents=True)
+            (effect / "definition.js").write_text(
+                "export default " + json.dumps({
+                    "namespace": "synth", "func": name,
+                    "globals": {}, "passes": [],
+                }) + ";\n"
+            )
+            manifest[f"synth/{name}"] = {"starter": True}
+        (effects / "manifest.json").write_text(json.dumps(manifest))
+        self.output = self.root / "godot" / "addons" / "noisemaker" / "effects"
+        (self.output / "synth").mkdir(parents=True)
+        (self.output / "synth" / "probe.json").write_text('{"sentinel":true}\n')
+        self.env = {**os.environ, "NM_REFERENCE_ROOT": str(self.reference)}
+        self.env.pop("NM_OUT_DIR", None)
+
+    def tree_hash(self):
+        digest = hashlib.sha256()
+        for path in sorted(self.output.rglob("*")):
+            if path.is_file():
+                digest.update(path.relative_to(self.output).as_posix().encode() + b"\0")
+                digest.update(path.read_bytes() + b"\0")
+        return digest.hexdigest()
+
+    def run_converter(self, *args):
+        return subprocess.run(
+            ["node", str(self.tool), *args], env=self.env,
+            capture_output=True, text=True,
+        )
+
+    def test_unknown_flags_leave_default_effects_tree_unchanged(self):
+        for args in (("--check",), ("-x",), ("--dry-run=false",),
+                     ("synth/probe", "--check"), ("--dry-run", "--check")):
+            with self.subTest(args=args):
+                before = self.tree_hash()
+                result = self.run_converter(*args)
+                self.assertEqual(before, self.tree_hash(), result.stderr)
+                self.assertNotEqual(result.returncode, 0, result.stderr)
+                self.assertIn(args[-1], result.stderr)
+
+    def test_unknown_flag_rejected_before_reference_loading(self):
+        self.env.pop("NM_REFERENCE_ROOT")
+        before = self.tree_hash()
+        result = self.run_converter("--check")
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--check", result.stderr)
+        self.assertEqual(before, self.tree_hash())
+
+    def test_dry_run_preserves_effects_tree(self):
+        before = self.tree_hash()
+        result = self.run_converter("--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(before, self.tree_hash())
+        self.assertIn("would write", result.stderr)
+
+    def test_bare_sync_writes_default_effects_tree(self):
+        result = self.run_converter()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for name in ("probe", "other"):
+            definition = json.loads((self.output / "synth" / f"{name}.json").read_text())
+            self.assertEqual(definition["func"], name)
+            self.assertTrue(definition["starter"])
+
+    def test_filter_writes_only_selected_effect(self):
+        result = self.run_converter("synth/probe")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads((self.output / "synth" / "probe.json").read_text())["func"], "probe")
+        self.assertFalse((self.output / "synth" / "other.json").exists())
 
 
 class HarnessContractTests(unittest.TestCase):
