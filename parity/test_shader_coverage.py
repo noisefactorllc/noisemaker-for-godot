@@ -68,8 +68,8 @@ def msl_reserved_declarations():
 # effects calling prng() inside loops then spend minutes building one pipeline
 # (noisemaker d0ed94ae, a00e96e4). Each of those effects' prng() must select
 # the fold per component with a boolean mix(), as the WGSL does with select().
-# This port routes classicNoisedeck/noise and classicNoisedeck/noise3d through
-# the shared nm_core variant, like its other shared primitives.
+# classicNoisedeck/noise routes through the shared nm_core variant; classicNoisedeck/noise3d
+# defines its own n3_prng, which already selects the fold with a boolean mix().
 SHADER_ROOT = ADDON / "shaders"
 
 PRNG_FOLD_SOURCES = (
