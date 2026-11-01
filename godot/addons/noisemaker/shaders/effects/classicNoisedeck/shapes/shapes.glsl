@@ -77,13 +77,8 @@ uvec3 pcg(uvec3 v_in) {
     return v;
 }
 
-vec3 prng(vec3 p0) {
-    vec3 p = p0;
-    if (p.x >= 0.0) { p.x = p.x * 2.0; } else { p.x = -p.x * 2.0 + 1.0; }
-    if (p.y >= 0.0) { p.y = p.y * 2.0; } else { p.y = -p.y * 2.0 + 1.0; }
-    if (p.z >= 0.0) { p.z = p.z * 2.0; } else { p.z = -p.z * 2.0 + 1.0; }
-    uvec3 u = pcg(uvec3(p));
-    return vec3(u) / float(0xffffffffu);
+vec3 prng(vec3 p) {
+    return vec3(pcg(uvec3(p))) / float(0xffffffffu);
 }
 
 float periodicFunction(float p) {

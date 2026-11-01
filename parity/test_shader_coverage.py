@@ -77,6 +77,7 @@ PRNG_FOLD_SOURCES = (
     "effects/classicNoisedeck/cellNoise/cellNoise.glsl",
     "effects/classicNoisedeck/moodscape/moodscape.glsl",
     "include/nm_core.glsl",
+    "effects/classicNoisedeck/shapes/shapes.glsl",
     "effects/classicNoisedeck/splat/splat.glsl",
     "effects/filter/corrupt/corrupt.glsl",
     "effects/filter/lensWarp/lensWarp.glsl",
