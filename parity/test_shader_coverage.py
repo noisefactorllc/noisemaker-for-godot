@@ -63,12 +63,72 @@ def msl_reserved_declarations():
     return found
 
 
+# prng() once folded each component's sign through a float ternary or an
+# if/else branch. Software rasterizers build each of those as a branch, and
+# effects calling prng() inside loops then spend minutes building one pipeline
+# (noisemaker d0ed94ae, a00e96e4). Each of those effects' prng() must select
+# the fold per component with a boolean mix(), as the WGSL does with select().
+# This port routes classicNoisedeck/noise and classicNoisedeck/noise3d through
+# the shared nm_core variant, like its other shared primitives.
+SHADER_ROOT = ADDON / "shaders"
+
+PRNG_FOLD_SOURCES = (
+    "effects/classicNoisedeck/caustic/caustic.glsl",
+    "effects/classicNoisedeck/cellNoise/cellNoise.glsl",
+    "effects/classicNoisedeck/moodscape/moodscape.glsl",
+    "include/nm_core.glsl",
+    "effects/classicNoisedeck/splat/splat.glsl",
+    "effects/filter/corrupt/corrupt.glsl",
+    "effects/filter/lensWarp/lensWarp.glsl",
+    "effects/filter/warp/warp.glsl",
+    "effects/mixer/cellSplit/cellSplit.glsl",
+    "effects/synth/cell/cell.glsl",
+    "effects/synth/gabor/gabor.glsl",
+    "effects/synth/gradient/gradient.glsl",
+    "effects/synth/noise/noise.glsl",
+    "effects/synth/perlin/perlin.glsl",
+    "effects/synth/shape/shape.glsl",
+)
+
+PRNG_BODY = re.compile(r"\bvec3 prng\s*\([^)]*\)\s*\{")
+
+
+def prng_branched_sign_folds():
+    found = []
+    for name in PRNG_FOLD_SOURCES:
+        shader = SHADER_ROOT / name
+        if not shader.is_file():
+            found.append(f"{name}: missing")
+            continue
+        source = COMMENT.sub("", shader.read_text(encoding="utf-8"))
+        bodies = []
+        for match in PRNG_BODY.finditer(source):
+            depth, end = 1, match.end()
+            while depth and end < len(source):
+                if source[end] == "{":
+                    depth += 1
+                elif source[end] == "}":
+                    depth -= 1
+                end += 1
+            bodies.append(source[match.end():end - 1])
+        if not bodies:
+            found.append(f"{name}: no vec3 prng()")
+            continue
+        for body in bodies:
+            if "?" in body or re.search(r"\bif\s*\(", body):
+                found.append(f"{name}: prng() folds with a branch or ternary")
+    return found
+
+
 class ShaderCoverageTests(unittest.TestCase):
     def test_every_definition_pass_has_its_required_shader_stages(self):
         self.assertEqual([], missing_required_shaders())
 
     def test_no_shader_function_takes_an_msl_reserved_name(self):
         self.assertEqual([], msl_reserved_declarations())
+
+    def test_no_prng_sign_fold_selects_with_a_branch_or_ternary(self):
+        self.assertEqual([], prng_branched_sign_folds())
 
     def test_registered_effect_definitions_satisfy_specification(self):
         definitions = sorted(DEFINITIONS.glob("*/*.json"))
