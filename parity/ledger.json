@@ -4376,6 +4376,26 @@
     }
   },
   {
+    "program": "polygonHardEdge",
+    "effect": null,
+    "mode": "default",
+    "golden": "parity/out/polygonHardEdge.golden.png",
+    "candidate": "parity/out/polygonHardEdge.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 0.0,
+    "mean_abs_diff": 0.0,
+    "ssim": 1.0,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
     "program": "pondRipples",
     "effect": "filter/pondRipples",
     "mode": "default",
