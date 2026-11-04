@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # scripts/parity-summary [case-id ...]
+# Requires bash 4.3 or newer for the bounded 'wait -n' job overlap; on older
+# bash the guard degrades to batched overlap and results are unchanged.
 #
 # Renders the current authority's manifest cases with this port (Godot) and
 # compares each with the authority's golden, then prints one summary line:
@@ -307,8 +309,6 @@ trap 'rc=$?; rmdir "$LOCKDIR" 2>/dev/null || true; printf "GATE-COMPLETED rc=%s\
 # runs concurrently under a bounded job count. Default keeps every required
 # case of the native profile overlapping; NM_CASE_JOBS=1 restores sequential
 # execution.
-RESULTS_TAG_DIR="$ROOT/parity/out/.case-results.$$"
-mkdir -p "$RESULTS_TAG_DIR"
 # Phase 1 (concurrent): mint each case's golden and graph with the browser
 # harness. Browsers parallelize cleanly; this is the cold path's dominant
 # cost. Phase 2 (sequential): render and classify with Godot — concurrent
@@ -510,7 +510,6 @@ for case in "${CASES[@]}"; do
     *)       skip=$((skip+1)) ;;
   esac
 done
-rm -rf "$RESULTS_TAG_DIR" 2>/dev/null || true
 
 echo "PARITY-SUMMARY {\"expected\":$EXPECTED,\"executed\":$executed,\"exact\":$exact,\"strict\":$strict,\"near\":$near,\"defer\":$defer,\"skip\":$skip,\"fail\":$fail,\"missing\":$missing}"
 if [ "$executed" -eq "$EXPECTED" ] && [ "$((exact+strict+near))" -eq "$EXPECTED" ] \
