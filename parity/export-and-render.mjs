@@ -30,7 +30,14 @@
 // and the reference repo at $NM_REFERENCE_ROOT (its shaders/ and demo/ trees).
 // See parity/README.md.
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, chmodSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, chmodSync, writeSync } from 'node:fs'
+
+// process.stdout.write buffers when stdout is a pipe; a runner that kills this
+// process on its engine deadline then loses every buffered diagnostic line.
+// writeSync to fd 1 (and 2) is synchronous, so the last stage reaches the
+// receipt even when the mint is killed mid-run.
+const nout = (s) => { try { writeSync(1, s) } catch { /* stdout closed */ } }
+const nerr = (s) => { try { writeSync(2, s) } catch { /* stderr closed */ } }
 import { spawnSync } from 'node:child_process'
 import { homedir } from 'node:os'
 import { dirname, resolve, basename, join } from 'node:path'
@@ -131,7 +138,7 @@ playwright.chromium.launch = async function (launchOptions) {
   const ensureChromiumBuild = () => {
     const extra = merged.headless === false ? [] : ['--only-shell']
     const res = spawnSync(process.execPath, [join(moduleDir, 'cli.js'), 'install', 'chromium', ...extra], { stdio: 'inherit' })
-    if (res.error) process.stdout.write(`[parity] browser build install failed: ${res.error.message}\n`)
+    if (res.error) nout(`[parity] browser build install failed: ${res.error.message}\n`)
     else markBrowserBinariesExecutable(process.env.PLAYWRIGHT_BROWSERS_PATH || '')
   }
   ensureChromiumBuild()
@@ -141,7 +148,7 @@ playwright.chromium.launch = async function (launchOptions) {
   } catch (err) {
     let exe = ''
     try { exe = playwright.chromium.executablePath() } catch {}
-    process.stdout.write(`[parity] chromium launch failed: executable=${exe || '?'} exists=${exe ? existsSync(exe) : '?'} platform=${process.platform} browsersPath=${process.env.PLAYWRIGHT_BROWSERS_PATH || '(default)'}\n`)
+    nout(`[parity] chromium launch failed: executable=${exe || '?'} exists=${exe ? existsSync(exe) : '?'} platform=${process.platform} browsersPath=${process.env.PLAYWRIGHT_BROWSERS_PATH || '(default)'}\n`)
     throw err
   }
   const cacheDir = process.env.SHADE_REMOTE_UI_CACHE
@@ -152,7 +159,7 @@ playwright.chromium.launch = async function (launchOptions) {
     if (url.search) parts.push(url.search.slice(1).replace(/[^A-Za-z0-9._-]+/g, '_'))
     if (cacheDir) {
       const cached = join(cacheDir, parts.join('_'))
-      if (debug) process.stdout.write(`[parity] remote-ui ${url} -> ${existsSync(cached) ? 'cache' : 'passthrough'}\n`)
+      if (debug) nout(`[parity] remote-ui ${url} -> ${existsSync(cached) ? 'cache' : 'passthrough'}\n`)
       if (existsSync(cached)) {
         const type = url.pathname.endsWith('.css') ? 'text/css' : 'application/javascript'
         return route.fulfill({ status: 200, contentType: type, body: readFileSync(cached) })
@@ -335,7 +342,7 @@ function dataUriToBuffer (uri) {
 async function main () {
   const opts = parseArgs(process.argv.slice(2))
   if (!opts.programPath || !opts.outDir) {
-    process.stdout.write('usage: node export-and-render.mjs <program.dsl> <outDir> ' +
+    nout('usage: node export-and-render.mjs <program.dsl> <outDir> ' +
       '[--time 0.25] [--size 256] [--backend webgl2|webgpu]\n')
     process.exit(2)
   }
@@ -349,7 +356,7 @@ async function main () {
   const graph = await exportGraph(dsl)
   const graphPath = join(opts.outDir, `${programName}.graph.json`)
   writeFileSync(graphPath, JSON.stringify(graph, null, 2) + '\n')
-  process.stdout.write(`[parity] wrote ${graphPath}\n`)
+  nout(`[parity] wrote ${graphPath}\n`)
 
   // ---- 2. Render the golden frame via the Playwright harness ---------------
   // Configure the harness via SHADE_* env (read by BrowserSession.getConfig()).
@@ -381,7 +388,7 @@ async function main () {
     await session.setup()
   } catch (err) {
     if (pinnedViewerPort !== undefined && listenError(err)) {
-      process.stdout.write(`[parity] viewer port ${pinnedViewerPort} unavailable (${String(err).split('\n')[0]}), retrying on a free fallback port\n`)
+      nout(`[parity] viewer port ${pinnedViewerPort} unavailable (${String(err).split('\n')[0]}), retrying on a free fallback port\n`)
       try { await session.teardown() } catch {}
       delete process.env.SHADE_VIEWER_PORT
       session = new BrowserSession({ backend: opts.backend })
@@ -391,7 +398,7 @@ async function main () {
       // on the same port: teardown releases the server even when the browser
       // never started, and a fresh launch is the only repair a port change
       // cannot provide.
-      process.stdout.write(`[parity] browser setup failed on the pinned viewer port ${pinnedViewerPort} (${String(err).split('\n')[0]}), retrying once on the same port\n`)
+      nout(`[parity] browser setup failed on the pinned viewer port ${pinnedViewerPort} (${String(err).split('\n')[0]}), retrying once on the same port\n`)
       try { await session.teardown() } catch {}
       session = new BrowserSession({ backend: opts.backend })
       await session.setup()
@@ -402,7 +409,7 @@ async function main () {
       const messages = ((session && session.consoleMessages) || [])
         .map((m) => `${m.type}: ${m.text}`).slice(0, 20)
       if (messages.length) {
-        process.stdout.write('[parity] page console during failed boot:\n' +
+        nout('[parity] page console during failed boot:\n' +
           messages.map((m) => '  ' + m).join('\n') + '\n')
       }
       throw err
@@ -425,7 +432,7 @@ async function main () {
   const watchdog = setTimeout(async () => {
     let pipeline = '?'
     try { pipeline = String(await page.evaluate(() => !!window.__noisemakerRenderingPipeline)) } catch {}
-    process.stdout.write(`[parity] mint watchdog fired after ${watchdogMs}ms: url=${page.url()} pipeline=${pipeline}\n` +
+    nout(`[parity] mint watchdog fired after ${watchdogMs}ms: url=${page.url()} pipeline=${pipeline}\n` +
       (consoleTail.length
         ? '[parity] page console tail:\n' + consoleTail.map((m) => '  ' + m).join('\n') + '\n'
         : '[parity] page console: empty\n'))
@@ -599,7 +606,7 @@ async function main () {
       const overlayTextureIds = overlayBindings.map(binding => binding.id)
       const reset = await page.evaluate(resetReferenceState, overlayTextureIds)
       if (reset.error) throw new Error(`state reset failed: ${reset.error}`)
-      process.stdout.write(`[parity] reset ${reset.textureCount} textures and ${reset.normalizedSurfaces.length} ping-pong surfaces before the 8-frame protocol\n`)
+      nout(`[parity] reset ${reset.textureCount} textures and ${reset.normalizedSurfaces.length} ping-pong surfaces before the 8-frame protocol\n`)
       if (overlayTextureIds.length && opts.backend === 'webgl2') {
         const overlays = await page.evaluate(ids => {
           const backend = window.__noisemakerRenderingPipeline?.backend
@@ -637,7 +644,7 @@ async function main () {
           // readPixels row zero is the GL bottom row. Preserve that byte order;
           // the Godot uploader consumes this PNG without another Y flip.
           writeFileSync(path, encodePng(overlay.width, overlay.height, Buffer.from(overlay.pixels)))
-          process.stdout.write(`[parity] wrote ${path}\n`)
+          nout(`[parity] wrote ${path}\n`)
         }
       }
     }
@@ -659,7 +666,7 @@ async function main () {
         )
       })
       if (!mesh.success || mesh.vertexCount !== 3) throw new Error('mesh fixture upload failed')
-      process.stdout.write('[parity] uploaded mesh0 triangle fixture (3 vertices)\n')
+      nout('[parity] uploaded mesh0 triangle fixture (3 vertices)\n')
     }
 
     if (graph.passes.some(pass => pass.func === 'scope')) {
@@ -672,7 +679,7 @@ async function main () {
         return true
       })
       if (!audio) throw new Error('silent waveform fixture failed')
-      process.stdout.write('[parity] supplied silent waveform fixture (128 samples)\n')
+      nout('[parity] supplied silent waveform fixture (128 samples)\n')
     }
 
     if (programName === 'media') {
@@ -708,7 +715,7 @@ async function main () {
         })
       }, mediaPasses)
       if (!mediaPasses.length || !uploaded) throw new Error('media fixture upload failed')
-      process.stdout.write(`[parity] uploaded media image fixture to ${mediaPasses.map(pass => pass.textureId).join(', ')}\n`)
+      nout(`[parity] uploaded media image fixture to ${mediaPasses.map(pass => pass.textureId).join(', ')}\n`)
     }
 
     // ---- 3. Render + capture: one pinned frame, or timed samples for statefuls.
@@ -732,7 +739,7 @@ async function main () {
         const sec = (s + 1) * opts.sampleEvery
         const sp = join(opts.outDir, `${programName}.golden.t${sec}.png`)
         writeFileSync(sp, buf)
-        process.stdout.write(`[parity] wrote ${sp}\n`)
+        nout(`[parity] wrote ${sp}\n`)
       }
       sampled = true
     } else {
@@ -752,7 +759,7 @@ async function main () {
 
     const consoleErrors = session.getConsoleMessages().map(m => m.text)
     if (consoleErrors.length) {
-      process.stdout.write(`[parity] console messages during render:\n  ${consoleErrors.join('\n  ')}\n`)
+      nout(`[parity] console messages during render:\n  ${consoleErrors.join('\n  ')}\n`)
     }
   } finally {
     clearTimeout(watchdog)
@@ -762,11 +769,11 @@ async function main () {
   if (!sampled) {
     const pngPath = join(opts.outDir, `${programName}.golden.png`)
     writeFileSync(pngPath, pngBuffer)
-    process.stdout.write(`[parity] wrote ${pngPath} (${opts.size}x${opts.size}, time=${opts.time}, backend=${opts.backend})\n`)
+    nout(`[parity] wrote ${pngPath} (${opts.size}x${opts.size}, time=${opts.time}, backend=${opts.backend})\n`)
   }
 }
 
 main().catch(err => {
-  process.stdout.write(`[parity] FAILED: ${err?.stack || err?.message || JSON.stringify(err)}\n`)
+  nout(`[parity] FAILED: ${err?.stack || err?.message || JSON.stringify(err)}\n`)
   process.exit(1)
 })
