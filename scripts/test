@@ -117,10 +117,12 @@ shard_select() {
 		[[ $((i % NM_SHARD_COUNT)) -eq "$NM_SHARD_INDEX" ]] && out+=("$entry")
 		i=$((i+1))
 	done
-	if [[ "${#out[@]}" -eq 0 ]]; then
-		fail "shard $NM_SHARD_INDEX of $NM_SHARD_COUNT has no suites to run"
+	# An empty slice is legitimate: the changed-path filter can leave fewer
+	# suites than the shard count, and the shards together still cover every
+	# suite. Print nothing; the caller exits 0 for that shard.
+	if [[ "${#out[@]}" -gt 0 ]]; then
+		printf '%s\n' "${out[@]}"
 	fi
-	printf '%s\n' "${out[@]}"
 }
 
 clear_shard_env() {
@@ -191,8 +193,12 @@ run_engine_free() {
 	echo "node: $(node --version)"
 	echo "== engine-free suites"
 	local engine_free=()
-	while IFS= read -r line; do engine_free+=("$line"); done < <(select_suites "${ENGINE_FREE[@]}" | shard_select "${ENGINE_FREE[@]}")
+	while IFS= read -r line; do engine_free+=("$line"); done < <(select_suites "${ENGINE_FREE[@]}" | shard_select)
 	clear_shard_env
+	if [[ "${#engine_free[@]}" -eq 0 ]]; then
+		echo "== engine-free suites: this shard has no suites to run"
+		exit 0
+	fi
 	run_unittest "${engine_free[@]}"
 }
 
@@ -216,6 +222,10 @@ run_godot_headless() {
 	local godot_headless=()
 	while IFS= read -r line; do godot_headless+=("$line"); done < <(select_suites "${GODOT_HEADLESS[@]}" | shard_select)
 	clear_shard_env
+	if [[ "${#godot_headless[@]}" -eq 0 ]]; then
+		echo "== Godot headless suites: this shard has no suites to run"
+		exit 0
+	fi
 	run_unittest "${godot_headless[@]}"
 
 	if [[ -n "${NM_REFERENCE_ROOT:-}" && -d "$NM_REFERENCE_ROOT" ]]; then
