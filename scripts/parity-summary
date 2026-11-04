@@ -335,7 +335,10 @@ mint_case () {
       if [ "${case_run:-0}" -gt 0 ]; then
         mint_args+=(--run-seconds "$case_run" --sample-every "$case_every")
       fi
-      if ! node "$ROOT/parity/export-and-render.mjs" "$prog" "$ROOT/parity/out" \
+      # A stalled browser mint would otherwise burn the engine command's
+      # whole deadline silently; bound it (see bound_ms above) so the stall
+      # exits as a named failure early, in time for the mint phase.
+      if ! bound_ms 150000 node "$ROOT/parity/export-and-render.mjs" "$prog" "$ROOT/parity/out" \
           "${mint_args[@]}" > "$ROOT/parity/out/$case.mint.log" 2>&1; then
         if ! rm -f "$gold" "$graph" "$ROOT/parity/out/$case.golden.t"*.png; then
           echo "[SKIP] $case: failed mint left artifacts that could not be cleared"
