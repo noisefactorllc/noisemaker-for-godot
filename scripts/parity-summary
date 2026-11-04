@@ -116,8 +116,18 @@ if [ -f "$NM_REFERENCE_ROOT/node_modules/playwright/cli.js" ]; then
     0|false) shell_flag='' ;;
     *) shell_flag='--only-shell' ;;
   esac
-  if ! ( cd "$NM_REFERENCE_ROOT" && node node_modules/playwright/cli.js install chromium $shell_flag ); then
-    echo "parity-summary: the playwright chromium build is unavailable (set PLAYWRIGHT_BROWSERS_PATH to an installed browser root)" >&2
+  # A runner whose network silently drops the download connection stalls the
+  # install until the engine command's deadline burns with no trace. Bound
+  # the install where the host offers a timeout command (macOS ships
+  # gtimeout from coreutils, not timeout; run unbounded where neither
+  # exists, as before): a stall exits as a named failure in time for the
+  # mint, and a healthy slow download still fits.
+  install_prefix=''
+  if command -v timeout >/dev/null 2>&1; then install_prefix='timeout 120'
+  elif command -v gtimeout >/dev/null 2>&1; then install_prefix='gtimeout 120'
+  fi
+  if ! ( cd "$NM_REFERENCE_ROOT" && $install_prefix node node_modules/playwright/cli.js install chromium $shell_flag ); then
+    echo "parity-summary: the playwright chromium build is unavailable or its install did not finish (set PLAYWRIGHT_BROWSERS_PATH to an installed browser root)" >&2
     echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
     exit 2
   fi
