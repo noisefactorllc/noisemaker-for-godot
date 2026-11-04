@@ -30,7 +30,7 @@
 // and the reference repo at $NM_REFERENCE_ROOT (its shaders/ and demo/ trees).
 // See parity/README.md.
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, chmodSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { dirname, resolve, basename, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -60,6 +60,17 @@ const EXPORT_GRAPH = join(__dirname, '..', 'tools', 'export-graph.mjs')
 // vendored harness imports, so its chromium launches inherit the route. The
 // helper only decorates controls and toasts; it never affects the rendered
 // frame, so a cached copy is pixel-equivalent to the live one.
+// A default browser cache under a noexec home (or an extraction that drops
+// the exec bit) makes the downloaded binary unspawnable, so the mint fails
+// before rendering. Playwright resolves browser paths when this module
+// loads, so set the browsers root before the import: with no browsers path
+// provided, ensure the build inside the workspace, which stays
+// executable-capable.
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
+  const wsRoot = join(__dirname, 'out', 'ms-playwright')
+  mkdirSync(wsRoot, { recursive: true })
+  process.env.PLAYWRIGHT_BROWSERS_PATH = wsRoot
+}
 const playwright = await import(pathToFileURL(join(REFERENCE_ROOT, 'node_modules', 'playwright', 'index.mjs')).href)
 const chromiumLaunch = playwright.chromium.launch.bind(playwright.chromium)
 playwright.chromium.launch = async function (launchOptions) {
@@ -82,6 +93,24 @@ playwright.chromium.launch = async function (launchOptions) {
     const extra = merged.headless === false ? [] : ['--only-shell']
     const res = spawnSync(process.execPath, [join(moduleDir, 'cli.js'), 'install', 'chromium', ...extra], { stdio: 'inherit' })
     if (res.error) process.stdout.write(`[parity] browser build install failed: ${res.error.message}\n`)
+    else markBrowserBinariesExecutable()
+  }
+  // Mark the browser binaries executable inside the ensured build. Extraction
+  // may leave the exec bit unset (zip modes), which surfaces only as a spawn
+  // EACCES at launch.
+  const markBrowserBinariesExecutable = () => {
+    const root = process.env.PLAYWRIGHT_BROWSERS_PATH
+    if (!root || !existsSync(root)) return
+    const walk = (dir) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name)
+        if (entry.isDirectory()) walk(full)
+        else if (entry.isFile() && /^chrome(-headless-shell)?$/.test(entry.name)) {
+          try { chmodSync(full, 0o755) } catch {}
+        }
+      }
+    }
+    try { walk(root) } catch {}
   }
   ensureChromiumBuild()
   let browser
