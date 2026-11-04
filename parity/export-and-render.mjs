@@ -31,6 +31,7 @@
 // See parity/README.md.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { dirname, resolve, basename, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { resetReferenceState } from './reference_reset.mjs'
@@ -70,7 +71,30 @@ playwright.chromium.launch = async function (launchOptions) {
   const args = Array.isArray(merged.args) ? [...merged.args] : []
   if (!args.includes('--no-sandbox')) args.push('--no-sandbox')
   merged.args = args
-  const browser = await chromiumLaunch(merged)
+  // The launching playwright resolves its browser build per registry path; an
+  // executable missing at launch surfaces only as the process exiting 126 with
+  // an ENOENT line, which the runner log truncates. Ensure the build for THIS
+  // module before launching, and name the resolved path when launch still
+  // fails so the cause is visible in the captured output.
+  const moduleDir = join(REFERENCE_ROOT, 'node_modules', 'playwright')
+  const ensureChromiumBuild = () => {
+    let exe = ''
+    try { exe = playwright.chromium.executablePath() } catch { exe = '' }
+    if (exe && existsSync(exe)) return
+    process.stderr.write(`[parity] chromium executable missing (${exe || 'unknown'}); installing the playwright browser build\n`)
+    const res = spawnSync(process.execPath, [join(moduleDir, 'cli.js'), 'install', 'chromium'], { stdio: 'inherit' })
+    if (res.error) process.stderr.write(`[parity] browser build install failed: ${res.error.message}\n`)
+  }
+  ensureChromiumBuild()
+  let browser
+  try {
+    browser = await chromiumLaunch(merged)
+  } catch (err) {
+    let exe = ''
+    try { exe = playwright.chromium.executablePath() } catch {}
+    process.stderr.write(`[parity] chromium launch failed: executable=${exe || '?'} exists=${exe ? existsSync(exe) : '?'} platform=${process.platform} browsersPath=${process.env.PLAYWRIGHT_BROWSERS_PATH || '(default)'}\n`)
+    throw err
+  }
   const cacheDir = process.env.SHADE_REMOTE_UI_CACHE
   if (!cacheDir) return browser
   const debug = process.env.SHADE_REMOTE_UI_DEBUG === '1'
