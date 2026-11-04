@@ -71,18 +71,16 @@ playwright.chromium.launch = async function (launchOptions) {
   const args = Array.isArray(merged.args) ? [...merged.args] : []
   if (!args.includes('--no-sandbox')) args.push('--no-sandbox')
   merged.args = args
-  // The launching playwright resolves its browser build per registry path; an
-  // executable missing at launch surfaces only as the process exiting 126 with
-  // an ENOENT line, which the runner log truncates. Ensure the build for THIS
-  // module before launching, and name the resolved path when launch still
-  // fails so the cause is visible in the captured output.
+  // The launching playwright resolves its browser build per registry path; a
+  // missing build surfaces only as the process exiting 126 with an ENOENT
+  // line, which the runner log truncates. Ensure the build for THIS module
+  // before launching: idempotent, headless launches need only the headless
+  // shell, and a non-headless launch needs the full build. Name the resolved
+  // path when launch still fails so the cause stays visible.
   const moduleDir = join(REFERENCE_ROOT, 'node_modules', 'playwright')
   const ensureChromiumBuild = () => {
-    let exe = ''
-    try { exe = playwright.chromium.executablePath() } catch { exe = '' }
-    if (exe && existsSync(exe)) return
-    process.stderr.write(`[parity] chromium executable missing (${exe || 'unknown'}); installing the playwright browser build\n`)
-    const res = spawnSync(process.execPath, [join(moduleDir, 'cli.js'), 'install', 'chromium'], { stdio: 'inherit' })
+    const extra = merged.headless === false ? [] : ['--only-shell']
+    const res = spawnSync(process.execPath, [join(moduleDir, 'cli.js'), 'install', 'chromium', ...extra], { stdio: 'inherit' })
     if (res.error) process.stderr.write(`[parity] browser build install failed: ${res.error.message}\n`)
   }
   ensureChromiumBuild()

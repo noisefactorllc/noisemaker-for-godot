@@ -102,7 +102,16 @@ fi
 # without downloading. A checkout without the module fails at mint as before.
 if [ -f "$NM_REFERENCE_ROOT/node_modules/playwright/cli.js" ]; then
   echo "[REFERENCE] ensuring the playwright chromium build" >&2
-  if ! ( cd "$NM_REFERENCE_ROOT" && node node_modules/playwright/cli.js install chromium >/dev/null 2>&1 ); then
+  # Mints launch headless, so the headless shell is the only browser build the
+  # gate needs; installing it alone keeps the cold-cache download inside a
+  # bounded command. A non-headless launch needs the full build. The install
+  # is idempotent and its output is kept: a slow or blocked download must be
+  # visible in a timed-out command, not silently dropped.
+  case "${SHADE_HEADLESS:-1}" in
+    0|false) shell_flag='' ;;
+    *) shell_flag='--only-shell' ;;
+  esac
+  if ! ( cd "$NM_REFERENCE_ROOT" && node node_modules/playwright/cli.js install chromium $shell_flag ); then
     echo "parity-summary: the playwright chromium build is unavailable (set PLAYWRIGHT_BROWSERS_PATH to an installed browser root)" >&2
     echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
     exit 2
