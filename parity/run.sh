@@ -16,9 +16,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # has because the gate runs node itself. A stall exits 124 as a named
 # failure instead of burning the engine command's deadline silently.
 bound_ms () { # $1 = milliseconds; rest = command
-  if command -v timeout >/dev/null 2>&1; then timeout "$(( $1 / 1000 ))" "${@:2}"
-  elif command -v gtimeout >/dev/null 2>&1; then gtimeout "$(( $1 / 1000 ))" "${@:2}"
-  else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS)});process.exit(r.status===null?124:r.status)' bound_ms "${@:2}"
+  # The bound itself must not hang: a child that ignores TERM (a stalled
+  # engine launch) survives plain timeout, so the bound burns the engine
+  # command's deadline anyway (red probe: timeout 2 'trap "" TERM; sleep 12'
+  # exits after 12s, not 2s). Escalate to SIGKILL 10s after the bound on
+  # every branch so the stall always ends as a named exit.
+  if command -v timeout >/dev/null 2>&1; then timeout -k 10 "$(( $1 / 1000 ))" "${@:2}"
+  elif command -v gtimeout >/dev/null 2>&1; then gtimeout -k 10 "$(( $1 / 1000 ))" "${@:2}"
+  else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS),killSignal:"SIGKILL"});process.exit(r.status===null?124:r.status)' bound_ms "${@:2}"
   fi
 }
 NAME="${1:?usage: run.sh <name> [tol] [ssim_min] [size]}"

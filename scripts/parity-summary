@@ -41,9 +41,13 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # every gate host has because the gate runs node itself. A stall exits 124
 # (timeout(1)'s code) as a named failure, early and in time for the mint.
 bound_ms () { # $1 = milliseconds; rest = command
-  if command -v timeout >/dev/null 2>&1; then timeout "$(( $1 / 1000 ))" "${@:2}"
-  elif command -v gtimeout >/dev/null 2>&1; then gtimeout "$(( $1 / 1000 ))" "${@:2}"
-  else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS)});process.exit(r.status===null?124:r.status)' bound_ms "${@:2}"
+  # GNU timeout waits forever when the child ignores TERM, so the bound itself
+  # can hang (red probe: timeout 2 'trap "" TERM; sleep 12' exits after 12s, not
+  # 2s). Escalate to SIGKILL 10s after the bound on every branch so a stalled
+  # browser or engine launch always ends the bounded command.
+  if command -v timeout >/dev/null 2>&1; then timeout -k 10 "$(( $1 / 1000 ))" "${@:2}"
+  elif command -v gtimeout >/dev/null 2>&1; then gtimeout -k 10 "$(( $1 / 1000 ))" "${@:2}"
+  else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS),killSignal:"SIGKILL"});process.exit(r.status===null?124:r.status)' bound_ms "${@:2}"
   fi
 }
 # Diagnostics must reach both streams: contract tests assert them on stderr,
