@@ -102,9 +102,9 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
     # exits as a named failure early, in time for the mint.
     if ! ( git init -q "$CACHE.tmp" \
            && git -C "$CACHE.tmp" remote add origin https://github.com/noisefactorllc/noisemaker \
-           && bound_ms 300000 git -C "$CACHE.tmp" fetch -q --depth 1 origin "$PIN" ) 2>/dev/null; then
+           && bound_ms 120000 git -C "$CACHE.tmp" fetch -q --depth 1 origin "$PIN" ) 2>/dev/null; then
       rm -rf "$CACHE.tmp" 2>/dev/null || true
-      if ! bound_ms 300000 git clone -q https://github.com/noisefactorllc/noisemaker "$CACHE.tmp" 2>/dev/null; then
+      if ! bound_ms 120000 git clone -q https://github.com/noisefactorllc/noisemaker "$CACHE.tmp" 2>/dev/null; then
         diag "parity-summary: cannot obtain the reference engine (set NM_REFERENCE_ROOT to a local checkout)"
         rm -f "$CACHE.lock/lock"
         echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
@@ -126,7 +126,7 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
     # bundled by whatever the registry happens to serve.
     if [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
       diag "[REFERENCE] installing playwright@1.63.0 into the reference clone"
-      if ! ( cd "$CACHE" && bound_ms 300000 npm install --no-save "playwright@1.63.0" >/dev/null 2>&1 ) \
+      if ! ( cd "$CACHE" && bound_ms 120000 npm install --no-save "playwright@1.63.0" >/dev/null 2>&1 ) \
          || [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
         diag "parity-summary: playwright unavailable for the reference harness (set NM_REFERENCE_ROOT to a prepared checkout)"
         # Drop the half-prepared cache so the next run re-clones and retries
