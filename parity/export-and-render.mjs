@@ -359,8 +359,28 @@ async function main () {
   }
   let pngBuffer
   let sampled = false
+  // The harness's own waits run 120s, longer than a runner's engine-command
+  // deadline: when the page boot or a render wait stalls there, the runner
+  // records only a silent timeout with no trace. Bound the whole capture: on
+  // expiry, name the page state (URL, console tail, pipeline presence) and
+  // exit, so the failure carries its cause instead of the deadline.
+  const watchdogMs = Number(process.env.SHADE_MINT_WATCHDOG_MS || 60000)
+  const page = session.page
+  const consoleTail = []
+  page.on('console', (msg) => {
+    consoleTail.push(`${msg.type()}: ${msg.text()}`)
+    if (consoleTail.length > 20) consoleTail.shift()
+  })
+  const watchdog = setTimeout(async () => {
+    let pipeline = '?'
+    try { pipeline = String(await page.evaluate(() => !!window.__noisemakerRenderingPipeline)) } catch {}
+    process.stderr.write(`[parity] mint watchdog fired after ${watchdogMs}ms: url=${page.url()} pipeline=${pipeline}\n` +
+      (consoleTail.length
+        ? '[parity] page console tail:\n' + consoleTail.map((m) => '  ' + m).join('\n') + '\n'
+        : '[parity] page console: empty\n'))
+    process.exit(3)
+  }, watchdogMs)
   try {
-    const page = session.page
     await session.setBackend(opts.backend)
     const globals = session.globals
 
@@ -684,6 +704,7 @@ async function main () {
       process.stderr.write(`[parity] console messages during render:\n  ${consoleErrors.join('\n  ')}\n`)
     }
   } finally {
+    clearTimeout(watchdog)
     await session.teardown()
   }
 
