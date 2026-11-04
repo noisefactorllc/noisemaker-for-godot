@@ -270,14 +270,33 @@ async function main () {
   // Retry once without the pin: acquireServer(0) then walks the fixed
   // fallback list 43117..43126 and binds the first free one.
   const pinnedViewerPort = process.env.SHADE_VIEWER_PORT
+  // A viewer-server failure names itself: Node listen errors start with
+  // "Error: listen ". Anything else (for example a chromium launch crash) is
+  // not a port problem: retrying it on a different port cannot help, and on
+  // hosts that deny ephemeral loopback binds the unpinned fallback dies with
+  // a listen error that masks the real cause.
+  const listenError = (err) => /(?:^|\n)Error: listen /.test(String(err))
   let session
   try {
     session = new BrowserSession({ backend: opts.backend })
     await session.setup()
   } catch (err) {
-    const portBusy = pinnedViewerPort !== undefined &&
-      /EADDRINUSE|EPERM|listen /.test(String(err))
-    if (!portBusy) {
+    if (pinnedViewerPort !== undefined && listenError(err)) {
+      process.stderr.write(`[parity] viewer port ${pinnedViewerPort} unavailable (${String(err).split('\n')[0]}), retrying on a free fallback port\n`)
+      try { await session.teardown() } catch {}
+      delete process.env.SHADE_VIEWER_PORT
+      session = new BrowserSession({ backend: opts.backend })
+      await session.setup()
+    } else if (pinnedViewerPort !== undefined) {
+      // The pinned port was listening; the browser itself failed. Retry once
+      // on the same port: teardown releases the server even when the browser
+      // never started, and a fresh launch is the only repair a port change
+      // cannot provide.
+      process.stderr.write(`[parity] browser setup failed on the pinned viewer port ${pinnedViewerPort} (${String(err).split('\n')[0]}), retrying once on the same port\n`)
+      try { await session.teardown() } catch {}
+      session = new BrowserSession({ backend: opts.backend })
+      await session.setup()
+    } else {
       // Surface the page's own console/errors: a failed demo boot (for example
       // a denied network fetch during startup) shows up here, not in the
       // Playwright timeout.
@@ -289,11 +308,6 @@ async function main () {
       }
       throw err
     }
-    process.stderr.write(`[parity] viewer port ${pinnedViewerPort} unavailable (${String(err).split('\n')[0]}), retrying on a free fallback port\n`)
-    try { await session.teardown() } catch {}
-    delete process.env.SHADE_VIEWER_PORT
-    session = new BrowserSession({ backend: opts.backend })
-    await session.setup()
   }
   let pngBuffer
   let sampled = false
