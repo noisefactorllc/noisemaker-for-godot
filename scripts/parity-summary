@@ -50,7 +50,26 @@ bound_ms () { # $1 = milliseconds; rest = command
 diag () {
   echo "$*"
   echo "$*" >&2
+  printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*" >>"$GATE_JOURNAL" 2>/dev/null || true
 }
+# A runner that kills the engine command on its deadline may lose the captured
+# output, so the gate also journals every diagnostic line inside the checkout.
+# A later invocation on the same workspace replays the previous invocation's
+# journal when that run never completed, which makes the killed run's last
+# stage visible even when its stdout was lost. A completed run records its
+# exit code, so only a killed run triggers a replay.
+GATE_JOURNAL="$ROOT/parity/out/gate-journal.log"
+mkdir -p "$ROOT/parity/out" 2>/dev/null || true
+trap 'printf "GATE-COMPLETED rc=%s\n" "$?" >>"$GATE_JOURNAL" 2>/dev/null || true' EXIT
+if [ -s "$GATE_JOURNAL" ] && ! tail -n 3 "$GATE_JOURNAL" 2>/dev/null | grep -q '^GATE-COMPLETED'; then
+  echo "[GATE-JOURNAL] the previous invocation was killed before completing; its last stages"
+  echo "[GATE-JOURNAL] the previous invocation was killed before completing; its last stages" >&2
+  tail -n 12 "$GATE_JOURNAL" 2>/dev/null | while IFS= read -r line; do
+    echo "[GATE-JOURNAL] $line"
+    echo "[GATE-JOURNAL] $line" >&2
+  done
+fi
+: > "$GATE_JOURNAL" 2>/dev/null || true
 if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
   # Self-contained authority resolution: pin-clone the reference engine at the
   # revision the port's goldens are bound to (no machine-specific paths; the
@@ -277,7 +296,10 @@ if ! mkdir "$LOCKDIR" 2>/dev/null; then
   echo "PARITY-SUMMARY {\"expected\":$EXPECTED,\"executed\":0,\"exact\":0,\"strict\":0,\"near\":0,\"defer\":0,\"skip\":$EXPECTED,\"fail\":0,\"missing\":0}"
   exit 2
 fi
-trap 'rmdir "$LOCKDIR" 2>/dev/null || true' EXIT
+# One EXIT trap must hold both actions: a later trap assignment would replace
+# the journal's completion marker and every completed run would then look
+# killed to the next invocation.
+trap 'rc=$?; rmdir "$LOCKDIR" 2>/dev/null || true; printf "GATE-COMPLETED rc=%s\n" "$rc" >>"$GATE_JOURNAL" 2>/dev/null || true' EXIT
 for case in "${CASES[@]}"; do
   if ! policy_line="$(bash "$ROOT/parity/sweep.sh" --policy "$case")"; then
     fail=$((fail+1)); echo "[FAIL] $case: policy lookup failed"; continue
