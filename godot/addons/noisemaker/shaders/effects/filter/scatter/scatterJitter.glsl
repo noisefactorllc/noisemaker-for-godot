@@ -23,10 +23,19 @@ layout(set = 0, binding = 1) uniform sampler2D inputTex;
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 frag;
 
-vec2 hash22(vec2 p) {
-	vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-	p3 += dot(p3, p3.yzx + 33.33);
-	return fract((p3.xx + p3.yz) * p3.zy);
+// PCG3D integer hash (Jarzynski & Olano 2020). Unsigned arithmetic wraps the
+// same way on every compiler, so every backend draws identical offsets; a float
+// hash rounds and fuses differently per compiler and drifts apart.
+uvec3 pcg3d(uvec3 v_in) {
+	uvec3 v = v_in * 1664525u + 1013904223u;
+	v.x = v.x + v.y * v.z;
+	v.y = v.y + v.z * v.x;
+	v.z = v.z + v.x * v.y;
+	v = v ^ (v >> uvec3(16u));
+	v.x = v.x + v.y * v.z;
+	v.y = v.y + v.z * v.x;
+	v.z = v.z + v.x * v.y;
+	return v;
 }
 
 float lum(vec3 c) {
@@ -53,6 +62,8 @@ vec2 lumGradient(vec2 uv) {
 void main() {
 	vec2 texSize = vec2(textureSize(inputTex, 0));
 	vec2 uv = gl_FragCoord.xy / texSize;
+	ivec2 texel = ivec2(gl_FragCoord.xy);
+	ivec2 texSizeI = textureSize(inputTex, 0);
 
 	// Seed with the global (tile-aware) coordinate, not gl_FragCoord.xy alone,
 	// so the scatter field is continuous across CLI render tiles instead of
@@ -66,8 +77,15 @@ void main() {
 		hashCoord = floor(globalCoord / 3.0) * 3.0;
 	}
 
-	vec2 rnd = hash22(hashCoord + float(int(seed)) * 101.7) - 0.5;
-	vec2 offset = rnd * 2.0 * radius;
+	uvec3 h = pcg3d(uvec3(uvec2(ivec2(floor(hashCoord))), uint(int(seed))));
+
+	// Offset in 1/256 px steps, in [-radius, radius) on each axis: the top 16
+	// hash bits scale the span 2 * radius * 256 in integers. radius * 256 is
+	// exact; the 128 px cap (far above the 25 px slider maximum) keeps the
+	// product within 32 bits.
+	uint r256 = uint(min(abs(radius), 128.0) * 256.0);
+	uvec2 steps = ((h.xy >> uvec2(16u)) * (2u * r256)) >> uvec2(16u);
+	vec2 offset = vec2(ivec2(steps) - int(r256)) / 256.0;
 
 	if (MODE == 3) {
 		// Anisotropic: project the offset onto the direction perpendicular to
@@ -81,10 +99,13 @@ void main() {
 		// else: gradient ~zero (flat region) -- fall back to raw offset.
 	}
 
-	vec2 sampleUV = clamp((gl_FragCoord.xy + offset) / texSize, vec2(0.0), vec2(1.0));
+	// Read the texel nearest the offset sample position, clamped to the edge.
+	// Outside anisotropic mode the offset is a multiple of 1/256, so
+	// offset + 0.5 and its floor are exact.
+	ivec2 sampleTexel = clamp(texel + ivec2(floor(offset + 0.5)), ivec2(0), texSizeI - 1);
 
-	vec4 src = texture(inputTex, uv);
-	vec4 samp = texture(inputTex, sampleUV);
+	vec4 src = texelFetch(inputTex, texel, 0);
+	vec4 samp = texelFetch(inputTex, sampleTexel, 0);
 
 	vec4 result = samp;
 	if (MODE == 1) {
