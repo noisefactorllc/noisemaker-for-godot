@@ -100,6 +100,33 @@ fail() {
 	exit 1
 }
 
+# The supervisor splits long required runs into bounded shard invocations
+# (see .nm-test-shards): with the shard variables set, this invocation runs
+# only its own slice of each suite group, and together the shards cover every
+# suite. The variables are cleared before the suites run, so subprocesses the
+# tests launch (the parity gate among them) never inherit shard instructions
+# that select suite slices, not gate cases.
+shard_select() {
+	local entry i=0
+	local -a out=()
+	if [[ -z "${NM_SHARD_COUNT:-}" || -z "${NM_SHARD_INDEX:-}" ]]; then
+		cat
+		return
+	fi
+	while IFS= read -r entry; do
+		[[ $((i % NM_SHARD_COUNT)) -eq "$NM_SHARD_INDEX" ]] && out+=("$entry")
+		i=$((i+1))
+	done
+	if [[ "${#out[@]}" -eq 0 ]]; then
+		fail "shard $NM_SHARD_INDEX of $NM_SHARD_COUNT has no suites to run"
+	fi
+	printf '%s\n' "${out[@]}"
+}
+
+clear_shard_env() {
+	unset NM_SHARD_COUNT NM_SHARD_INDEX
+}
+
 check_classification() {
 	local path module entry found
 	local unlisted=()
@@ -164,7 +191,8 @@ run_engine_free() {
 	echo "node: $(node --version)"
 	echo "== engine-free suites"
 	local engine_free=()
-	while IFS= read -r line; do engine_free+=("$line"); done < <(select_suites "${ENGINE_FREE[@]}")
+	while IFS= read -r line; do engine_free+=("$line"); done < <(select_suites "${ENGINE_FREE[@]}" | shard_select "${ENGINE_FREE[@]}")
+	clear_shard_env
 	run_unittest "${engine_free[@]}"
 }
 
@@ -186,7 +214,8 @@ run_godot_headless() {
 
 	echo "== Godot headless suites"
 	local godot_headless=()
-	while IFS= read -r line; do godot_headless+=("$line"); done < <(select_suites "${GODOT_HEADLESS[@]}")
+	while IFS= read -r line; do godot_headless+=("$line"); done < <(select_suites "${GODOT_HEADLESS[@]}" | shard_select)
+	clear_shard_env
 	run_unittest "${godot_headless[@]}"
 
 	if [[ -n "${NM_REFERENCE_ROOT:-}" && -d "$NM_REFERENCE_ROOT" ]]; then

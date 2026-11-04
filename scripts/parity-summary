@@ -209,6 +209,29 @@ PYEOF
     exit 2
   }
 fi
+# The supervisor splits long required runs into bounded shard invocations
+# (see .nm-test-shards): with the shard variables set, this invocation
+# renders only its own slice of the expected cases, and together the shards
+# cover every case. Without them the whole manifest runs exactly as before.
+if [ -n "${NM_SHARD_COUNT:-}" ] && [ -n "${NM_SHARD_INDEX:-}" ]; then
+  ZEROS='PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
+  case "${NM_SHARD_COUNT}${NM_SHARD_INDEX}" in
+    *[!0-9]*) echo "$ZEROS"; exit 2 ;;
+  esac
+  if [ "$NM_SHARD_COUNT" -lt 1 ] || [ "$NM_SHARD_INDEX" -lt 0 ] || [ "$NM_SHARD_INDEX" -ge "$NM_SHARD_COUNT" ]; then
+    echo "$ZEROS"; exit 2
+  fi
+  SHARD_CASES=()
+  i=0
+  for c in "${CASES[@]}"; do
+    [ $((i % NM_SHARD_COUNT)) -eq "$NM_SHARD_INDEX" ] && SHARD_CASES+=("$c")
+    i=$((i+1))
+  done
+  if [ "${#SHARD_CASES[@]}" -eq 0 ]; then
+    echo "$ZEROS"; exit 0
+  fi
+  CASES=("${SHARD_CASES[@]}")
+fi
 EXPECTED=${#CASES[@]}
 
 classify () { # $1 = case; $2/$3 = published tolerance/SSIM
