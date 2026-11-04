@@ -94,17 +94,29 @@ playwright.chromium.launch = async function (launchOptions) {
     throw err
   }
   const cacheDir = process.env.SHADE_REMOTE_UI_CACHE
-  if (!cacheDir) return browser
   const debug = process.env.SHADE_REMOTE_UI_DEBUG === '1'
   const serveCached = (context) => context.route(/handfish\.noisefactor\.io\//, (route) => {
     const url = new URL(route.request().url())
     const parts = [url.pathname.replace(/^\/+/, '').replace(/[^A-Za-z0-9._-]+/g, '_')]
     if (url.search) parts.push(url.search.slice(1).replace(/[^A-Za-z0-9._-]+/g, '_'))
-    const cached = join(cacheDir, parts.join('_'))
-    if (debug) process.stderr.write(`[parity] remote-ui ${url} -> ${existsSync(cached) ? 'cache' : 'passthrough'}\n`)
-    if (existsSync(cached)) {
-      const type = url.pathname.endsWith('.css') ? 'text/css' : 'application/javascript'
-      return route.fulfill({ status: 200, contentType: type, body: readFileSync(cached) })
+    if (cacheDir) {
+      const cached = join(cacheDir, parts.join('_'))
+      if (debug) process.stderr.write(`[parity] remote-ui ${url} -> ${existsSync(cached) ? 'cache' : 'passthrough'}\n`)
+      if (existsSync(cached)) {
+        const type = url.pathname.endsWith('.css') ? 'text/css' : 'application/javascript'
+        return route.fulfill({ status: 200, contentType: type, body: readFileSync(cached) })
+      }
+    }
+    if (url.pathname.endsWith('.js')) {
+      // Some mint runners deny or cannot reach the helper CDN. The helper
+      // only provides toast UI (the demo falls back to console without it),
+      // so on a failed fetch serve an empty module: the page boot completes
+      // and the rendered frame is unaffected. Without this, a denied fetch
+      // aborts the boot and the harness waits out its full deadline.
+      return route.fetch().then(
+        (res) => route.fulfill({ response: res }),
+        () => route.fulfill({ status: 200, contentType: 'application/javascript', body: 'export {};\n' })
+      )
     }
     return route.fallback()
   })
