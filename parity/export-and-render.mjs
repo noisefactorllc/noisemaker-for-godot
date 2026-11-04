@@ -107,18 +107,24 @@ playwright.chromium.launch = async function (launchOptions) {
         return route.fulfill({ status: 200, contentType: type, body: readFileSync(cached) })
       }
     }
-    if (url.pathname.endsWith('.js')) {
-      // Some mint runners deny or cannot reach the helper CDN. The helper
-      // only provides toast UI (the demo falls back to console without it),
-      // so on a failed fetch serve an empty module: the page boot completes
-      // and the rendered frame is unaffected. Without this, a denied fetch
-      // aborts the boot and the harness waits out its full deadline.
-      return route.fetch().then(
-        (res) => route.fulfill({ response: res }),
-        () => route.fulfill({ status: 200, contentType: 'application/javascript', body: 'export {};\n' })
-      )
-    }
-    return route.fallback()
+    // Some mint runners deny, cannot reach, or silently drop traffic to the
+    // helper CDN. The helper only provides toast UI (the demo falls back to
+    // console without it) and its stylesheets do not affect the rendered
+    // frame. Bound every passthrough fetch: when it fails or stalls, serve an
+    // empty stand-in so the page boot completes and the mint proceeds instead
+    // of waiting out the harness's full deadline. A silently dropped
+    // connection never fails, so the bound must come from here, not from the
+    // fetch itself.
+    const isCss = url.pathname.endsWith('.css')
+    const empty = () => route.fulfill({
+      status: 200,
+      contentType: isCss ? 'text/css' : 'application/javascript',
+      body: isCss ? '' : 'export {};\n'
+    }).catch(() => {})
+    return Promise.race([
+      route.fetch().then((res) => route.fulfill({ response: res }).catch(() => {}), empty),
+      new Promise((done) => setTimeout(done, 5000)).then(empty)
+    ])
   })
   // Register the route inside newContext, awaited, so it is active before the
   // harness creates its page and navigates (a browser-level 'context' event
