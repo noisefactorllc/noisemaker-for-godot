@@ -44,6 +44,13 @@ bound_ms () { # $1 = milliseconds; rest = command
   else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS)});process.exit(r.status===null?124:r.status)' bound_ms "${@:2}"
   fi
 }
+# Diagnostics must reach both streams: contract tests assert them on stderr,
+# and a runner receipt that captures only stdout must still show where the
+# gate is when a step stalls.
+diag () {
+  echo "$*"
+  echo "$*" >&2
+}
 if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
   # Self-contained authority resolution: pin-clone the reference engine at the
   # revision the port's goldens are bound to (no machine-specific paths; the
@@ -62,11 +69,11 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
     fi
   fi
   if [ "$usable" -ne 1 ]; then
-    echo "[REFERENCE] pin-cloning noisefactorllc/noisemaker at $PIN into $CACHE" >&2
+    diag "[REFERENCE] pin-cloning noisefactorllc/noisemaker at $PIN into $CACHE"
     rm -rf "$CACHE.tmp" 2>/dev/null || true
     mkdir -p "$CACHE.lock" 2>/dev/null || true
     if ! ( set -o noclobber; : > "$CACHE.lock/lock" ) 2>/dev/null; then
-      echo "parity-summary: another invocation holds the reference cache lock ($CACHE.lock)" >&2
+      diag "parity-summary: another invocation holds the reference cache lock ($CACHE.lock)"
       echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
       exit 2
     fi
@@ -79,14 +86,14 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
            && bound_ms 300000 git -C "$CACHE.tmp" fetch -q --depth 1 origin "$PIN" ) 2>/dev/null; then
       rm -rf "$CACHE.tmp" 2>/dev/null || true
       if ! bound_ms 300000 git clone -q https://github.com/noisefactorllc/noisemaker "$CACHE.tmp" 2>/dev/null; then
-        echo "parity-summary: cannot obtain the reference engine (set NM_REFERENCE_ROOT to a local checkout)" >&2
+        diag "parity-summary: cannot obtain the reference engine (set NM_REFERENCE_ROOT to a local checkout)"
         rm -f "$CACHE.lock/lock"
         echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
         exit 2
       fi
     fi
     git -C "$CACHE.tmp" checkout -q --detach "$PIN" || {
-      echo "parity-summary: pinned revision $PIN not reachable" >&2
+      diag "parity-summary: pinned revision $PIN not reachable"
       rm -rf "$CACHE.tmp"; rm -f "$CACHE.lock/lock"
       echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
       exit 2
@@ -99,10 +106,10 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
     # pinned version so minted reference goldens do not drift with the browser
     # bundled by whatever the registry happens to serve.
     if [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
-      echo "[REFERENCE] installing playwright@1.63.0 into the reference clone" >&2
+      diag "[REFERENCE] installing playwright@1.63.0 into the reference clone"
       if ! ( cd "$CACHE" && bound_ms 300000 npm install --no-save "playwright@1.63.0" >/dev/null 2>&1 ) \
          || [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
-        echo "parity-summary: playwright unavailable for the reference harness (set NM_REFERENCE_ROOT to a prepared checkout)" >&2
+        diag "parity-summary: playwright unavailable for the reference harness (set NM_REFERENCE_ROOT to a prepared checkout)"
         # Drop the half-prepared cache so the next run re-clones and retries
         # the install instead of trusting a cache that cannot mint.
         rm -rf "$CACHE"
@@ -112,7 +119,7 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
     fi
     rm -f "$CACHE.lock/lock"
   fi
-  echo "[REFERENCE] using $NM_REFERENCE_ROOT" >&2
+  diag "[REFERENCE] using $NM_REFERENCE_ROOT"
 fi
 
 # The minting harness launches Chromium through playwright. A prepared
@@ -122,7 +129,7 @@ fi
 # is idempotent: with the build already present it validates it and exits 0
 # without downloading. A checkout without the module fails at mint as before.
 if [ -f "$NM_REFERENCE_ROOT/node_modules/playwright/cli.js" ]; then
-  echo "[REFERENCE] ensuring the playwright chromium build" >&2
+  diag "[REFERENCE] ensuring the playwright chromium build"
   # Mints launch headless, so the headless shell is the only browser build the
   # gate needs; installing it alone keeps the cold-cache download inside a
   # bounded command. A non-headless launch needs the full build. The install
@@ -141,7 +148,7 @@ if [ -f "$NM_REFERENCE_ROOT/node_modules/playwright/cli.js" ]; then
     *) shell_flag='--only-shell' ;;
   esac
   if ! ( cd "$NM_REFERENCE_ROOT" && bound_ms 120000 node node_modules/playwright/cli.js install chromium $shell_flag ); then
-    echo "parity-summary: the playwright chromium build is unavailable or its install did not finish (set PLAYWRIGHT_BROWSERS_PATH to an installed browser root)" >&2
+    diag "parity-summary: the playwright chromium build is unavailable or its install did not finish (set PLAYWRIGHT_BROWSERS_PATH to an installed browser root)"
     echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
     exit 2
   fi
@@ -243,7 +250,7 @@ exact=0; strict=0; near=0; defer=0; skip=0; fail=0; missing=0; executed=0
 mkdir -p "$ROOT/parity/out"
 LOCKDIR="$ROOT/parity/out/.parity-summary.lock"
 if ! mkdir "$LOCKDIR" 2>/dev/null; then
-  echo "parity-summary: output directory is held by another run ($LOCKDIR)" >&2
+  diag "parity-summary: output directory is held by another run ($LOCKDIR)"
   echo "PARITY-SUMMARY {\"expected\":$EXPECTED,\"executed\":0,\"exact\":0,\"strict\":0,\"near\":0,\"defer\":0,\"skip\":$EXPECTED,\"fail\":0,\"missing\":0}"
   exit 2
 fi
