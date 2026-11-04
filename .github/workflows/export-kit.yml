@@ -84,12 +84,15 @@ jobs:
                   ['git', '-C', bare, 'cat-file', 'blob', oid]))
               if mode == '100755':
                   destination.chmod(0o755)
-          if links != ['shaders/share']:
+          # Older pins track shaders/share as a link to ../share; newer pins
+          # track no link. Both get the same regular-file copy.
+          if links not in ([], ['shaders/share']):
               raise SystemExit(f'unexpected reference links: {links}')
-          target = subprocess.check_output(
-              ['git', '-C', bare, 'show', f'{pin}:shaders/share']).decode().strip()
-          if target != '../share':
-              raise SystemExit(f'unexpected shaders/share target: {target}')
+          if links:
+              target = subprocess.check_output(
+                  ['git', '-C', bare, 'show', f'{pin}:shaders/share']).decode().strip()
+              if target != '../share':
+                  raise SystemExit(f'unexpected shaders/share target: {target}')
           shutil.copytree(root / 'share', root / 'shaders' / 'share')
           PY
           npm install --prefix "$reference" --no-save --no-bin-links --ignore-scripts --package-lock=false --omit=dev playwright@1.63.0
