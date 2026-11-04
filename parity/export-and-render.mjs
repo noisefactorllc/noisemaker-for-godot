@@ -62,7 +62,15 @@ const EXPORT_GRAPH = join(__dirname, '..', 'tools', 'export-graph.mjs')
 const playwright = await import(pathToFileURL(join(REFERENCE_ROOT, 'node_modules', 'playwright', 'index.mjs')).href)
 const chromiumLaunch = playwright.chromium.launch.bind(playwright.chromium)
 playwright.chromium.launch = async function (launchOptions) {
-  const browser = await chromiumLaunch(launchOptions)
+  // The minting browser runs inside restricted runners whose seatbelt
+  // profiles deny Chromium's own sandbox helpers, which aborts the process
+  // at startup. Launch with Chromium's sandbox disabled; the browser only
+  // serves the local viewer and renders the minted frame.
+  const merged = { ...launchOptions }
+  const args = Array.isArray(merged.args) ? [...merged.args] : []
+  if (!args.includes('--no-sandbox')) args.push('--no-sandbox')
+  merged.args = args
+  const browser = await chromiumLaunch(merged)
   const cacheDir = process.env.SHADE_REMOTE_UI_CACHE
   if (!cacheDir) return browser
   const debug = process.env.SHADE_REMOTE_UI_DEBUG === '1'
