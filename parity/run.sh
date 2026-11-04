@@ -21,10 +21,14 @@ bound_ms () { # $1 = milliseconds; rest = command
   # command's deadline anyway (red probe: timeout 2 'trap "" TERM; sleep 12'
   # exits after 12s, not 2s). Escalate to SIGKILL 10s after the bound on
   # every branch so the stall always ends as a named exit.
-  if command -v timeout >/dev/null 2>&1; then timeout -k 10 "$(( $1 / 1000 ))" "${@:2}"
-  elif command -v gtimeout >/dev/null 2>&1; then gtimeout -k 10 "$(( $1 / 1000 ))" "${@:2}"
-  else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS),killSignal:"SIGKILL"});process.exit(r.status===null?124:r.status)' bound_ms "${@:2}"
+  if command -v timeout >/dev/null 2>&1; then timeout -k 10 "$(( $1 / 1000 ))" "${@:2}"; rc=$?
+  elif command -v gtimeout >/dev/null 2>&1; then gtimeout -k 10 "$(( $1 / 1000 ))" "${@:2}"; rc=$?
+  else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS),killSignal:"SIGKILL"});process.exit(r.status===null?124:r.status)' bound_ms "${@:2}"; rc=$?
   fi
+  # The escalation kill makes timeout(1) exit 137 (128+SIGKILL), not 124;
+  # the bound's named-failure contract is 124, so map the kill back.
+  if [ "$rc" -eq 137 ]; then rc=124; fi
+  return "$rc"
 }
 NAME="${1:?usage: run.sh <name> [tol] [ssim_min] [size]}"
 # Default 2.001 (not 2): compare.py computes max-abs-diff as float ((x-y)/255*255),
