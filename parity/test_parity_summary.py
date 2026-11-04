@@ -367,6 +367,26 @@ echo "=== SAMPLES: $name $((run/every))/$((run/every)) pass ==="
         self.assertNotIn("[RENDER] a", result.stdout)
         self.assertEqual((out / "a.golden.png").read_bytes(), b"STALE")
 
+    def _prepared_reference_with_playwright(self):
+        module = self.root / "reference/node_modules/playwright"
+        module.mkdir(parents=True)
+        (module / "cli.js").write_text("module.exports = {}\n")
+
+    def test_prepared_reference_ensures_the_playwright_browser_build(self):
+        self._prepared_reference_with_playwright()
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("[REFERENCE] ensuring the playwright chromium build", result.stderr)
+        self.assertIn('PARITY-SUMMARY {"expected":1,"executed":1,"exact":1', result.stdout)
+
+    def test_unavailable_playwright_browser_build_blocks_before_mint(self):
+        self._prepared_reference_with_playwright()
+        result = self._run(mint_fail="1")
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("the playwright chromium build is unavailable", result.stderr)
+        self.assertIn('PARITY-SUMMARY {"expected":0,"executed":0', result.stdout)
+        self.assertNotIn("[MINT] a", result.stdout)
+
 
 class ParitySummaryScriptContractTests(unittest.TestCase):
     """Static contract checks on the entrypoint itself."""

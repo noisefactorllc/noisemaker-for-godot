@@ -94,6 +94,21 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
   echo "[REFERENCE] using $NM_REFERENCE_ROOT" >&2
 fi
 
+# The minting harness launches Chromium through playwright. A prepared
+# reference checkout can carry the playwright module without the browser
+# binaries launch needs, and a fresh clone never has them, so ensure the
+# module's own pinned browser build when the module is present. The install
+# is idempotent: with the build already present it validates it and exits 0
+# without downloading. A checkout without the module fails at mint as before.
+if [ -f "$NM_REFERENCE_ROOT/node_modules/playwright/cli.js" ]; then
+  echo "[REFERENCE] ensuring the playwright chromium build" >&2
+  if ! ( cd "$NM_REFERENCE_ROOT" && node node_modules/playwright/cli.js install chromium >/dev/null 2>&1 ); then
+    echo "parity-summary: the playwright chromium build is unavailable (set PLAYWRIGHT_BROWSERS_PATH to an installed browser root)" >&2
+    echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
+    exit 2
+  fi
+fi
+
 GODOT_BIN="${GODOT:-}"
 GODOT_MIN="4.7"
 godot_version_ok () { # $1 = binary; prints nothing, rc 0 iff >= GODOT_MIN
