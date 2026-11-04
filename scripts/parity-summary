@@ -58,13 +58,18 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
       echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
       exit 2
     fi
-    if ! git clone -q https://github.com/noisefactorllc/noisemaker "$CACHE.tmp" 2>/dev/null; then
-      echo "parity-summary: cannot obtain the reference engine (set NM_REFERENCE_ROOT to a local checkout)" >&2
-      rm -f "$CACHE.lock/lock"
-      echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
-      exit 2
+    if ! ( git init -q "$CACHE.tmp" \
+           && git -C "$CACHE.tmp" remote add origin https://github.com/noisefactorllc/noisemaker \
+           && git -C "$CACHE.tmp" fetch -q --depth 1 origin "$PIN" ) 2>/dev/null; then
+      rm -rf "$CACHE.tmp" 2>/dev/null || true
+      if ! git clone -q https://github.com/noisefactorllc/noisemaker "$CACHE.tmp" 2>/dev/null; then
+        echo "parity-summary: cannot obtain the reference engine (set NM_REFERENCE_ROOT to a local checkout)" >&2
+        rm -f "$CACHE.lock/lock"
+        echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
+        exit 2
+      fi
     fi
-    git -C "$CACHE.tmp" checkout -q "$PIN" || {
+    git -C "$CACHE.tmp" checkout -q --detach "$PIN" || {
       echo "parity-summary: pinned revision $PIN not reachable" >&2
       rm -rf "$CACHE.tmp"; rm -f "$CACHE.lock/lock"
       echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
