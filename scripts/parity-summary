@@ -58,11 +58,22 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
       echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
       exit 2
     fi
+    # A runner whose network accepts connections but never answers stalls a
+    # silent fetch or npm install until the engine command's deadline burns
+    # with no trace. Bound each network step where the host offers a timeout
+    # command (macOS ships gtimeout from coreutils, not timeout); run
+    # unbounded where neither exists, as before. A stall exits as a named
+    # failure early, in time for the mint.
+    bound () {
+      if command -v timeout >/dev/null 2>&1; then timeout 300 "$@"
+      elif command -v gtimeout >/dev/null 2>&1; then gtimeout 300 "$@"
+      else "$@"; fi
+    }
     if ! ( git init -q "$CACHE.tmp" \
            && git -C "$CACHE.tmp" remote add origin https://github.com/noisefactorllc/noisemaker \
-           && git -C "$CACHE.tmp" fetch -q --depth 1 origin "$PIN" ) 2>/dev/null; then
+           && bound git -C "$CACHE.tmp" fetch -q --depth 1 origin "$PIN" ) 2>/dev/null; then
       rm -rf "$CACHE.tmp" 2>/dev/null || true
-      if ! git clone -q https://github.com/noisefactorllc/noisemaker "$CACHE.tmp" 2>/dev/null; then
+      if ! bound git clone -q https://github.com/noisefactorllc/noisemaker "$CACHE.tmp" 2>/dev/null; then
         echo "parity-summary: cannot obtain the reference engine (set NM_REFERENCE_ROOT to a local checkout)" >&2
         rm -f "$CACHE.lock/lock"
         echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
@@ -84,7 +95,7 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
     # bundled by whatever the registry happens to serve.
     if [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
       echo "[REFERENCE] installing playwright@1.63.0 into the reference clone" >&2
-      if ! ( cd "$CACHE" && npm install --no-save "playwright@1.63.0" >/dev/null 2>&1 ) \
+      if ! ( cd "$CACHE" && bound npm install --no-save "playwright@1.63.0" >/dev/null 2>&1 ) \
          || [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
         echo "parity-summary: playwright unavailable for the reference harness (set NM_REFERENCE_ROOT to a prepared checkout)" >&2
         # Drop the half-prepared cache so the next run re-clones and retries
