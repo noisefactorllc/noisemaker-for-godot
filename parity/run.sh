@@ -9,6 +9,18 @@
 # NON-headless with the window positioned offscreen (--position 5000,5000).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Bounds for engine steps: a host without a window session can stall the
+# launch forever, burning the engine command's whole deadline. Prefer the
+# host's timeout command (macOS ships gtimeout from coreutils, not
+# timeout); fall back to node's own spawn timeout, which every gate host
+# has because the gate runs node itself. A stall exits 124 as a named
+# failure instead of burning the engine command's deadline silently.
+bound_ms () { # $1 = milliseconds; rest = command
+  if command -v timeout >/dev/null 2>&1; then timeout "$(( $1 / 1000 ))" "${@:2}"
+  elif command -v gtimeout >/dev/null 2>&1; then gtimeout "$(( $1 / 1000 ))" "${@:2}"
+  else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS)});process.exit(r.status===null?124:r.status)' bound_ms "${@:2}"
+  fi
+}
 NAME="${1:?usage: run.sh <name> [tol] [ssim_min] [size]}"
 # Default 2.001 (not 2): compare.py computes max-abs-diff as float ((x-y)/255*255),
 # so a TRUE 8-bit diff of 2 reports ~2.0000035 and would false-fail a strict "<=2".
@@ -41,15 +53,9 @@ if [ "${SKIP_RENDER:-0}" != "1" ]; then
 	set +e
 	# The render opens a real window (RenderingDevice is null under
 	# --headless). A host without a window session can stall the engine
-	# launch forever. Bound it where the host offers a timeout command
-	# (macOS ships gtimeout, not timeout; run unbounded where neither
-	# exists, as before) so a stall fails named instead of burning the
-	# engine command's whole deadline.
-	render_prefix=''
-	if command -v timeout >/dev/null 2>&1; then render_prefix='timeout 120'
-	elif command -v gtimeout >/dev/null 2>&1; then render_prefix='gtimeout 120'
-	fi
-	render_log=$($render_prefix "$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
+	# launch forever. Bound it (see bound_ms above) so a stall fails named
+	# instead of burning the engine command's whole deadline.
+	render_log=$(bound_ms 120000 "$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
 		--position 5000,5000 -- "${render_args[@]}" 2>&1)
 	render_rc=$?
 	set -e

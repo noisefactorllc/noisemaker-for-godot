@@ -32,6 +32,18 @@
 # minted fresh via parity/export-and-render.mjs on every run at that revision.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Bounds for network and engine steps: a runner whose environment stalls a
+# silent fetch, install or launch burns the engine command's deadline with
+# no trace. Prefer the host's timeout command (macOS ships gtimeout from
+# coreutils, not timeout); fall back to node's own spawn timeout, which
+# every gate host has because the gate runs node itself. A stall exits 124
+# (timeout(1)'s code) as a named failure, early and in time for the mint.
+bound_ms () { # $1 = milliseconds; rest = command
+  if command -v timeout >/dev/null 2>&1; then timeout "$(( $1 / 1000 ))" "${@:2}"
+  elif command -v gtimeout >/dev/null 2>&1; then gtimeout "$(( $1 / 1000 ))" "${@:2}"
+  else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS)});process.exit(r.status===null?124:r.status)' bound_ms "${@:2}"
+  fi
+}
 if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
   # Self-contained authority resolution: pin-clone the reference engine at the
   # revision the port's goldens are bound to (no machine-specific paths; the
@@ -60,20 +72,13 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
     fi
     # A runner whose network accepts connections but never answers stalls a
     # silent fetch or npm install until the engine command's deadline burns
-    # with no trace. Bound each network step where the host offers a timeout
-    # command (macOS ships gtimeout from coreutils, not timeout); run
-    # unbounded where neither exists, as before. A stall exits as a named
-    # failure early, in time for the mint.
-    bound () {
-      if command -v timeout >/dev/null 2>&1; then timeout 300 "$@"
-      elif command -v gtimeout >/dev/null 2>&1; then gtimeout 300 "$@"
-      else "$@"; fi
-    }
+    # with no trace. Bound each network step (see bound_ms above): a stall
+    # exits as a named failure early, in time for the mint.
     if ! ( git init -q "$CACHE.tmp" \
            && git -C "$CACHE.tmp" remote add origin https://github.com/noisefactorllc/noisemaker \
-           && bound git -C "$CACHE.tmp" fetch -q --depth 1 origin "$PIN" ) 2>/dev/null; then
+           && bound_ms 300000 git -C "$CACHE.tmp" fetch -q --depth 1 origin "$PIN" ) 2>/dev/null; then
       rm -rf "$CACHE.tmp" 2>/dev/null || true
-      if ! bound git clone -q https://github.com/noisefactorllc/noisemaker "$CACHE.tmp" 2>/dev/null; then
+      if ! bound_ms 300000 git clone -q https://github.com/noisefactorllc/noisemaker "$CACHE.tmp" 2>/dev/null; then
         echo "parity-summary: cannot obtain the reference engine (set NM_REFERENCE_ROOT to a local checkout)" >&2
         rm -f "$CACHE.lock/lock"
         echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
@@ -95,7 +100,7 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
     # bundled by whatever the registry happens to serve.
     if [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
       echo "[REFERENCE] installing playwright@1.63.0 into the reference clone" >&2
-      if ! ( cd "$CACHE" && bound npm install --no-save "playwright@1.63.0" >/dev/null 2>&1 ) \
+      if ! ( cd "$CACHE" && bound_ms 300000 npm install --no-save "playwright@1.63.0" >/dev/null 2>&1 ) \
          || [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
         echo "parity-summary: playwright unavailable for the reference harness (set NM_REFERENCE_ROOT to a prepared checkout)" >&2
         # Drop the half-prepared cache so the next run re-clones and retries
@@ -129,15 +134,13 @@ if [ -f "$NM_REFERENCE_ROOT/node_modules/playwright/cli.js" ]; then
   esac
   # A runner whose network silently drops the download connection stalls the
   # install until the engine command's deadline burns with no trace. Bound
-  # the install where the host offers a timeout command (macOS ships
-  # gtimeout from coreutils, not timeout; run unbounded where neither
-  # exists, as before): a stall exits as a named failure in time for the
-  # mint, and a healthy slow download still fits.
-  install_prefix=''
-  if command -v timeout >/dev/null 2>&1; then install_prefix='timeout 120'
-  elif command -v gtimeout >/dev/null 2>&1; then install_prefix='gtimeout 120'
-  fi
-  if ! ( cd "$NM_REFERENCE_ROOT" && $install_prefix node node_modules/playwright/cli.js install chromium $shell_flag ); then
+  # it (see bound_ms above): a stall exits as a named failure in time for
+  # the mint, and a healthy slow download still fits.
+  case "${SHADE_HEADLESS:-1}" in
+    0|false) shell_flag='' ;;
+    *) shell_flag='--only-shell' ;;
+  esac
+  if ! ( cd "$NM_REFERENCE_ROOT" && bound_ms 120000 node node_modules/playwright/cli.js install chromium $shell_flag ); then
     echo "parity-summary: the playwright chromium build is unavailable or its install did not finish (set PLAYWRIGHT_BROWSERS_PATH to an installed browser root)" >&2
     echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
     exit 2
