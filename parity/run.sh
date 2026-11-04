@@ -39,10 +39,23 @@ if [ "${SKIP_RENDER:-0}" != "1" ]; then
 	render_args=(--graph "$GRAPH" --out "$CAND" --size "$SIZE")
 	[ "$NAME" != "media" ] || render_args+=(--media-fixture)
 	set +e
-	render_log=$("$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
+	# The render opens a real window (RenderingDevice is null under
+	# --headless). A host without a window session can stall the engine
+	# launch forever. Bound it where the host offers a timeout command
+	# (macOS ships gtimeout, not timeout; run unbounded where neither
+	# exists, as before) so a stall fails named instead of burning the
+	# engine command's whole deadline.
+	render_prefix=''
+	if command -v timeout >/dev/null 2>&1; then render_prefix='timeout 120'
+	elif command -v gtimeout >/dev/null 2>&1; then render_prefix='gtimeout 120'
+	fi
+	render_log=$($render_prefix "$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
 		--position 5000,5000 -- "${render_args[@]}" 2>&1)
 	render_rc=$?
 	set -e
+	if [ "$render_rc" -eq 124 ] || [ "$render_rc" -eq 137 ]; then
+		echo "DIAG: the Godot render for $NAME did not finish within its bound (rc $render_rc); a windowed engine launch on a headless host is the likely stall"
+	fi
 	# "ERROR" (Godot ERR_FAIL_* engine messages) must be surfaced: a failed
 	# render_pipeline_create prints its exact validation reason as an ERROR
 	# line, which the previous lowercase-only filter dropped from tails.
