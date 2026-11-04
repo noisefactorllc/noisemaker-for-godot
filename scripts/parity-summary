@@ -300,42 +300,74 @@ fi
 # the journal's completion marker and every completed run would then look
 # killed to the next invocation.
 trap 'rc=$?; rmdir "$LOCKDIR" 2>/dev/null || true; printf "GATE-COMPLETED rc=%s\n" "$rc" >>"$GATE_JOURNAL" 2>/dev/null || true' EXIT
-for case in "${CASES[@]}"; do
+# Cold runs are deadline-bound: the browser build download plus three
+# sequential case mints and renders can exceed the engine command's budget,
+# while the same steps fit easily when the cases overlap. Each case is
+# self-contained (per-case output paths and logs), so the heavy per-case work
+# runs concurrently under a bounded job count. Default keeps every required
+# case of the native profile overlapping; NM_CASE_JOBS=1 restores sequential
+# execution.
+RESULTS_TAG_DIR="$ROOT/parity/out/.case-results.$$"
+mkdir -p "$RESULTS_TAG_DIR"
+# Phase 1 (concurrent): mint each case's golden and graph with the browser
+# harness. Browsers parallelize cleanly; this is the cold path's dominant
+# cost. Phase 2 (sequential): render and classify with Godot — concurrent
+# Godot renders starve each other on one GPU/display, so they never overlap.
+mint_case () {
+  local case="$1"
+  while :; do
+    prog="$ROOT/parity/programs/$case.dsl"
+    gold="$ROOT/parity/out/$case.golden.png"
+    graph="$ROOT/parity/out/$case.graph.json"
+    case_run=0; case_every=0
+    if policy_line="$(bash "$ROOT/parity/sweep.sh" --policy "$case" 2>/dev/null)"; then
+      IFS=$'\t' read -r _ _ _ case_run case_every <<< "$policy_line"
+    fi
+    if [ ! -f "$prog" ]; then break; fi
+    if ! rm -f "$gold" "$graph" "$ROOT/parity/out/$case.golden.t"*.png \
+        "$ROOT/parity/out/$case.candidate.t"*.png "$ROOT/parity/out/$case.report.t"*.json; then
+      echo "[SKIP] $case: cannot clear previous golden and graph"
+      break
+    fi
+    if command -v node >/dev/null 2>&1; then
+      echo "[MINT] $case (reference $NM_REFERENCE_ROOT)"
+      mint_args=(--size 256 --backend webgl2)
+      if [ "${case_run:-0}" -gt 0 ]; then
+        mint_args+=(--run-seconds "$case_run" --sample-every "$case_every")
+      fi
+      if ! node "$ROOT/parity/export-and-render.mjs" "$prog" "$ROOT/parity/out" \
+          "${mint_args[@]}" > "$ROOT/parity/out/$case.mint.log" 2>&1; then
+        if ! rm -f "$gold" "$graph" "$ROOT/parity/out/$case.golden.t"*.png; then
+          echo "[SKIP] $case: failed mint left artifacts that could not be cleared"
+        fi
+      fi
+    fi
+    break
+  done
+}
+run_case () {
+  local case="$1"
+  # Single-pass loop: the body's 'break' statements end this invocation
+  # the way they ended a loop iteration before.
+  while :; do
   if ! policy_line="$(bash "$ROOT/parity/sweep.sh" --policy "$case")"; then
-    fail=$((fail+1)); echo "[FAIL] $case: policy lookup failed"; continue
+    fail=$((fail+1)); echo "[FAIL] $case: policy lookup failed"; break
   fi
   IFS=$'\t' read -r case_tol case_ssim case_reason case_run case_every <<< "$policy_line"
   if [ -z "$case_tol" ] || [ -z "$case_ssim" ]; then
-    fail=$((fail+1)); echo "[FAIL] $case: policy lookup returned no bounds"; continue
+    fail=$((fail+1)); echo "[FAIL] $case: policy lookup returned no bounds"; break
   fi
   prog="$ROOT/parity/programs/$case.dsl"
   gold="$ROOT/parity/out/$case.golden.png"
   graph="$ROOT/parity/out/$case.graph.json"
   if [ ! -f "$prog" ]; then
-    skip=$((skip+1)); echo "[SKIP] $case: no parity/programs/$case.dsl"; continue
-  fi
-  if ! rm -f "$gold" "$graph" "$ROOT/parity/out/$case.golden.t"*.png \
-      "$ROOT/parity/out/$case.candidate.t"*.png "$ROOT/parity/out/$case.report.t"*.json; then
-    skip=$((skip+1)); echo "[SKIP] $case: cannot clear previous golden and graph"; continue
-  fi
-  if command -v node >/dev/null 2>&1; then
-    echo "[MINT] $case (reference $NM_REFERENCE_ROOT)"
-    mint_args=(--size 256 --backend webgl2)
-    if [ "${case_run:-0}" -gt 0 ]; then
-      mint_args+=(--run-seconds "$case_run" --sample-every "$case_every")
-    fi
-    if ! node "$ROOT/parity/export-and-render.mjs" "$prog" "$ROOT/parity/out" \
-        "${mint_args[@]}" > "$ROOT/parity/out/$case.mint.log" 2>&1; then
-      if ! rm -f "$gold" "$graph" "$ROOT/parity/out/$case.golden.t"*.png; then
-        skip=$((skip+1)); echo "[SKIP] $case: failed mint left artifacts that could not be cleared"; continue
-      fi
-    fi
+    skip=$((skip+1)); echo "[SKIP] $case: no parity/programs/$case.dsl"; break
   fi
   if [ ! -f "$graph" ] || { [ "${case_run:-0}" -eq 0 ] && [ ! -f "$gold" ]; }; then
-    skip=$((skip+1)); echo "[SKIP] $case: current golden and graph could not be minted"; continue
+    skip=$((skip+1)); echo "[SKIP] $case: current golden and graph could not be minted"; break
   fi
   if [ -z "$GODOT_BIN" ]; then
-    skip=$((skip+1)); echo "[SKIP] $case: no Godot binary (set GODOT)"; continue
+    skip=$((skip+1)); echo "[SKIP] $case: no Godot binary (set GODOT)"; break
   fi
   if [ "${case_run:-0}" -gt 0 ]; then
     echo "[RENDER] $case (${case_run}s every ${case_every}s)"
@@ -378,11 +410,11 @@ for case in "${CASES[@]}"; do
         near) near=$((near+1)); echo "[NEAR] $case (timed: $case_reason)" ;;
       esac
     fi
-    continue
+    break
   fi
   echo "[RENDER] $case"
   if ! rm -f "$ROOT/parity/out/$case.parity-summary.report.json" "$ROOT/parity/out/$case.report.json"; then
-    skip=$((skip+1)); echo "[SKIP] $case: cannot clear previous comparator reports"; continue
+    skip=$((skip+1)); echo "[SKIP] $case: cannot clear previous comparator reports"; break
   fi
   if GODOT="$GODOT_BIN" bash "$ROOT/parity/run.sh" "$case" "$case_tol" "$case_ssim" 256 \
       > "$ROOT/parity/out/$case.parity-summary.log" 2>&1; then
@@ -393,18 +425,18 @@ for case in "${CASES[@]}"; do
   fi
   # run.sh writes report.json on both paths (compare.py --report always runs).
   if [ ! -f "$ROOT/parity/out/$case.candidate.png" ]; then
-    missing=$((missing+1)); echo "[MISSING] $case: no candidate produced"; continue
+    missing=$((missing+1)); echo "[MISSING] $case: no candidate produced"; break
   fi
   if [ ! -f "$ROOT/parity/out/$case.report.json" ]; then
     # Candidate exists but compare.py died before its report: fail, not missing.
     fail=$((fail+1)); executed=$((executed+1))
     echo "[FAIL] $case: comparator wrote no report (see parity/out/$case.parity-summary.log)"
-    continue
+    break
   fi
   if [ "$run_rc" -ne 0 ]; then
     fail=$((fail+1)); executed=$((executed+1))
     echo "[FAIL] $case: renderer or comparator exited $run_rc"
-    continue
+    break
   fi
   cp "$ROOT/parity/out/$case.report.json" "$ROOT/parity/out/$case.parity-summary.report.json" 2>/dev/null || true
   case "$(classify "$case" "$case_tol" "$case_ssim")" in
@@ -415,7 +447,70 @@ for case in "${CASES[@]}"; do
     missing) missing=$((missing+1)); echo "[MISSING] $case";;
     *)       fail=$((fail+1)); executed=$((executed+1)); echo "[FAIL] $case: classification failed";;
   esac
+  break
+  done
+}
+
+# Phase 1: mints overlap (bounded), each captured in its own log.
+mint_jobs="${NM_CASE_JOBS:-3}"
+mint_pids=()
+for case in "${CASES[@]}"; do
+  mint_case "$case" > "$ROOT/parity/out/$case.mintphase.log" 2>&1 &
+  mint_pids+=($!)
+  if [ "${#mint_pids[@]}" -ge "$mint_jobs" ]; then
+    if ! wait -n 2>/dev/null; then wait; mint_pids=(); else
+      mint_pids=("${mint_pids[@]:1}")
+    fi
+  fi
 done
+wait
+
+# Phase 2: Godot renders and comparisons run sequentially — concurrent Godot
+# instances starve each other on one GPU/display.
+case_jobs=1
+case_pids=()
+for case in "${CASES[@]}"; do
+  run_case "$case" > "$ROOT/parity/out/$case.case.log" 2>&1 &
+  case_pids+=($!)
+  if [ "${#case_pids[@]}" -ge "$case_jobs" ]; then
+    if ! wait -n 2>/dev/null; then wait; case_pids=(); else
+      # wait -n reaped one child; drop its pid. Statuses are judged from the
+      # per-case logs below, not from exit codes.
+      case_pids=("${case_pids[@]:1}")
+    fi
+  fi
+done
+wait
+
+# Aggregate the buckets from each case's own tags. A case's terminal tag is
+# authoritative: SKIP and MISSING never coexist with PASS, and a FAIL tag
+# always marks the case's final verdict.
+for case in "${CASES[@]}"; do
+  log="$ROOT/parity/out/$case.case.log"
+  # The children ran with their output captured per phase; replay both logs
+  # so the gate's stdout still carries every per-case stage line in order.
+  [ -f "$ROOT/parity/out/$case.mintphase.log" ] && cat "$ROOT/parity/out/$case.mintphase.log"
+  [ -f "$log" ] && cat "$log"
+  bucket="skip"
+  if [ -f "$log" ]; then
+    if    grep -q '^\[FAIL\]' "$log"; then bucket="fail"
+    elif  grep -q '^\[MISSING\]' "$log"; then bucket="missing"
+    elif  grep -q '^\[NEAR\]' "$log"; then bucket="near"
+    elif  grep -q '^\[PASS\] .*exact' "$log"; then bucket="exact"
+    elif  grep -q '^\[PASS\]' "$log"; then bucket="strict"
+    elif  grep -q '^\[SKIP\]' "$log"; then bucket="skip"
+    fi
+  fi
+  case "$bucket" in
+    exact)   exact=$((exact+1)); executed=$((executed+1)) ;;
+    strict)  strict=$((strict+1)); executed=$((executed+1)) ;;
+    near)    near=$((near+1)); executed=$((executed+1)) ;;
+    fail)    fail=$((fail+1)); executed=$((executed+1)) ;;
+    missing) missing=$((missing+1)) ;;
+    *)       skip=$((skip+1)) ;;
+  esac
+done
+rm -rf "$RESULTS_TAG_DIR" 2>/dev/null || true
 
 echo "PARITY-SUMMARY {\"expected\":$EXPECTED,\"executed\":$executed,\"exact\":$exact,\"strict\":$strict,\"near\":$near,\"defer\":$defer,\"skip\":$skip,\"fail\":$fail,\"missing\":$missing}"
 if [ "$executed" -eq "$EXPECTED" ] && [ "$((exact+strict+near))" -eq "$EXPECTED" ] \
