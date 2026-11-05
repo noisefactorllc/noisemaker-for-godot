@@ -62,6 +62,16 @@ diag () {
   echo "$*" >&2
   printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*" >>"$GATE_JOURNAL" 2>/dev/null || true
 }
+
+# tagj mirrors diag for per-case stage lines: the same line goes to stdout and
+# the gate journal (with a timestamp). The per-case phases run with their
+# output captured in per-case logs, so a run killed by the engine command's
+# deadline would otherwise leave no trace naming the case and stage that were
+# active at the kill; the journal makes the killed run's last stage visible.
+tagj () {
+  echo "$*"
+  printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*" >>"$GATE_JOURNAL" 2>/dev/null || true
+}
 # A runner that kills the engine command on its deadline may lose the captured
 # output, so the gate also journals every diagnostic line inside the checkout.
 # A later invocation on the same workspace replays the previous invocation's
@@ -334,11 +344,11 @@ mint_case () {
     if [ ! -f "$prog" ]; then break; fi
     if ! rm -f "$gold" "$graph" "$ROOT/parity/out/$case.golden.t"*.png \
         "$ROOT/parity/out/$case.candidate.t"*.png "$ROOT/parity/out/$case.report.t"*.json; then
-      echo "[SKIP] $case: cannot clear previous golden and graph"
+      tagj "[SKIP] $case: cannot clear previous golden and graph"
       break
     fi
     if command -v node >/dev/null 2>&1; then
-      echo "[MINT] $case (reference $NM_REFERENCE_ROOT)"
+      tagj "[MINT] $case (reference $NM_REFERENCE_ROOT)"
       mint_args=(--size 256 --backend webgl2)
       if [ "${case_run:-0}" -gt 0 ]; then
         mint_args+=(--run-seconds "$case_run" --sample-every "$case_every")
@@ -349,7 +359,7 @@ mint_case () {
       if ! bound_ms 90000 node "$ROOT/parity/export-and-render.mjs" "$prog" "$ROOT/parity/out" \
           "${mint_args[@]}" > "$ROOT/parity/out/$case.mint.log" 2>&1; then
         if ! rm -f "$gold" "$graph" "$ROOT/parity/out/$case.golden.t"*.png; then
-          echo "[SKIP] $case: failed mint left artifacts that could not be cleared"
+          tagj "[SKIP] $case: failed mint left artifacts that could not be cleared"
         fi
       fi
     fi
@@ -381,7 +391,7 @@ run_case () {
     skip=$((skip+1)); echo "[SKIP] $case: no Godot binary (set GODOT)"; break
   fi
   if [ "${case_run:-0}" -gt 0 ]; then
-    echo "[RENDER] $case (${case_run}s every ${case_every}s)"
+    tagj "[RENDER] $case (${case_run}s every ${case_every}s)"
     if GODOT="$GODOT_BIN" bash "$ROOT/parity/run_samples.sh" "$case" "$case_tol" \
         "$case_ssim" "$case_run" "$case_every" 256 \
         > "$ROOT/parity/out/$case.parity-summary.log" 2>&1; then
@@ -409,54 +419,54 @@ run_case () {
       t=$((t + case_every))
     done
     if [ "$sample_bucket" = missing ]; then
-      missing=$((missing+1)); echo "[MISSING] $case: timed sample missing"
+      missing=$((missing+1)); tagj "[MISSING] $case: timed sample missing"
     elif [ "$run_rc" -ne 0 ] || [ "$sample_bucket" = fail ]; then
       fail=$((fail+1)); executed=$((executed+1))
-      echo "[FAIL] $case: timed samples failed (runner exit $run_rc)"
+      tagj "[FAIL] $case: timed samples failed (runner exit $run_rc)"
     else
       executed=$((executed+1))
       case "$sample_bucket" in
-        exact) exact=$((exact+1)); echo "[PASS] $case (timed exact)" ;;
-        strict) strict=$((strict+1)); echo "[PASS] $case (timed strict)" ;;
-        near) near=$((near+1)); echo "[NEAR] $case (timed: $case_reason)" ;;
+        exact) exact=$((exact+1)); tagj "[PASS] $case (timed exact)" ;;
+        strict) strict=$((strict+1)); tagj "[PASS] $case (timed strict)" ;;
+        near) near=$((near+1)); tagj "[NEAR] $case (timed: $case_reason)" ;;
       esac
     fi
     break
   fi
-  echo "[RENDER] $case"
+  tagj "[RENDER] $case"
   if ! rm -f "$ROOT/parity/out/$case.parity-summary.report.json" "$ROOT/parity/out/$case.report.json"; then
-    skip=$((skip+1)); echo "[SKIP] $case: cannot clear previous comparator reports"; break
+    skip=$((skip+1)); tagj "[SKIP] $case: cannot clear previous comparator reports"; break
   fi
   if GODOT="$GODOT_BIN" bash "$ROOT/parity/run.sh" "$case" "$case_tol" "$case_ssim" 256 \
       > "$ROOT/parity/out/$case.parity-summary.log" 2>&1; then
     run_rc=0
   else
     run_rc=$?
-    echo "[NONZERO] $case: run.sh exited nonzero (see parity/out/$case.parity-summary.log)"
+    tagj "[NONZERO] $case: run.sh exited nonzero (see parity/out/$case.parity-summary.log)"
   fi
   # run.sh writes report.json on both paths (compare.py --report always runs).
   if [ ! -f "$ROOT/parity/out/$case.candidate.png" ]; then
-    missing=$((missing+1)); echo "[MISSING] $case: no candidate produced"; break
+    missing=$((missing+1)); tagj "[MISSING] $case: no candidate produced"; break
   fi
   if [ ! -f "$ROOT/parity/out/$case.report.json" ]; then
     # Candidate exists but compare.py died before its report: fail, not missing.
     fail=$((fail+1)); executed=$((executed+1))
-    echo "[FAIL] $case: comparator wrote no report (see parity/out/$case.parity-summary.log)"
+    tagj "[FAIL] $case: comparator wrote no report (see parity/out/$case.parity-summary.log)"
     break
   fi
   if [ "$run_rc" -ne 0 ]; then
     fail=$((fail+1)); executed=$((executed+1))
-    echo "[FAIL] $case: renderer or comparator exited $run_rc"
+    tagj "[FAIL] $case: renderer or comparator exited $run_rc"
     break
   fi
   cp "$ROOT/parity/out/$case.report.json" "$ROOT/parity/out/$case.parity-summary.report.json" 2>/dev/null || true
   case "$(classify "$case" "$case_tol" "$case_ssim")" in
-    exact)   exact=$((exact+1)); executed=$((executed+1)); echo "[PASS] $case (exact)";;
-    strict)  strict=$((strict+1)); executed=$((executed+1)); echo "[PASS] $case (strict)";;
-    near)    near=$((near+1)); executed=$((executed+1)); echo "[NEAR] $case ($case_reason)";;
-    fail)    fail=$((fail+1)); executed=$((executed+1)); echo "[FAIL] $case";;
-    missing) missing=$((missing+1)); echo "[MISSING] $case";;
-    *)       fail=$((fail+1)); executed=$((executed+1)); echo "[FAIL] $case: classification failed";;
+    exact)   exact=$((exact+1)); executed=$((executed+1)); tagj "[PASS] $case (exact)";;
+    strict)  strict=$((strict+1)); executed=$((executed+1)); tagj "[PASS] $case (strict)";;
+    near)    near=$((near+1)); executed=$((executed+1)); tagj "[NEAR] $case ($case_reason)";;
+    fail)    fail=$((fail+1)); executed=$((executed+1)); tagj "[FAIL] $case";;
+    missing) missing=$((missing+1)); tagj "[MISSING] $case";;
+    *)       fail=$((fail+1)); executed=$((executed+1)); tagj "[FAIL] $case: classification failed";;
   esac
   break
   done
