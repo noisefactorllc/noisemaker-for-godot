@@ -39,16 +39,27 @@ mkdir -p "$_compare_root/parity/out" 2>/dev/null || true
 : > "$_provision_log" 2>/dev/null || true
 # uv bootstraps a venv without ensurepip, which some check hosts lack; try it
 # first and fall back to python3 -m venv.
-if command -v uv >/dev/null 2>&1; then
-  if bound 120000 uv venv "$_compare_root/parity/.venv" >>"$_provision_log" 2>&1 \
-     && bound 120000 uv pip install --python "$_compare_root/parity/.venv/bin/python" numpy pillow >>"$_provision_log" 2>&1; then
-    PY="$_compare_root/parity/.venv/bin/python"
+# Windows venvs keep the interpreter under Scripts/; resolve either layout
+# so a successful provision cannot end in FAIL (review finding).
+_venv_python() {
+  if [ -x "$_compare_root/parity/.venv/bin/python" ]; then
+    echo "$_compare_root/parity/.venv/bin/python"
+  elif [ -x "$_compare_root/parity/.venv/Scripts/python.exe" ]; then
+    echo "$_compare_root/parity/.venv/Scripts/python.exe"
+  fi
+}
+if command -v uv >/dev/null 2>&1 \
+   && bound 120000 uv venv "$_compare_root/parity/.venv" >>"$_provision_log" 2>&1; then
+  _vp="$(_venv_python)"
+  if [ -n "$_vp" ] && bound 120000 uv pip install --python "$_vp" numpy pillow >>"$_provision_log" 2>&1; then
+    PY="$_vp"
   fi
 fi
-if [ ! -x "$PY" ] && command -v python3 >/dev/null 2>&1; then
-  if bound 120000 python3 -m venv "$_compare_root/parity/.venv" >>"$_provision_log" 2>&1 \
-     && bound 120000 "$_compare_root/parity/.venv/bin/python" -m pip install numpy pillow >>"$_provision_log" 2>&1; then
-    PY="$_compare_root/parity/.venv/bin/python"
+if [ ! -x "$PY" ] && command -v python3 >/dev/null 2>&1 \
+   && bound 120000 python3 -m venv "$_compare_root/parity/.venv" >>"$_provision_log" 2>&1; then
+  _vp="$(_venv_python)"
+  if [ -n "$_vp" ] && bound 120000 "$_vp" -m pip install numpy pillow >>"$_provision_log" 2>&1; then
+    PY="$_vp"
   fi
 fi
 if [ ! -x "$PY" ]; then

@@ -25,6 +25,7 @@ ENGINE_FREE=(
 	parity.test_artistic_matrix
 	parity.test_expand_acceptance
 	parity.test_export_kit_gate
+	parity.test_ensure_compare_python
 	parity.test_harness_contract
 	parity.test_parity_summary
 	parity.test_bound_ms
