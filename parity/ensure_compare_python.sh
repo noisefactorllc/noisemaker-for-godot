@@ -26,7 +26,22 @@ if command -v python3 >/dev/null 2>&1 \
   return 0 2>/dev/null || exit 0
 fi
 bound () { # $1 = milliseconds; rest = command; escalates like run.sh's bound_ms
-  local rc
+  local rc planned="$1" now remaining=""
+  # The gate (scripts/parity-summary) exports its engine deadline and start:
+  # cap this step's fixed bound at the deadline's remaining time minus a 10s
+  # margin, so a slow registry cannot outlive the engine command's deadline
+  # as a bare command_timeout with no stage named. Standalone (no gate clock)
+  # the bound stays exactly as large as requested.
+  if [ -n "${NM_GATE_DEADLINE_MS:-}" ] && [ -n "${NM_GATE_START_MS:-}" ]; then
+    now="$(date +%s%3N 2>/dev/null)"
+    case "$now" in *[!0-9]*) now=$(( $(date +%s) * 1000 )) ;; esac
+    remaining=$(( NM_GATE_DEADLINE_MS - ( now - NM_GATE_START_MS ) - 10000 ))
+    if [ "$remaining" -lt 5000 ]; then
+      echo "FAIL: the engine deadline has too little time left to provision the comparator environment" >&2
+      return 124
+    fi
+    if [ "$planned" -gt "$remaining" ]; then set -- "$remaining" "${@:2}"; fi
+  fi
   if command -v timeout >/dev/null 2>&1; then timeout -k 10 "$(( $1 / 1000 ))" "${@:2}"; rc=$?
   elif command -v gtimeout >/dev/null 2>&1; then gtimeout -k 10 "$(( $1 / 1000 ))" "${@:2}"; rc=$?
   else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"ignore",timeout:Number(process.env.BOUND_MS),killSignal:"SIGKILL"});process.exit(r.status===null?124:r.status)' bound "${@:2}"; rc=$?

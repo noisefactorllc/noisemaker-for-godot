@@ -41,6 +41,23 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # every gate host has because the gate runs node itself. A stall exits 124
 # (timeout(1)'s code) as a named failure, early and in time for the mint.
 bound_ms () { # $1 = milliseconds; rest = command
+  # The engine command's deadline bounds the whole gate (see GATE_START_MS
+  # below): a fixed bound longer than that deadline's remaining time lets the
+  # harness kill arrive first as a bare command_timeout with no stage named
+  # (observed on a cold runner). Cap every bound at the remaining time minus
+  # the same 10s margin the renders reserve, and refuse to launch once too
+  # little of it remains, so every overrun ends as this named 124 inside the
+  # deadline. Standalone (no gate clock, as in the bound_ms contract tests)
+  # the bound stays exactly as large as requested.
+  local planned="$1" remaining=""
+  if [ -n "${NM_GATE_DEADLINE_MS:-}" ]; then
+    remaining=$(( NM_GATE_DEADLINE_MS - ( "$(now_ms)" - GATE_START_MS ) - 10000 ))
+    if [ "$remaining" -lt 5000 ]; then
+      echo "DIAG: the gate's engine deadline has too little time left for: ${*:2}" >&2
+      return 124
+    fi
+    if [ "$planned" -gt "$remaining" ]; then set -- "$remaining" "${@:2}"; fi
+  fi
   # GNU timeout waits forever when the child ignores TERM, so the bound itself
   # can hang (red probe: timeout 2 'trap "" TERM; sleep 12' exits after 12s, not
   # 2s). Escalate to SIGKILL 10s after the bound on every branch so a stalled
@@ -106,6 +123,11 @@ now_ms () { # prints epoch milliseconds; portable across GNU and BSD date
   case "$s" in *[!0-9]*) echo "$(( $(date +%s) * 1000 ))" ;; *) echo "$s" ;; esac
 }
 GATE_START_MS="$(now_ms)"
+# Export the gate's deadline and start so child scripts (run.sh,
+# run_samples.sh and the comparator provisioning they source) can cap their
+# own fixed bounds at the deadline's remaining time too.
+NM_GATE_DEADLINE_MS="${NM_ENGINE_DEADLINE_MS:-180000}"
+export NM_GATE_DEADLINE_MS NM_GATE_START_MS="$GATE_START_MS"
 render_bound_ms () { # prints the milliseconds a render may still use
   local remaining
   remaining=$(( ${NM_ENGINE_DEADLINE_MS:-180000} - ( "$(now_ms)" - GATE_START_MS ) - 10000 ))
