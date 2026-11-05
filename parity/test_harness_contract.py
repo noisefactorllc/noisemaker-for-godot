@@ -803,6 +803,63 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
         result = self._run_with_fake_renderer(1)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_gate_render_without_window_session_fails_named_before_launch(self):
+        """On Linux a gate-driven render (NM_RENDER_BOUND_MS set) needs a
+        window session: the engine launch opens a real window and would stall
+        on a display-less runner until the harness kills it as a bare
+        command_timeout. The guard must fail named before any launch."""
+        parity = self.tmp / "parity"
+        (parity / "out").mkdir(parents=True)
+        shutil.copy2(REPO / "parity" / "run.sh", parity / "run.sh")
+        shutil.copy2(REPO / "parity" / "ensure_compare_python.sh",
+                     parity / "ensure_compare_python.sh")
+        for suffix in ("graph.json", "golden.png"):
+            (parity / "out" / f"chrome.{suffix}").touch()
+        renderer = self.tmp / "fake-godot"
+        renderer.write_text(
+            "#!/usr/bin/env bash\n"
+            f"touch '{self.tmp / 'launched'}'\n"
+            "exit 0\n"
+        )
+        renderer.chmod(0o755)
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("DISPLAY", "WAYLAND_DISPLAY")}
+        env["GODOT"] = str(renderer)
+        env["NM_RENDER_BOUND_MS"] = "1000"
+
+        result = subprocess.run(
+            ["bash", str(parity / "run.sh"), "chrome", "0", "0.999"],
+            env=env, capture_output=True, text=True,
+        )
+
+        self.assertEqual(result.returncode, 124, result.stdout + result.stderr)
+        self.assertIn("no window session", result.stdout)
+        self.assertFalse((self.tmp / "launched").exists(),
+                         "the guard must fail before any engine launch")
+
+    def test_gate_render_guard_skipped_when_a_window_session_exists(self):
+        """With a window session the guard must not fire: the render proceeds
+        (here the fake renderer produces no candidate, so the run fails for
+        that named reason instead of the guard's exit 124)."""
+        parity = self.tmp / "parity"
+        (parity / "out").mkdir(parents=True)
+        shutil.copy2(REPO / "parity" / "run.sh", parity / "run.sh")
+        for suffix in ("graph.json", "golden.png"):
+            (parity / "out" / f"chrome.{suffix}").touch()
+        renderer = self.tmp / "fake-godot"
+        renderer.write_text("#!/usr/bin/env bash\nexit 0\n")
+        renderer.chmod(0o755)
+        env = {**os.environ, "GODOT": str(renderer), "NM_RENDER_BOUND_MS": "1000"}
+        env.setdefault("DISPLAY", ":99")
+
+        result = subprocess.run(
+            ["bash", str(parity / "run.sh"), "chrome", "0", "0.999"],
+            env=env, capture_output=True, text=True,
+        )
+
+        self.assertNotEqual(result.returncode, 124, result.stdout + result.stderr)
+        self.assertNotIn("no window session", result.stdout + result.stderr)
+
     def test_runner_prints_report_diagnostics_on_threshold_failure(self):
         parity = self.tmp / "parity"
         (parity / "out").mkdir(parents=True)

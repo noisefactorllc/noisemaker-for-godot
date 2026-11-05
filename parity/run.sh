@@ -59,6 +59,19 @@ fi
 [ -f "$GRAPH" ] || { echo "missing graph: $GRAPH (run: node tools/export-graph.mjs --file parity/programs/$NAME.dsl $GRAPH)"; exit 2; }
 [ -f "$GOLD" ]  || { echo "missing golden: $GOLD (run the reference harness)"; exit 2; }
 
+# A gate-driven render needs a window session: the engine launch opens a real
+# window, and on a display-less Linux runner that launch stalls until its
+# bound fires, burning the harness's engine deadline as a bare command_timeout
+# with no stage named (observed on a windowless runner). Fail named instead,
+# immediately, so the runner mismatch is visible. Linux only: macOS leaves
+# DISPLAY unset in a normal windowed session, so the variables cannot prove
+# anything there.
+if [ -n "${NM_RENDER_BOUND_MS:-}" ] && [ "$(uname -s)" = "Linux" ] \
+   && [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+	echo "FAIL: no window session (DISPLAY and WAYLAND_DISPLAY unset); the Godot render needs a windowed engine launch on a GPU host"
+	exit 124
+fi
+
 if [ "${SKIP_RENDER:-0}" != "1" ]; then
 	render_args=(--graph "$GRAPH" --out "$CAND" --size "$SIZE")
 	[ "$NAME" != "media" ] || render_args+=(--media-fixture)
