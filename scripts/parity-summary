@@ -463,7 +463,7 @@ run_case () {
 }
 
 # Phase 1: mints overlap (bounded), each captured in its own log.
-mint_jobs="${NM_CASE_JOBS:-3}"
+mint_jobs="${NM_CASE_JOBS:-8}"
 mint_pids=()
 for case in "${CASES[@]}"; do
   mint_case "$case" > "$ROOT/parity/out/$case.mintphase.log" 2>&1 &
