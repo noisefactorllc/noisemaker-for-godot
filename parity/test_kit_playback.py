@@ -21,6 +21,10 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+try:
+    from parity.windowed import run_windowed
+except ImportError:  # direct discovery (unittest discover -s parity)
+    from windowed import run_windowed
 
 REPO = Path(__file__).resolve().parents[1]
 GODOT = Path(os.environ.get("GODOT", "/Applications/Godot.app/Contents/MacOS/Godot"))
@@ -54,9 +58,9 @@ def build_kit(dest: Path, frames: int, sample_every: int, playback_fps: int,
     main.write_text(text)
 
 
-def observe(kit: Path, out_png: Path, timeout: int = 300) -> dict:
+def observe(kit: Path, out_png: Path, timeout: int = 90) -> dict:
     """Run the committed observer; return {rc, output, summary}."""
-    result = subprocess.run(
+    result = run_windowed(
         [
             str(GODOT), "--path", str(kit),
             "--script", str(OBSERVER),

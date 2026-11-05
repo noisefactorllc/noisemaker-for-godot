@@ -3,6 +3,10 @@ import hashlib
 import json
 import os
 from pathlib import Path
+try:
+    from parity.windowed import run_windowed
+except ImportError:  # direct discovery (unittest discover -s parity)
+    from windowed import run_windowed
 
 try:
     from parity.godot_floor_noise import without_engine_exit_noise
@@ -51,8 +55,8 @@ export_path=""
 application/modify_resources=false
 ''')
             def run(*args):
-                result = subprocess.run([GODOT, '--path', str(root), *args],
-                                        capture_output=True, text=True, timeout=180)
+                result = run_windowed([GODOT, '--path', str(root), *args],
+                                      capture_output=True, text=True, timeout=180)
                 output = result.stdout + result.stderr
                 self.assertEqual(result.returncode, 0, output[-12000:])
                 self.assertNotIn('ShaderFile', output, output[-12000:])

@@ -7,6 +7,10 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+try:
+    from parity.windowed import run_windowed
+except ImportError:  # direct discovery (unittest discover -s parity)
+    from windowed import run_windowed
 
 try:
     from parity.godot_floor_noise import without_engine_exit_noise
@@ -63,7 +67,7 @@ class MissingEffectsLiveTests(unittest.TestCase):
 
             manifest = root / "manifest.json"
             manifest.write_text(json.dumps({"entries": entries}))
-            result = subprocess.run(
+            result = run_windowed(
                 [
                     str(GODOT),
                     "--path",
@@ -78,7 +82,7 @@ class MissingEffectsLiveTests(unittest.TestCase):
                 ],
                 capture_output=True,
                 text=True,
-                timeout=300,
+                timeout=90,
             )
 
             output_log = result.stdout + result.stderr

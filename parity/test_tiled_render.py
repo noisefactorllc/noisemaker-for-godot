@@ -30,6 +30,10 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+try:
+    from parity.windowed import run_windowed
+except ImportError:  # direct discovery (unittest discover -s parity)
+    from windowed import run_windowed
 
 import numpy as np
 from PIL import Image
@@ -75,7 +79,7 @@ def render_tiled(dsl_text: str, work: Path, name: str) -> dict:
     dsl = work / f"{name}.dsl"
     dsl.write_text(dsl_text)
     out = work / f"{name}.candidate.png"
-    result = subprocess.run(
+    result = run_windowed(
         [
             str(GODOT), "--path", str(REPO / "godot"),
             "--script", RENDER_GRAPH,
@@ -86,7 +90,7 @@ def render_tiled(dsl_text: str, work: Path, name: str) -> dict:
             "--render-scale", str(RENDER_SCALE),
             "--tiles", f"{TILE}x{TILE}", "--tile-margin", str(MARGIN),
         ],
-        capture_output=True, text=True, timeout=900,
+        capture_output=True, text=True, timeout=150,
     )
     untiled = work / f"{name}.untiled.png"
     return {

@@ -8,6 +8,10 @@ import subprocess
 import tempfile
 import textwrap
 import unittest
+try:
+    from parity.windowed import run_windowed
+except ImportError:  # direct discovery (unittest discover -s parity)
+    from windowed import run_windowed
 from pathlib import Path
 
 
@@ -95,7 +99,7 @@ class LiveLifecycleTests(unittest.TestCase):
     """Live RenderingDevice probe (needs a real window + device)."""
 
     def test_repeated_lifecycles_are_flat_cancel_active_exports_and_free_clean(self):
-        result = subprocess.run(
+        result = run_windowed(
             [str(GODOT), "--path", str(REPO / "godot"), "--script", str(PROBE),
              "--position", "5000,5000"],
             capture_output=True, text=True, timeout=120,
@@ -128,11 +132,11 @@ class LiveLifecycleTests(unittest.TestCase):
                 {"name": f"r{i}", "dsl": dsl.as_posix(), "out": (Path(tmp) / f"r{i}.png").as_posix(),
                  "size": 32, "run_seconds": 0, "sample_every": 0}
                 for i in range(requests)]}))
-            result = subprocess.run(
+            result = run_windowed(
                 [str(GODOT), "--path", str(REPO / "godot"), "--script",
                  "res://addons/noisemaker/tools/render_graph.gd", "--position", "5000,5000",
                  "--", "--batch-manifest", manifest.as_posix()],
-                capture_output=True, text=True, timeout=300,
+                capture_output=True, text=True, timeout=90,
             )
             output = result.stdout + result.stderr
             self.assertEqual(result.returncode, 0, output[-4000:])

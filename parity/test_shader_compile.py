@@ -7,6 +7,10 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+try:
+    from parity.windowed import run_windowed
+except ImportError:  # direct discovery (unittest discover -s parity)
+    from windowed import run_windowed
 from pathlib import Path
 
 try:
@@ -23,7 +27,7 @@ SWEEP = REPO / "parity" / "shader_compile_sweep.gd"
 @unittest.skipUnless(GODOT.exists(), f"Godot binary not found: {GODOT}")
 class ShaderCompileTests(unittest.TestCase):
     def test_every_definition_shader_compiles_for_vulkan(self):
-        result = subprocess.run(
+        result = run_windowed(
             [
                 str(GODOT),
                 "--path",
@@ -35,7 +39,7 @@ class ShaderCompileTests(unittest.TestCase):
             ],
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=90,
         )
 
         output = result.stdout + result.stderr
@@ -59,11 +63,11 @@ class ShaderCompileTests(unittest.TestCase):
             )
             shader.write_text(source, encoding="utf-8")
 
-            result = subprocess.run(
+            result = run_windowed(
                 [str(GODOT), "--path", str(project), "--script", str(SWEEP), "--position", "5000,5000"],
                 capture_output=True,
                 text=True,
-                timeout=300,
+                timeout=90,
             )
 
         output = result.stdout + result.stderr

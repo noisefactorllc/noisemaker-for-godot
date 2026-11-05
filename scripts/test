@@ -31,6 +31,7 @@ ENGINE_FREE=(
 	parity.test_bound_ms
 	parity.test_doc_count_claims
 	parity.test_shader_coverage
+	parity.test_windowed
 )
 GODOT_HEADLESS=(
 	parity.test_capture_quantization

@@ -4,6 +4,10 @@
 import os
 import subprocess
 import unittest
+try:
+    from parity.windowed import run_windowed
+except ImportError:  # direct discovery (unittest discover -s parity)
+    from windowed import run_windowed
 from pathlib import Path
 
 try:
@@ -20,7 +24,7 @@ PROBE = REPO / "parity" / "device_limits_probe.gd"
 @unittest.skipUnless(GODOT.exists(), f"Godot binary not found: {GODOT}")
 class DeviceLimitTests(unittest.TestCase):
     def test_device_limits_are_probed_and_applied_to_a_live_mrt_render(self):
-        result = subprocess.run(
+        result = run_windowed(
             [
                 str(GODOT),
                 "--path",

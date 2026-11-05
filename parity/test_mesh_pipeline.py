@@ -4,6 +4,10 @@
 import os
 import subprocess
 import unittest
+try:
+    from parity.windowed import run_windowed
+except ImportError:  # direct discovery (unittest discover -s parity)
+    from windowed import run_windowed
 from pathlib import Path
 
 try:
@@ -20,7 +24,7 @@ PROBE = REPO / "parity" / "mesh_pipeline_probe.gd"
 @unittest.skipUnless(GODOT.exists(), f"Godot binary not found: {GODOT}")
 class MeshPipelineTests(unittest.TestCase):
     def test_triangles_use_depth_and_back_face_culling(self):
-        result = subprocess.run(
+        result = run_windowed(
             [
                 str(GODOT),
                 "--path",
