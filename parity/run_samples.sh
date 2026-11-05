@@ -21,9 +21,12 @@ RUN="${4:-30}"
 EVERY="${5:-5}"
 SIZE="${6:-256}"
 GODOT="${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}"
-PY="$ROOT/parity/.venv/bin/python"
-# A Windows venv keeps its interpreter under Scripts/.
-[ -x "$PY" ] || [ ! -x "$ROOT/parity/.venv/Scripts/python.exe" ] || PY="$ROOT/parity/.venv/Scripts/python.exe"
+# The comparator's interpreter and environment (see ensure_compare_python.sh):
+# a fresh runner checkout ships no parity/.venv, so resolution provisions the
+# documented venv here instead of letting every compare die with exit 127.
+. "$ROOT/parity/ensure_compare_python.sh" "$ROOT" || {
+	echo "FAIL: cannot resolve the comparator interpreter for $ROOT"; exit 2;
+}
 GRAPH="$ROOT/parity/out/$NAME.graph.json"
 [ -f "$GRAPH" ] || { echo "missing graph: $GRAPH (run export-and-render.mjs first)"; exit 2; }
 [ "$EVERY" -gt 0 ] 2>/dev/null || { echo "sample_every must be a positive integer"; exit 2; }
