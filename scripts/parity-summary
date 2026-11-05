@@ -97,6 +97,30 @@ tagj () {
 # exit code, so only a killed run triggers a replay.
 GATE_JOURNAL="$ROOT/parity/out/gate-journal.log"
 mkdir -p "$ROOT/parity/out" 2>/dev/null || true
+
+# Provision the comparator's python environment while the reference
+# provisioning below and the mint phase run: on a cold runner the venv
+# install is the longest silent step, and a harness that bounds the whole
+# gate command kills it as a bare command_timeout with no stage named once
+# the cumulative cold time exceeds its deadline. The ensure script is
+# idempotent; run.sh and run_samples.sh source it again per render and then
+# find the environment ready.
+COMPARE_PY_PID=""
+if ! python3 -c 'import numpy, PIL' >/dev/null 2>&1 \
+   && [ -f "$ROOT/parity/ensure_compare_python.sh" ]; then
+  COMPARE_PY_DONE="$ROOT/parity/out/venv-provision.done"
+  COMPARE_PY_FAIL="$ROOT/parity/out/venv-provision.fail"
+  rm -f "$COMPARE_PY_DONE" "$COMPARE_PY_FAIL"
+  (
+    if bash "$ROOT/parity/ensure_compare_python.sh" "$ROOT" \
+        > "$ROOT/parity/out/venv-provision.log" 2>&1; then
+      touch "$COMPARE_PY_DONE"
+    else
+      touch "$COMPARE_PY_FAIL"
+    fi
+  ) &
+  COMPARE_PY_PID=$!
+fi
 trap 'printf "GATE-COMPLETED rc=%s\n" "$?" >>"$GATE_JOURNAL" 2>/dev/null || true' EXIT
 if [ -s "$GATE_JOURNAL" ] && ! tail -n 3 "$GATE_JOURNAL" 2>/dev/null | grep -q '^GATE-COMPLETED'; then
   echo "[GATE-JOURNAL] the previous invocation was killed before completing; its last stages"
@@ -548,6 +572,23 @@ for case in "${CASES[@]}"; do
   fi
 done
 wait
+
+# The comparator's python environment must be ready before the first render:
+# it provisioned in the background (overlapping the reference provisioning
+# and the mints), so wait on its sentinel — earlier reaps can invalidate the
+# pid — and fail named, not silently, if it failed or ran out of time.
+if [ -n "$COMPARE_PY_PID" ]; then
+  i=0
+  while [ ! -f "${COMPARE_PY_DONE:-/nonexistent}" ] \
+     && [ ! -f "${COMPARE_PY_FAIL:-/nonexistent}" ] && [ "$i" -lt 150 ]; do
+    sleep 1; i=$((i+1))
+  done
+  if [ ! -f "${COMPARE_PY_DONE:-/nonexistent}" ]; then
+    echo "FAIL: the comparator python environment did not provision (parity/out/venv-provision.log):"
+    cat "$ROOT/parity/out/venv-provision.log" 2>/dev/null || true
+    exit 124
+  fi
+fi
 
 # Phase 2: Godot renders and comparisons run sequentially — concurrent Godot
 # instances starve each other on one GPU/display.
