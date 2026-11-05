@@ -526,7 +526,12 @@ run_case () {
     tagj "[FAIL] $case: the engine command's deadline left no time for the render"
     break
   fi
-  if NM_RENDER_BOUND_MS="$render_bound" GODOT="$GODOT_BIN" bash "$ROOT/parity/run.sh" "$case" "$case_tol" "$case_ssim" 256 \
+  # A batched pre-render already produced this case's candidate, so run.sh
+  # only compares and classifies (SKIP_RENDER=1); the case still fails named
+  # when the batch left no candidate. Unbatched runs keep the render launch.
+  skip_render=0
+  case " $NM_BATCHED_CASES " in *" $case "*) skip_render=1 ;; esac
+  if NM_RENDER_BOUND_MS="$render_bound" GODOT="$GODOT_BIN" SKIP_RENDER="$skip_render" bash "$ROOT/parity/run.sh" "$case" "$case_tol" "$case_ssim" 256 \
       > "$ROOT/parity/out/$case.parity-summary.log" 2>&1; then
     run_rc=0
   else
@@ -591,6 +596,81 @@ if [ -n "$COMPARE_PY_PID" ]; then
     exit 124
   fi
 fi
+
+# One cold engine launch pays the engine's startup and import cost. The
+# native profile's three required cases each paid it again, and on a slow
+# cold runner the last render could outlive the engine command's deadline
+# before its own bound fired. The engine renders many requests in one
+# launch (--batch-manifest), so pre-render every non-sampled case of this
+# run in one bounded launch; each per-case run.sh then classifies with
+# SKIP_RENDER=1 and never launches the engine itself. Single-case runs and
+# timed-sweep cases keep the per-case launch path.
+NM_BATCHED_CASES=""
+batch_cases=()
+if [ -n "$GODOT_BIN" ]; then
+  for case in "${CASES[@]}"; do
+    if policy_line="$(bash "$ROOT/parity/sweep.sh" --policy "$case" 2>/dev/null)"; then
+      IFS=$'\t' read -r _ _ _ case_run _ <<< "$policy_line"
+      if [ "${case_run:-0}" -eq 0 ] && [ -f "$ROOT/parity/programs/$case.dsl" ] \
+         && [ -f "$ROOT/parity/out/$case.graph.json" ]; then
+        batch_cases+=("$case")
+      fi
+    fi
+  done
+fi
+if [ "${#batch_cases[@]}" -gt 1 ]; then
+  # The batch launch opens real windows (see run.sh): a display-less Linux
+  # runner stalls it, so fail named here instead of per case.
+  if [ "$(uname -s)" = "Linux" ] && [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    echo "FAIL: no window session (DISPLAY and WAYLAND_DISPLAY unset); the Godot render needs a windowed engine launch on a GPU host"
+    exit 124
+  fi
+  manifest="$ROOT/parity/out/batch-manifest.json"
+  if ! python3 - "$ROOT" "$manifest" "${batch_cases[@]}" <<'PYEOF'
+import json, sys
+root, out_path = sys.argv[1], sys.argv[2]
+out_dir = root + "/parity/out"
+entries = []
+for name in sys.argv[3:]:
+    # Mirror run.sh's per-case flags: only the media case renders with its
+    # media fixture; every other case renders the plain graph.
+    entry = {
+        "name": name,
+        "graph": out_dir + "/" + name + ".graph.json",
+        "out": out_dir + "/" + name + ".candidate.png",
+        "size": 256,
+        "run_seconds": 0,
+        "sample_every": 0,
+    }
+    if name == "media":
+        entry["media_fixture"] = True
+    entries.append(entry)
+with open(out_path, "w") as f:
+    f.write(json.dumps({"entries": entries}, indent=2) + "\n")
+PYEOF
+  then
+    echo "FAIL: cannot write the batch render manifest"; exit 2
+  fi
+  # Stale candidates must never classify: clear each batched case's
+  # candidate and reports so a failed batch launch leaves a named
+  # "no candidate produced" failure, not a stale pass.
+  for case in "${batch_cases[@]}"; do
+    rm -f "$ROOT/parity/out/$case.candidate.png" "$ROOT/parity/out/$case.report.json" \
+          "$ROOT/parity/out/$case.parity-summary.report.json" || true
+  done
+  render_bound="$(render_bound_ms)"
+  if [ "$render_bound" -eq 0 ]; then
+    echo "FAIL: the engine command's deadline left no time for the batch render"; exit 124
+  fi
+  tagj "[RENDER] batch (${#batch_cases[@]} cases in one launch)"
+  if ! bound_ms "$render_bound" "$GODOT_BIN" --path "$ROOT/godot" \
+        --script res://addons/noisemaker/tools/render_graph.gd --position 5000,5000 -- \
+        --batch-manifest "$manifest" > "$ROOT/parity/out/batch-render.log" 2>&1; then
+    tagj "[NONZERO] batch render exited nonzero (see parity/out/batch-render.log)"
+  fi
+  NM_BATCHED_CASES=" ${batch_cases[*]} "
+fi
+export NM_BATCHED_CASES
 
 # Phase 2: Godot renders and comparisons run sequentially — concurrent Godot
 # instances starve each other on one GPU/display.

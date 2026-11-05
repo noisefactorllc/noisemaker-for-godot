@@ -87,7 +87,8 @@ func _run_batch(manifest_path: String) -> void:
 			str(request.get("graph", "")), str(request.get("dsl", "")),
 			str(request.get("out", "")), int(request.get("size", 256)),
 			int(request.get("run_seconds", 0)), int(request.get("sample_every", 5)),
-			bool(request.get("texture_pooling", false)))
+			bool(request.get("texture_pooling", false)),
+			bool(request.get("media_fixture", false)))
 		print("NM_BATCH name=", request.get("name", "unknown"), " ok=", ok)
 		all_ok = all_ok and ok
 	quit(0 if all_ok else 1)
