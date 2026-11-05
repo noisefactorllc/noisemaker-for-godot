@@ -50,7 +50,7 @@ if [ "${SKIP_RENDER:-0}" != "1" ]; then
 		if [ "$rc" -eq 137 ]; then rc=124; fi
 		return "$rc"
 	}
-	render_log=$(bound_ms "${NM_RENDER_BOUND_MS:-240000}" "$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
+	render_log=$(bound_ms "${NM_RENDER_BOUND_MS:-170000}" "$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
 		--position 5000,5000 -- --graph "$GRAPH" --out "$ROOT/parity/out/$NAME.candidate.png" \
 		--size "$SIZE" --run-seconds "$RUN" --sample-every "$EVERY" 2>&1)
 	render_rc=$?

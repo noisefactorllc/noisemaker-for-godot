@@ -70,7 +70,7 @@ if [ "${SKIP_RENDER:-0}" != "1" ]; then
 	# The caller (scripts/parity-summary) hands over the engine command's
 	# remaining deadline minus its exit margin; the default covers a direct
 	# run.sh invocation.
-	render_log=$(bound_ms "${NM_RENDER_BOUND_MS:-240000}" "$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
+	render_log=$(bound_ms "${NM_RENDER_BOUND_MS:-170000}" "$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
 		--position 5000,5000 -- "${render_args[@]}" 2>&1)
 	render_rc=$?
 	set -e

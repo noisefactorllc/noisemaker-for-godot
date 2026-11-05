@@ -90,16 +90,16 @@ if [ -s "$GATE_JOURNAL" ] && ! tail -n 3 "$GATE_JOURNAL" 2>/dev/null | grep -q '
   done
 fi
 : > "$GATE_JOURNAL" 2>/dev/null || true
-# The engine command's deadline bounds the whole gate; the operator's test
-# rule caps one test invocation at 300 seconds, and the gate has no other
-# channel to receive the caller's deadline, so NM_ENGINE_DEADLINE_MS
-# defaults to that cap and lets a host lower it. A fixed per-render bound
-# large enough for a slow runner can outlive that deadline, and the
-# harness kill then arrives before the render's own bound names the stall
-# (observed as a bare command_timeout with no stage named). Start the gate
-# clock here and give each render the deadline's remaining time minus a
-# margin for classification and exit, so a stalled render always ends as a
-# named bound failure inside the deadline.
+# The engine command's deadline bounds the whole gate. The gate has no
+# channel to receive the caller's deadline, and a runner's engine deadline
+# can be shorter than the operator's 300-second invocation cap, so
+# NM_ENGINE_DEADLINE_MS defaults to a pessimistic 180 seconds that fits any
+# such deadline and lets a host raise or lower it. A planned total past the
+# true deadline makes the harness kill arrive before the render's own bound
+# names the stall (observed as a bare command_timeout with no stage named).
+# Start the gate clock here and give each render the deadline's remaining
+# time minus a margin for classification and exit, so a stalled render
+# always ends as a named bound failure inside the deadline.
 now_ms () { # prints epoch milliseconds; portable across GNU and BSD date
   local s
   s="$(date +%s%3N 2>/dev/null)"
@@ -108,8 +108,8 @@ now_ms () { # prints epoch milliseconds; portable across GNU and BSD date
 GATE_START_MS="$(now_ms)"
 render_bound_ms () { # prints the milliseconds a render may still use
   local remaining
-  remaining=$(( ${NM_ENGINE_DEADLINE_MS:-300000} - ( "$(now_ms)" - GATE_START_MS ) - 10000 ))
-  if [ "$remaining" -gt 240000 ]; then remaining=240000; fi
+  remaining=$(( ${NM_ENGINE_DEADLINE_MS:-180000} - ( "$(now_ms)" - GATE_START_MS ) - 10000 ))
+  if [ "$remaining" -gt 170000 ]; then remaining=170000; fi
   if [ "$remaining" -lt 30000 ]; then remaining=0; fi
   echo "$remaining"
 }
