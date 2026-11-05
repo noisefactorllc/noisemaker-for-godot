@@ -36,10 +36,25 @@ if [ "${SKIP_RENDER:-0}" != "1" ]; then
 		rm -f "$ROOT/parity/out/$NAME.candidate.t$t.png"
 		t=$((t + EVERY))
 	done
-	render_log=$("$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
+	# bound_ms matches parity/run.sh: a TERM-ignoring stalled engine launch
+	# must still end as a named 124 inside the caller's deadline, not burn
+	# the engine command's whole deadline silently.
+	bound_ms () { # $1 = milliseconds; rest = command
+		if command -v timeout >/dev/null 2>&1; then timeout -k 10 "$(( $1 / 1000 ))" "${@:2}"; rc=$?
+		elif command -v gtimeout >/dev/null 2>&1; then gtimeout -k 10 "$(( $1 / 1000 ))" "${@:2}"; rc=$?
+		else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS),killSignal:"SIGKILL"});process.exit(r.status===null?124:r.status)' bound_ms "${@:2}"; rc=$?
+		fi
+		if [ "$rc" -eq 137 ]; then rc=124; fi
+		return "$rc"
+	}
+	render_log=$(bound_ms "${NM_RENDER_BOUND_MS:-240000}" "$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
 		--position 5000,5000 -- --graph "$GRAPH" --out "$ROOT/parity/out/$NAME.candidate.png" \
 		--size "$SIZE" --run-seconds "$RUN" --sample-every "$EVERY" 2>&1)
 	render_rc=$?
+	if [ "$render_rc" -eq 124 ]; then
+		echo "[FAIL] $NAME timed render did not finish within its bound (rc $render_rc); a stalled engine launch is the likely cause"
+		exit 124
+	fi
 	printf '%s\n' "$render_log" | grep -E "NM_SAMPLE|RD_NULL|SCRIPT ERROR|shader |error" || true
 	if [ "$render_rc" -ne 0 ]; then
 		echo "[FAIL] $NAME timed renderer exited $render_rc"

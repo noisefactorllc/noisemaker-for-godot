@@ -90,6 +90,29 @@ if [ -s "$GATE_JOURNAL" ] && ! tail -n 3 "$GATE_JOURNAL" 2>/dev/null | grep -q '
   done
 fi
 : > "$GATE_JOURNAL" 2>/dev/null || true
+# The engine command's deadline bounds the whole gate; the operator's test
+# rule caps one test invocation at 300 seconds, and the gate has no other
+# channel to receive the caller's deadline, so NM_ENGINE_DEADLINE_MS
+# defaults to that cap and lets a host lower it. A fixed per-render bound
+# large enough for a slow runner can outlive that deadline, and the
+# harness kill then arrives before the render's own bound names the stall
+# (observed as a bare command_timeout with no stage named). Start the gate
+# clock here and give each render the deadline's remaining time minus a
+# margin for classification and exit, so a stalled render always ends as a
+# named bound failure inside the deadline.
+now_ms () { # prints epoch milliseconds; portable across GNU and BSD date
+  local s
+  s="$(date +%s%3N 2>/dev/null)"
+  case "$s" in *[!0-9]*) echo "$(( $(date +%s) * 1000 ))" ;; *) echo "$s" ;; esac
+}
+GATE_START_MS="$(now_ms)"
+render_bound_ms () { # prints the milliseconds a render may still use
+  local remaining
+  remaining=$(( ${NM_ENGINE_DEADLINE_MS:-300000} - ( "$(now_ms)" - GATE_START_MS ) - 10000 ))
+  if [ "$remaining" -gt 240000 ]; then remaining=240000; fi
+  if [ "$remaining" -lt 30000 ]; then remaining=0; fi
+  echo "$remaining"
+}
 if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
   # Self-contained authority resolution: pin-clone the reference engine at the
   # revision the port's goldens are bound to (no machine-specific paths; the
@@ -392,7 +415,13 @@ run_case () {
   fi
   if [ "${case_run:-0}" -gt 0 ]; then
     tagj "[RENDER] $case (${case_run}s every ${case_every}s)"
-    if GODOT="$GODOT_BIN" bash "$ROOT/parity/run_samples.sh" "$case" "$case_tol" \
+    render_bound="$(render_bound_ms)"
+    if [ "$render_bound" -eq 0 ]; then
+      fail=$((fail+1)); executed=$((executed+1))
+      tagj "[FAIL] $case: the engine command's deadline left no time for the render"
+      break
+    fi
+    if NM_RENDER_BOUND_MS="$render_bound" GODOT="$GODOT_BIN" bash "$ROOT/parity/run_samples.sh" "$case" "$case_tol" \
         "$case_ssim" "$case_run" "$case_every" 256 \
         > "$ROOT/parity/out/$case.parity-summary.log" 2>&1; then
       run_rc=0
@@ -437,7 +466,13 @@ run_case () {
   if ! rm -f "$ROOT/parity/out/$case.parity-summary.report.json" "$ROOT/parity/out/$case.report.json"; then
     skip=$((skip+1)); tagj "[SKIP] $case: cannot clear previous comparator reports"; break
   fi
-  if GODOT="$GODOT_BIN" bash "$ROOT/parity/run.sh" "$case" "$case_tol" "$case_ssim" 256 \
+  render_bound="$(render_bound_ms)"
+  if [ "$render_bound" -eq 0 ]; then
+    fail=$((fail+1)); executed=$((executed+1))
+    tagj "[FAIL] $case: the engine command's deadline left no time for the render"
+    break
+  fi
+  if NM_RENDER_BOUND_MS="$render_bound" GODOT="$GODOT_BIN" bash "$ROOT/parity/run.sh" "$case" "$case_tol" "$case_ssim" 256 \
       > "$ROOT/parity/out/$case.parity-summary.log" 2>&1; then
     run_rc=0
   else
