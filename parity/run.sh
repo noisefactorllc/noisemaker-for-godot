@@ -85,9 +85,19 @@ if [ "${SKIP_RENDER:-0}" != "1" ]; then
 fi
 [ -f "$CAND" ] || { echo "FAIL: Godot renderer produced no candidate for $NAME"; exit 1; }
 
-"$PY" "$ROOT/parity/compare.py" "$GOLD" "$CAND" \
+# Bound the comparator too: a stalled or hung interpreter (cold filesystem,
+# broken venv) is the one remaining unbounded engine command, and it would
+# burn the harness deadline as a bare command_timeout with no stage named.
+# A 256px PNG compare finishes in well under a second; 30s is generous.
+set +e
+compare_log=$(bound_ms 30000 "$PY" "$ROOT/parity/compare.py" "$GOLD" "$CAND" \
 	--name "$NAME" --tolerance "$TOL" --ssim-min "$SSIM" \
-	--report "$ROOT/parity/out/$NAME.report.json" || {
+	--report "$ROOT/parity/out/$NAME.report.json" 2>&1)
+compare_rc=$?
+set -e
+printf '%s\n' "$compare_log"
+[ "$compare_rc" -ne 124 ] || { echo "FAIL: the comparator for $NAME did not finish within its bound"; exit 124; }
+[ "$compare_rc" -eq 0 ] || {
 	{
 	# Threshold failure: surface the full metrics report and artifact identity so a
 	# native-runner failure is diagnosable from its output tail alone (the report
