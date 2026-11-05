@@ -112,9 +112,9 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
     # exits as a named failure early, in time for the mint.
     if ! ( git init -q "$CACHE.tmp" \
            && git -C "$CACHE.tmp" remote add origin https://github.com/noisefactorllc/noisemaker \
-           && bound_ms 30000 git -C "$CACHE.tmp" fetch -q --depth 1 origin "$PIN" ) 2>/dev/null; then
+           && bound_ms 20000 git -C "$CACHE.tmp" fetch -q --depth 1 origin "$PIN" ) 2>/dev/null; then
       rm -rf "$CACHE.tmp" 2>/dev/null || true
-      if ! bound_ms 30000 git clone -q https://github.com/noisefactorllc/noisemaker "$CACHE.tmp" 2>/dev/null; then
+      if ! bound_ms 20000 git clone -q https://github.com/noisefactorllc/noisemaker "$CACHE.tmp" 2>/dev/null; then
         diag "parity-summary: cannot obtain the reference engine (set NM_REFERENCE_ROOT to a local checkout)"
         rm -f "$CACHE.lock/lock"
         echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
@@ -136,7 +136,7 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
     # bundled by whatever the registry happens to serve.
     if [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
       diag "[REFERENCE] installing playwright@1.63.0 into the reference clone"
-      if ! ( cd "$CACHE" && bound_ms 60000 npm install --no-save "playwright@1.63.0" >/dev/null 2>&1 ) \
+      if ! ( cd "$CACHE" && bound_ms 45000 npm install --no-save "playwright@1.63.0" >/dev/null 2>&1 ) \
          || [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
         diag "parity-summary: playwright unavailable for the reference harness (set NM_REFERENCE_ROOT to a prepared checkout)"
         # Drop the half-prepared cache so the next run re-clones and retries
@@ -176,7 +176,7 @@ if [ -f "$NM_REFERENCE_ROOT/node_modules/playwright/cli.js" ]; then
     0|false) shell_flag='' ;;
     *) shell_flag='--only-shell' ;;
   esac
-  if ! ( cd "$NM_REFERENCE_ROOT" && bound_ms 60000 node node_modules/playwright/cli.js install chromium $shell_flag ); then
+  if ! ( cd "$NM_REFERENCE_ROOT" && bound_ms 45000 node node_modules/playwright/cli.js install chromium $shell_flag ); then
     diag "parity-summary: the playwright chromium build is unavailable or its install did not finish (set PLAYWRIGHT_BROWSERS_PATH to an installed browser root)"
     echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
     exit 2
@@ -346,7 +346,7 @@ mint_case () {
       # A stalled browser mint would otherwise burn the engine command's
       # whole deadline silently; bound it (see bound_ms above) so the stall
       # exits as a named failure early, in time for the mint phase.
-      if ! bound_ms 150000 node "$ROOT/parity/export-and-render.mjs" "$prog" "$ROOT/parity/out" \
+      if ! bound_ms 90000 node "$ROOT/parity/export-and-render.mjs" "$prog" "$ROOT/parity/out" \
           "${mint_args[@]}" > "$ROOT/parity/out/$case.mint.log" 2>&1; then
         if ! rm -f "$gold" "$graph" "$ROOT/parity/out/$case.golden.t"*.png; then
           echo "[SKIP] $case: failed mint left artifacts that could not be cleared"

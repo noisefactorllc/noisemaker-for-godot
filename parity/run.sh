@@ -64,7 +64,7 @@ if [ "${SKIP_RENDER:-0}" != "1" ]; then
 	# --headless). A host without a window session can stall the engine
 	# launch forever. Bound it (see bound_ms above) so a stall fails named
 	# instead of burning the engine command's whole deadline.
-	render_log=$(bound_ms 300000 "$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
+	render_log=$(bound_ms 240000 "$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
 		--position 5000,5000 -- "${render_args[@]}" 2>&1)
 	render_rc=$?
 	set -e
