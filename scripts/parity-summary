@@ -107,6 +107,12 @@ if [ -s "$GATE_JOURNAL" ] && ! tail -n 3 "$GATE_JOURNAL" 2>/dev/null | grep -q '
   done
 fi
 : > "$GATE_JOURNAL" 2>/dev/null || true
+# Emit a start marker before anything else: a runner whose harness kills the
+# engine command before the gate's first diagnostic line leaves a result with
+# no stage named (observed as a bare command_timeout). This marker, or its
+# absence, makes the next attempt's evidence decisive about whether the gate
+# ever started.
+diag "[GATE] start (deadline ${NM_GATE_DEADLINE_MS:-unset}ms, cases ${1:-all})"
 # The engine command's deadline bounds the whole gate. The gate has no
 # channel to receive the caller's deadline, and a runner's engine deadline
 # can be shorter than the operator's 300-second invocation cap, so
