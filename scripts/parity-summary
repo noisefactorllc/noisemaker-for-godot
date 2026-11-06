@@ -696,11 +696,19 @@ if [ -n "$GODOT_BIN" ]; then
   done
 fi
 if [ "${#batch_cases[@]}" -gt 1 ]; then
-  # The batch launch opens real windows (see run.sh): a display-less Linux
-  # runner stalls it, so fail named here instead of per case.
-  if [ "$(uname -s)" = "Linux" ] && [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
-    echo "FAIL: no window session (DISPLAY and WAYLAND_DISPLAY unset); the Godot render needs a windowed engine launch on a GPU host"
-    exit 124
+  # The batch launch opens real windows (see run.sh): on a display-less Linux
+  # runner it stalls, so launch under a virtual display (xvfb-run) when one is
+  # installed, and fail named otherwise (see run.sh for the full contract).
+  window_cmd=""
+  if [ -n "${NM_WINDOW_CMD:-}" ]; then
+    window_cmd="$NM_WINDOW_CMD"
+  elif [ "$(uname -s)" = "Linux" ] && [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    if command -v xvfb-run >/dev/null 2>&1; then
+      window_cmd="xvfb-run -a"
+    else
+      echo "FAIL: no window session (DISPLAY and WAYLAND_DISPLAY unset) and no xvfb-run on PATH; the Godot render needs a windowed engine launch on a GPU host"
+      exit 124
+    fi
   fi
   manifest="$ROOT/parity/out/batch-manifest.json"
   if ! python3 - "$ROOT" "$manifest" "${batch_cases[@]}" <<'PYEOF'
@@ -740,7 +748,7 @@ PYEOF
     echo "FAIL: the engine command's deadline left no time for the batch render"; exit 124
   fi
   tagj "[RENDER] batch (${#batch_cases[@]} cases in one launch)"
-  if ! bound_ms "$render_bound" "$GODOT_BIN" --path "$ROOT/godot" \
+  if ! bound_ms "$render_bound" $window_cmd "$GODOT_BIN" --path "$ROOT/godot" \
         --script res://addons/noisemaker/tools/render_graph.gd --position 5000,5000 -- \
         --batch-manifest "$manifest" > "$ROOT/parity/out/batch-render.log" 2>&1; then
     tagj "[NONZERO] batch render exited nonzero (see parity/out/batch-render.log)"

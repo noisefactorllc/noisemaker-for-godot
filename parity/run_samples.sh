@@ -50,7 +50,20 @@ if [ "${SKIP_RENDER:-0}" != "1" ]; then
 		if [ "$rc" -eq 137 ]; then rc=124; fi
 		return "$rc"
 	}
-	render_log=$(bound_ms "${NM_RENDER_BOUND_MS:-170000}" "$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
+	# The timed render also opens a real window; mirror run.sh's virtual-display
+	# launch on a display-less Linux runner (see run.sh for the full contract).
+	window_cmd=""
+	if [ -n "${NM_WINDOW_CMD:-}" ]; then
+		window_cmd="$NM_WINDOW_CMD"
+	elif [ "$(uname -s)" = "Linux" ] && [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+		if command -v xvfb-run >/dev/null 2>&1; then
+			window_cmd="xvfb-run -a"
+		else
+			echo "[FAIL] $NAME: no window session and no xvfb-run on PATH; the Godot render needs a windowed engine launch on a GPU host"
+			exit 124
+		fi
+	fi
+	render_log=$(bound_ms "${NM_RENDER_BOUND_MS:-170000}" $window_cmd "$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
 		--position 5000,5000 -- --graph "$GRAPH" --out "$ROOT/parity/out/$NAME.candidate.png" \
 		--size "$SIZE" --run-seconds "$RUN" --sample-every "$EVERY" 2>&1)
 	render_rc=$?

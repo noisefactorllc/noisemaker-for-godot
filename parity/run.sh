@@ -62,14 +62,23 @@ fi
 # A gate-driven render needs a window session: the engine launch opens a real
 # window, and on a display-less Linux runner that launch stalls until its
 # bound fires, burning the harness's engine deadline as a bare command_timeout
-# with no stage named (observed on a windowless runner). Fail named instead,
-# immediately, so the runner mismatch is visible. Linux only: macOS leaves
-# DISPLAY unset in a normal windowed session, so the variables cannot prove
-# anything there.
-if [ -n "${NM_RENDER_BOUND_MS:-}" ] && [ "$(uname -s)" = "Linux" ] \
-   && [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
-	echo "FAIL: no window session (DISPLAY and WAYLAND_DISPLAY unset); the Godot render needs a windowed engine launch on a GPU host"
-	exit 124
+# with no stage named (observed on a windowless runner). Launch the engine
+# under a virtual display (xvfb-run) when one is installed, so a windowless
+# runner can still render; without it, fail named immediately so the runner
+# mismatch is visible. Linux only: macOS leaves DISPLAY unset in a normal
+# windowed session, so the variables cannot prove anything there. NM_WINDOW_CMD
+# overrides the wrapper: a space-separated command word list, unquoted — an
+# empty value launches the engine directly.
+window_cmd=""
+if [ -n "${NM_WINDOW_CMD:-}" ]; then
+	window_cmd="$NM_WINDOW_CMD"
+elif [ "$(uname -s)" = "Linux" ] && [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+	if command -v xvfb-run >/dev/null 2>&1; then
+		window_cmd="xvfb-run -a"
+	else
+		echo "FAIL: no window session (DISPLAY and WAYLAND_DISPLAY unset) and no xvfb-run on PATH; the Godot render needs a windowed engine launch on a GPU host"
+		exit 124
+	fi
 fi
 
 if [ "${SKIP_RENDER:-0}" != "1" ]; then
@@ -83,7 +92,7 @@ if [ "${SKIP_RENDER:-0}" != "1" ]; then
 	# The caller (scripts/parity-summary) hands over the engine command's
 	# remaining deadline minus its exit margin; the default covers a direct
 	# run.sh invocation.
-	render_log=$(bound_ms "${NM_RENDER_BOUND_MS:-170000}" "$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
+	render_log=$(bound_ms "${NM_RENDER_BOUND_MS:-170000}" $window_cmd "$GODOT" --path "$ROOT/godot" --script res://addons/noisemaker/tools/render_graph.gd \
 		--position 5000,5000 -- "${render_args[@]}" 2>&1)
 	render_rc=$?
 	set -e

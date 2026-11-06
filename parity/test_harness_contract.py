@@ -772,6 +772,28 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
         self.assertIn("UNIVERSE MISMATCH", result.stdout)
         self.assertIn("chrome", result.stdout)
 
+    def _shim_path_without_xvfb(self):
+        """A PATH directory holding every host executable except xvfb-run
+        and Xvfb, so a test can reach the no-wrapper branch of run.sh's
+        window-session guard on hosts that ship xvfb-run."""
+        shim = self.tmp / "shim-path"
+        shim.mkdir(exist_ok=True)
+        for element in os.environ.get("PATH", "").split(os.pathsep):
+            if not element or not os.path.isdir(element):
+                continue
+            for name in os.listdir(element):
+                if name in ("xvfb-run", "Xvfb"):
+                    continue
+                if (shim / name).exists():
+                    continue
+                target = os.path.join(element, name)
+                if os.path.isfile(target) and os.access(target, os.X_OK):
+                    try:
+                        os.symlink(target, shim / name)
+                    except OSError:
+                        pass
+        return str(shim)
+
     def _run_with_fake_renderer(self, renderer_exit):
         parity = self.tmp / "parity"
         (parity / "out").mkdir(parents=True)
@@ -804,10 +826,11 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_gate_render_without_window_session_fails_named_before_launch(self):
-        """On Linux a gate-driven render (NM_RENDER_BOUND_MS set) needs a
-        window session: the engine launch opens a real window and would stall
-        on a display-less runner until the harness kills it as a bare
-        command_timeout. The guard must fail named before any launch."""
+        """On Linux a gate-driven render (NM_RENDER_BOUND_MS set) with no
+        window session and no xvfb-run on PATH cannot render: the engine
+        launch opens a real window and would stall on a display-less runner
+        until the harness kills it as a bare command_timeout. The guard must
+        fail named before any launch."""
         parity = self.tmp / "parity"
         (parity / "out").mkdir(parents=True)
         shutil.copy2(REPO / "parity" / "run.sh", parity / "run.sh")
@@ -824,6 +847,7 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
         renderer.chmod(0o755)
         env = {k: v for k, v in os.environ.items()
                if k not in ("DISPLAY", "WAYLAND_DISPLAY")}
+        env["PATH"] = self._shim_path_without_xvfb()
         env["GODOT"] = str(renderer)
         env["NM_RENDER_BOUND_MS"] = "1000"
 
@@ -836,6 +860,42 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
         self.assertIn("no window session", result.stdout)
         self.assertFalse((self.tmp / "launched").exists(),
                          "the guard must fail before any engine launch")
+
+    def test_gate_render_without_window_session_launches_under_xvfb(self):
+        """On Linux with no window session, a gate-driven render launches the
+        engine under xvfb-run when the host provides it (the windowless-runner
+        command_timeout repair): the fake renderer records its DISPLAY, and
+        the guard's exit 124 must not fire."""
+        parity = self.tmp / "parity"
+        (parity / "out").mkdir(parents=True)
+        shutil.copy2(REPO / "parity" / "run.sh", parity / "run.sh")
+        shutil.copy2(REPO / "parity" / "ensure_compare_python.sh",
+                     parity / "ensure_compare_python.sh")
+        for suffix in ("graph.json", "golden.png"):
+            (parity / "out" / f"chrome.{suffix}").touch()
+        renderer = self.tmp / "fake-godot"
+        renderer.write_text(
+            "#!/usr/bin/env bash\n"
+            f"touch '{self.tmp / 'launched'}'\n"
+            f"printf '%s' \"${{DISPLAY:-}}\" > '{self.tmp / 'renderer-display'}'\n"
+            "exit 0\n"
+        )
+        renderer.chmod(0o755)
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("DISPLAY", "WAYLAND_DISPLAY")}
+        env["GODOT"] = str(renderer)
+        env["NM_RENDER_BOUND_MS"] = "1000"
+
+        result = subprocess.run(
+            ["bash", str(parity / "run.sh"), "chrome", "0", "0.999"],
+            env=env, capture_output=True, text=True,
+        )
+
+        self.assertTrue((self.tmp / "launched").exists(),
+                        result.stdout + result.stderr)
+        display = (self.tmp / "renderer-display").read_text()
+        self.assertTrue(display, "the render must run under a virtual display")
+        self.assertNotEqual(result.returncode, 124, result.stdout + result.stderr)
 
     def test_gate_render_guard_skipped_when_a_window_session_exists(self):
         """With a window session the guard must not fire: the render proceeds
