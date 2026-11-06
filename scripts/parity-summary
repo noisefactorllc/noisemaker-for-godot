@@ -105,6 +105,23 @@ mkdir -p "$ROOT/parity/out" 2>/dev/null || true
 # the cumulative cold time exceeds its deadline. The ensure script is
 # idempotent; run.sh and run_samples.sh source it again per render and then
 # find the environment ready.
+# The gate clock is set here, before the background provisioning below, so
+# that the ensure script's bound caps every provisioning step at the
+# deadline's remaining time: a subshell forked before the clock existed
+# would run in standalone mode with full fixed bounds, and a slow registry
+# could outlive the engine command's deadline as a bare command_timeout
+# with no stage named.
+now_ms () { # prints epoch milliseconds; portable across GNU and BSD date
+  local s
+  s="$(date +%s%3N 2>/dev/null)"
+  case "$s" in *[!0-9]*) echo "$(( $(date +%s) * 1000 ))" ;; *) echo "$s" ;; esac
+}
+GATE_START_MS="$(now_ms)"
+# Export the gate's deadline and start so child scripts (run.sh,
+# run_samples.sh and the comparator provisioning they source) can cap their
+# own fixed bounds at the deadline's remaining time too.
+NM_GATE_DEADLINE_MS="${NM_ENGINE_DEADLINE_MS:-180000}"
+export NM_GATE_DEADLINE_MS NM_GATE_START_MS="$GATE_START_MS"
 COMPARE_PY_PID=""
 if ! python3 -c 'import numpy, PIL' >/dev/null 2>&1 \
    && [ -f "$ROOT/parity/ensure_compare_python.sh" ]; then
@@ -149,27 +166,9 @@ fi
 # absence, makes the next attempt's evidence decisive about whether the gate
 # ever started.
 diag "[GATE] start (deadline ${NM_GATE_DEADLINE_MS:-unset}ms, cases ${1:-all})"
-# The engine command's deadline bounds the whole gate. The gate has no
-# channel to receive the caller's deadline, and a runner's engine deadline
-# can be shorter than the operator's 300-second invocation cap, so
-# NM_ENGINE_DEADLINE_MS defaults to a pessimistic 180 seconds that fits any
-# such deadline and lets a host raise or lower it. A planned total past the
-# true deadline makes the harness kill arrive before the render's own bound
-# names the stall (observed as a bare command_timeout with no stage named).
-# Start the gate clock here and give each render the deadline's remaining
-# time minus a margin for classification and exit, so a stalled render
-# always ends as a named bound failure inside the deadline.
-now_ms () { # prints epoch milliseconds; portable across GNU and BSD date
-  local s
-  s="$(date +%s%3N 2>/dev/null)"
-  case "$s" in *[!0-9]*) echo "$(( $(date +%s) * 1000 ))" ;; *) echo "$s" ;; esac
-}
-GATE_START_MS="$(now_ms)"
-# Export the gate's deadline and start so child scripts (run.sh,
-# run_samples.sh and the comparator provisioning they source) can cap their
-# own fixed bounds at the deadline's remaining time too.
-NM_GATE_DEADLINE_MS="${NM_ENGINE_DEADLINE_MS:-180000}"
-export NM_GATE_DEADLINE_MS NM_GATE_START_MS="$GATE_START_MS"
+# The gate clock was started above the comparator provisioning fork so every
+# background bound shares this deadline (see the comment there). render_bound
+# reads the same clock below.
 render_bound_ms () { # prints the milliseconds a render may still use
   local remaining
   remaining=$(( ${NM_ENGINE_DEADLINE_MS:-180000} - ( "$(now_ms)" - GATE_START_MS ) - 10000 ))
