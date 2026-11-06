@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { readdirSync, existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { execFileSync } from 'node:child_process'
+import { runEngine } from './gate_engine.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO = resolve(HERE, '..')
@@ -47,7 +48,7 @@ files.push(aliasProgram)
 const oracle = JSON.parse(execFileSync('node', [join(REPO, 'tools', 'dump-validate.mjs'), EFFECTS_DIR, ...files],
     { encoding: 'utf8', maxBuffer: 1 << 28 }))
 
-const candRaw = execFileSync(GODOT, ['--headless', '--path', join(REPO, 'godot'),
+const candRaw = runEngine(GODOT, ['--headless', '--path', join(REPO, 'godot'),
     '--script', 'res://addons/noisemaker/compiler/_validate_dump.gd', '--', ...files],
     { encoding: 'utf8', maxBuffer: 1 << 28 })
 const markerLine = candRaw.split('\n').find(l => l.startsWith('VALIDATEDUMP:'))

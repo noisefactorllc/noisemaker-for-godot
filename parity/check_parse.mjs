@@ -11,6 +11,7 @@ import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readdirSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
+import { runEngine } from './gate_engine.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO = resolve(HERE, '..')
@@ -39,7 +40,7 @@ if (files.length === 0) { console.error('no DSL files found'); process.exit(2) }
 const oracle = JSON.parse(execFileSync('node', [join(REPO, 'tools', 'dump-ast.mjs'), ...files],
     { encoding: 'utf8', maxBuffer: 1 << 28 }))
 
-const candRaw = execFileSync(GODOT, ['--headless', '--path', join(REPO, 'godot'),
+const candRaw = runEngine(GODOT, ['--headless', '--path', join(REPO, 'godot'),
     '--script', 'res://addons/noisemaker/compiler/_parse_dump.gd', '--', ...files],
     { encoding: 'utf8', maxBuffer: 1 << 28 })
 const markerLine = candRaw.split('\n').find(l => l.startsWith('PARSEDUMP:'))

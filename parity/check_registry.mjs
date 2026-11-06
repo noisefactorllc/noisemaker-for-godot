@@ -9,6 +9,7 @@
 import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
+import { runEngine } from './gate_engine.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO = resolve(HERE, '..')
@@ -20,7 +21,7 @@ if (!process.env.NM_REFERENCE_ROOT) { console.error('NM_REFERENCE_ROOT is not se
 const oracle = JSON.parse(execFileSync('node', [join(REPO, 'tools', 'dump-registry.mjs'), EFFECTS_DIR],
     { encoding: 'utf8', maxBuffer: 1 << 28 }))
 
-const candRaw = execFileSync(GODOT, ['--headless', '--path', join(REPO, 'godot'),
+const candRaw = runEngine(GODOT, ['--headless', '--path', join(REPO, 'godot'),
     '--script', 'res://addons/noisemaker/compiler/_registry_dump.gd'],
     { encoding: 'utf8', maxBuffer: 1 << 28 })
 const markerLine = candRaw.split('\n').find(l => l.startsWith('REGDUMP:'))
