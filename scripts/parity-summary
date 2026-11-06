@@ -180,6 +180,43 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
     if [ "$(git -C "$CACHE" rev-parse HEAD 2>/dev/null)" = "$PIN" ] \
        && [ -z "$(git -C "$CACHE" status --porcelain 2>/dev/null)" ]; then
       usable=1
+    elif [ -z "$(git -C "$CACHE" status --porcelain 2>/dev/null)" ]; then
+      # The cache is clean but at another revision (a moved pin): reuse it
+      # instead of discarding it. A fast-forward keeps node_modules and the
+      # browser cache, so a pin move costs one bounded fetch instead of a
+      # full cold re-clone plus a fresh npm install — the difference between
+      # fitting a runner's engine deadline and being killed mid-provision.
+      # The reuse is still fail-closed: after the fetch the checkout must
+      # land exactly on the pin with a clean tree, or the cache is discarded
+      # and the cold re-clone below runs as before.
+      mkdir -p "$CACHE.lock" 2>/dev/null || true
+      if ! ( set -o noclobber; : > "$CACHE.lock/lock" ) 2>/dev/null; then
+        diag "parity-summary: another invocation holds the reference cache lock ($CACHE.lock)"
+        echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
+        exit 2
+      fi
+      if bound_ms 30000 git -C "$CACHE" fetch -q origin "$PIN" 2>/dev/null \
+         && git -C "$CACHE" checkout -q --detach "$PIN" 2>/dev/null \
+         && [ "$(git -C "$CACHE" rev-parse HEAD 2>/dev/null)" = "$PIN" ] \
+         && [ -z "$(git -C "$CACHE" status --porcelain 2>/dev/null)" ]; then
+        usable=1
+        diag "[REFERENCE] fast-forwarded the clean cache to the pin $PIN"
+        # A reused cache keeps node_modules from its earlier install, but only
+        # if a previous run managed to install it; ensure it the same bounded,
+        # fail-closed way the fresh-clone path does, still under the lock.
+        if [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
+          diag "[REFERENCE] installing playwright@1.63.0 into the reference clone"
+          if ! ( cd "$CACHE" && bound_ms 45000 npm install --no-save "playwright@1.63.0" >/dev/null 2>&1 ) \
+             || [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
+            diag "parity-summary: playwright unavailable for the reference harness (set NM_REFERENCE_ROOT to a prepared checkout)"
+            rm -rf "$CACHE"
+            rm -f "$CACHE.lock/lock"
+            echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
+            exit 2
+          fi
+        fi
+      fi
+      rm -f "$CACHE.lock/lock"
     fi
   fi
   if [ "$usable" -ne 1 ]; then
@@ -225,8 +262,12 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
          || [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
         diag "parity-summary: playwright unavailable for the reference harness (set NM_REFERENCE_ROOT to a prepared checkout)"
         # Drop the half-prepared cache so the next run re-clones and retries
-        # the install instead of trusting a cache that cannot mint.
+        # the install instead of trusting a cache that cannot mint. Release
+        # the lock too: an exit here that left the lock file behind would
+        # brick the gate, with every later invocation exiting 2 on the held
+        # lock until the file was deleted by hand.
         rm -rf "$CACHE"
+        rm -f "$CACHE.lock/lock"
         echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
         exit 2
       fi

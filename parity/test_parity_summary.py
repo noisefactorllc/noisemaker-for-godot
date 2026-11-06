@@ -388,6 +388,138 @@ echo "=== SAMPLES: $name $((run/every))/$((run/every)) pass ==="
         self.assertNotIn("[MINT] a", result.stdout)
 
 
+class ParitySummaryReferenceCacheTests(ParitySummaryFreshArtifactTests):
+    """The pin-clone block: cache reuse across a moved pin, fail-closed.
+
+    These tests run the script WITHOUT NM_REFERENCE_ROOT, so the changed
+    pin-clone path executes. A stub git emulates the surface the block uses
+    (rev-parse/status/fetch/checkout/init/clone) so no test touches the
+    network; a stub npm installs a marker node_modules/playwright tree.
+    """
+
+    PIN = re.search(r"^  PIN=([0-9a-f]{40})$", SCRIPT.read_text(), re.M).group(1)
+
+    GIT_STUB = """#!/bin/sh
+# Emulates the git surface parity-summary's pin-clone block uses, steered by
+# GIT_MODE (reuse-ok, reuse-fail, reclone-ok) and GIT_STUB_STATE.
+state=${GIT_STUB_STATE:?GIT_STUB_STATE required}
+pin=${GIT_STUB_PIN:?GIT_STUB_PIN required}
+is_depth=0
+for a in "$@"; do
+  if [ "$a" = "--depth" ]; then is_depth=1; fi
+done
+case "$*" in
+  *" rev-parse HEAD")
+    cat "$state/head" 2>/dev/null; exit 0;;
+  *" status --porcelain")
+    exit 0;;
+  *" fetch"*)
+    if [ "$is_depth" = 1 ]; then
+      if [ "$GIT_MODE" = reclone-ok ]; then
+        printf '%s\\n' "$pin" > "$state/head"; exit 0
+      fi
+      exit 1
+    fi
+    if [ "$GIT_MODE" = reuse-ok ]; then
+      printf '%s\\n' "$pin" > "$state/head"; exit 0
+    fi
+    exit 1;;
+  *" checkout"*)
+    printf '%s\\n' "$pin" > "$state/head"; exit 0;;
+  init*)
+    if [ "$GIT_MODE" = reclone-ok ]; then
+      last=""; for a in "$@"; do last=$a; done
+      mkdir -p "$last"
+      exit 0
+    fi
+    exit 1;;
+  *" remote"*)
+    exit 0;;
+  clone*)
+    exit 1;;
+  *" clone"*)
+    exit 1;;
+  *)
+    exit 0;;
+esac
+"""
+
+    NPM_STUB = """#!/bin/sh
+if [ "${NPM_FAIL:-0}" = 1 ]; then exit 1; fi
+mkdir -p node_modules/playwright
+printf '{}' > node_modules/playwright/package.json
+exit 0
+"""
+
+    def setUp(self):
+        super().setUp()
+        self.cache = self.root / "refcache"
+        self.git_state = self.root / "git-stub-state"
+        self.git_state.mkdir()
+        (self.git_state / "head").write_text("0" * 40 + "\n")
+        self._executable("bin/git", self.GIT_STUB)
+        self._executable("bin/npm", self.NPM_STUB)
+
+    def _run_cache(self, git_mode, npm_fail="0"):
+        env = {**os.environ,
+               "PARITY_REFERENCE_CACHE": str(self.cache),
+               "GODOT": str(self.root / "bin/godot"),
+               "PYTHON": sys.executable,
+               "PARITY_FIXTURE_ROOT": str(self.root),
+               "REPORT_MODE": "write",
+               "MINT_FAIL": "0",
+               "TIMED_NEAR_SAMPLE": "",
+               "TIMED_BAD_SAMPLE": "",
+               "GIT_MODE": git_mode,
+               "NPM_FAIL": npm_fail,
+               "GIT_STUB_STATE": str(self.git_state),
+               "GIT_STUB_PIN": self.PIN,
+               "PATH": str(self.root / "bin") + os.pathsep + os.environ["PATH"]}
+        return subprocess.run([str(self.root / "scripts/parity-summary"), "a"],
+                              capture_output=True, text=True, env=env)
+
+    def test_clean_cache_fast_forwards_to_a_moved_pin(self):
+        # The cache exists, is clean, but sits at another revision: the reuse
+        # branch must fast-forward it to the pin under the lock, ensure
+        # node_modules, release the lock, and complete the case.
+        (self.cache / ".git").mkdir(parents=True)
+        (self.cache / ".git/HEAD").write_text("ref: refs/heads/main\n")
+        result = self._run_cache("reuse-ok")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("fast-forwarded the clean cache to the pin", result.stderr)
+        self.assertIn("installing playwright@1.63.0 into the reference clone",
+                      result.stderr)
+        self.assertIn('PARITY-SUMMARY {"expected":1,"executed":1,"exact":1,"strict":0',
+                      result.stdout)
+        self.assertEqual((self.git_state / "head").read_text().strip(), self.PIN)
+        self.assertFalse((self.root / "refcache.lock/lock").exists())
+
+    def test_failed_fast_forward_falls_back_and_releases_the_lock(self):
+        # A cache at another revision whose fetch fails must not be trusted or
+        # kept locked: the cold re-clone takes over and fails named here
+        # (stubbed git refuses every clone), with the lock released.
+        (self.cache / ".git").mkdir(parents=True)
+        (self.cache / ".git/HEAD").write_text("ref: refs/heads/main\n")
+        result = self._run_cache("reuse-fail")
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertNotIn("fast-forwarded the clean cache", result.stderr)
+        self.assertIn("cannot obtain the reference engine", result.stderr)
+        self.assertIn('PARITY-SUMMARY {"expected":0,"executed":0', result.stdout)
+        self.assertFalse((self.root / "refcache.lock/lock").exists())
+
+    def test_fresh_clone_playwright_failure_releases_the_lock(self):
+        # No cache at all, the clone succeeds (stubbed), and the playwright
+        # install fails: the half-prepared cache is dropped AND the lock file
+        # is released, so the next invocation is not bricked on a held lock.
+        result = self._run_cache("reclone-ok", npm_fail="1")
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("playwright unavailable for the reference harness",
+                      result.stderr)
+        self.assertIn('PARITY-SUMMARY {"expected":0,"executed":0', result.stdout)
+        self.assertFalse(self.cache.exists())
+        self.assertFalse((self.root / "refcache.lock/lock").exists())
+
+
 class ParitySummaryScriptContractTests(unittest.TestCase):
     """Static contract checks on the entrypoint itself."""
 
