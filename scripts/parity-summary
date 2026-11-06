@@ -121,7 +121,19 @@ if ! python3 -c 'import numpy, PIL' >/dev/null 2>&1 \
   ) &
   COMPARE_PY_PID=$!
 fi
-trap 'printf "GATE-COMPLETED rc=%s\n" "$?" >>"$GATE_JOURNAL" 2>/dev/null || true' EXIT
+# The reference cache swap lock's held flag and its release helper live here
+# so both EXIT traps (this one and the later combined one) can release the
+# lock, whatever killed the run: a holder that died with the file behind it
+# must not brick the next invocation. Releasing clears the flag so a later
+# exit cannot remove a live successor's lock.
+CACHE_LOCK_HELD=""
+release_cache_lock () {
+  if [ -n "$CACHE_LOCK_HELD" ]; then
+    rm -f "$CACHE.lock/lock"
+    CACHE_LOCK_HELD=""
+  fi
+}
+trap 'rc=$?; release_cache_lock; printf "GATE-COMPLETED rc=%s\n" "$rc" >>"$GATE_JOURNAL" 2>/dev/null || true' EXIT
 if [ -s "$GATE_JOURNAL" ] && ! tail -n 3 "$GATE_JOURNAL" 2>/dev/null | grep -q '^GATE-COMPLETED'; then
   echo "[GATE-JOURNAL] the previous invocation was killed before completing; its last stages"
   echo "[GATE-JOURNAL] the previous invocation was killed before completing; its last stages" >&2
@@ -166,6 +178,30 @@ render_bound_ms () { # prints the milliseconds a render may still use
   echo "$remaining"
 }
 if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
+  # Acquire the reference cache swap lock, or fail named. The lock file
+  # records the holder's pid: a live holder blocks the swap as before, and a
+  # holder that died between acquiring and releasing (a runner deadline kill
+  # during the bounded fetch or npm install, where no EXIT trap can run)
+  # leaves the file behind without its pid existing. Such a stale lock must
+  # not brick the gate, so a dead holder's lock is removed and acquisition is
+  # retried once. A live holder's lock, an empty file (a holder between
+  # creating the lock and writing its pid), and unreadable content all stay
+  # held, keeping the swap mutually exclusive.
+  acquire_cache_lock () {
+    if ( set -o noclobber; echo "$$" > "$CACHE.lock/lock" ) 2>/dev/null; then
+      CACHE_LOCK_HELD=1
+      return 0
+    fi
+    local pid
+    pid=$(head -c 32 "$CACHE.lock/lock" 2>/dev/null)
+    case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+    if kill -0 "$pid" 2>/dev/null; then return 1; fi
+    diag "parity-summary: the reference cache lock was left by dead pid $pid; taking it"
+    rm -f "$CACHE.lock/lock"
+    ( set -o noclobber; echo "$$" > "$CACHE.lock/lock" ) 2>/dev/null || return 1
+    CACHE_LOCK_HELD=1
+    return 0
+  }
   # Self-contained authority resolution: pin-clone the reference engine at the
   # revision the port's goldens are bound to (no machine-specific paths; the
   # clone is cached and reused across runs). Cache reuse requires the pinned
@@ -190,7 +226,7 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
       # land exactly on the pin with a clean tree, or the cache is discarded
       # and the cold re-clone below runs as before.
       mkdir -p "$CACHE.lock" 2>/dev/null || true
-      if ! ( set -o noclobber; : > "$CACHE.lock/lock" ) 2>/dev/null; then
+      if ! acquire_cache_lock; then
         diag "parity-summary: another invocation holds the reference cache lock ($CACHE.lock)"
         echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
         exit 2
@@ -210,20 +246,20 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
              || [ ! -f "$CACHE/node_modules/playwright/package.json" ]; then
             diag "parity-summary: playwright unavailable for the reference harness (set NM_REFERENCE_ROOT to a prepared checkout)"
             rm -rf "$CACHE"
-            rm -f "$CACHE.lock/lock"
+            release_cache_lock
             echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
             exit 2
           fi
         fi
       fi
-      rm -f "$CACHE.lock/lock"
+      release_cache_lock
     fi
   fi
   if [ "$usable" -ne 1 ]; then
     diag "[REFERENCE] pin-cloning noisefactorllc/noisemaker at $PIN into $CACHE"
     rm -rf "$CACHE.tmp" 2>/dev/null || true
     mkdir -p "$CACHE.lock" 2>/dev/null || true
-    if ! ( set -o noclobber; : > "$CACHE.lock/lock" ) 2>/dev/null; then
+    if ! acquire_cache_lock; then
       diag "parity-summary: another invocation holds the reference cache lock ($CACHE.lock)"
       echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
       exit 2
@@ -238,14 +274,14 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
       rm -rf "$CACHE.tmp" 2>/dev/null || true
       if ! bound_ms 20000 git clone -q https://github.com/noisefactorllc/noisemaker "$CACHE.tmp" 2>/dev/null; then
         diag "parity-summary: cannot obtain the reference engine (set NM_REFERENCE_ROOT to a local checkout)"
-        rm -f "$CACHE.lock/lock"
+        release_cache_lock
         echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
         exit 2
       fi
     fi
     git -C "$CACHE.tmp" checkout -q --detach "$PIN" || {
       diag "parity-summary: pinned revision $PIN not reachable"
-      rm -rf "$CACHE.tmp"; rm -f "$CACHE.lock/lock"
+      rm -rf "$CACHE.tmp"; release_cache_lock
       echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
       exit 2
     }
@@ -267,12 +303,12 @@ if [ -z "${NM_REFERENCE_ROOT:-}" ]; then
         # brick the gate, with every later invocation exiting 2 on the held
         # lock until the file was deleted by hand.
         rm -rf "$CACHE"
-        rm -f "$CACHE.lock/lock"
+        release_cache_lock
         echo 'PARITY-SUMMARY {"expected":0,"executed":0,"exact":0,"strict":0,"near":0,"defer":0,"skip":0,"fail":0,"missing":0}'
         exit 2
       fi
     fi
-    rm -f "$CACHE.lock/lock"
+    release_cache_lock
   fi
   diag "[REFERENCE] using $NM_REFERENCE_ROOT"
 fi
@@ -434,10 +470,11 @@ if ! mkdir "$LOCKDIR" 2>/dev/null; then
   echo "PARITY-SUMMARY {\"expected\":$EXPECTED,\"executed\":0,\"exact\":0,\"strict\":0,\"near\":0,\"defer\":0,\"skip\":$EXPECTED,\"fail\":0,\"missing\":0}"
   exit 2
 fi
-# One EXIT trap must hold both actions: a later trap assignment would replace
+# One EXIT trap must hold all three actions (output lock, reference cache
+# lock, completion journal): a later trap assignment would replace
 # the journal's completion marker and every completed run would then look
 # killed to the next invocation.
-trap 'rc=$?; rmdir "$LOCKDIR" 2>/dev/null || true; printf "GATE-COMPLETED rc=%s\n" "$rc" >>"$GATE_JOURNAL" 2>/dev/null || true' EXIT
+trap 'rc=$?; rmdir "$LOCKDIR" 2>/dev/null || true; release_cache_lock; printf "GATE-COMPLETED rc=%s\n" "$rc" >>"$GATE_JOURNAL" 2>/dev/null || true' EXIT
 # Cold runs are deadline-bound: the browser build download plus three
 # sequential case mints and renders can exceed the engine command's budget,
 # while the same steps fit easily when the cases overlap. Each case is

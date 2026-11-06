@@ -519,6 +519,62 @@ exit 0
         self.assertFalse(self.cache.exists())
         self.assertFalse((self.root / "refcache.lock/lock").exists())
 
+    @staticmethod
+    def _dead_pid():
+        pid = 999999
+        while pid < 10000000:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return pid
+            except PermissionError:
+                pid += 1
+                continue
+            pid += 1
+        raise unittest.SkipTest("no dead pid available")
+
+    def test_stale_lock_from_dead_pid_does_not_brick_the_gate(self):
+        # A holder killed between acquiring the cache lock and releasing it
+        # (a runner deadline kill during the bounded fetch or npm install,
+        # where no EXIT trap runs) leaves the lock file with its pid behind.
+        # The next invocation must take that stale lock and proceed instead
+        # of exiting 2 until the file is deleted by hand.
+        (self.cache / ".git").mkdir(parents=True)
+        (self.cache / ".git/HEAD").write_text("ref: refs/heads/main\n")
+        lockdir = self.root / "refcache.lock"
+        lockdir.mkdir()
+        pid = self._dead_pid()
+        (lockdir / "lock").write_text(f"{pid}\n")
+        result = self._run_cache("reuse-ok")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"was left by dead pid {pid}", result.stderr)
+        self.assertFalse((lockdir / "lock").exists())
+
+    def test_live_holder_still_blocks_the_cache_swap(self):
+        # Mutual exclusion is unchanged: a lock whose recorded pid is alive
+        # still blocks the swap, so concurrent invocations cannot move the
+        # cache out from under each other.
+        (self.cache / ".git").mkdir(parents=True)
+        (self.cache / ".git/HEAD").write_text("ref: refs/heads/main\n")
+        lockdir = self.root / "refcache.lock"
+        lockdir.mkdir()
+        sleeper = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(self._stop(sleeper))
+        (lockdir / "lock").write_text(f"{sleeper.pid}\n")
+        result = self._run_cache("reuse-ok")
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("another invocation holds the reference cache lock",
+                      result.stderr)
+        self.assertIn('PARITY-SUMMARY {"expected":0,"executed":0', result.stdout)
+        self.assertTrue((lockdir / "lock").exists())
+
+    @staticmethod
+    def _stop(process):
+        def cleanup():
+            process.kill()
+            process.wait()
+        return cleanup
+
 
 class ParitySummaryScriptContractTests(unittest.TestCase):
     """Static contract checks on the entrypoint itself."""
