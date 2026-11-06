@@ -1,11 +1,11 @@
 """Unit tests for the bound_ms TERM-then-SIGKILL escalation.
 
-bound_ms in parity/run.sh and scripts/parity-summary bounds every engine and
-network step. A child that ignores TERM must not survive the bound: the bound
-escalates to SIGKILL 10s after the deadline on every branch, so a stalled
-launch always exits 124 as a named failure instead of burning the engine
-command's whole deadline. These tests extract the function text from each
-changed script and run the real function against a TERM-ignoring child.
+bound_ms in parity/run.sh, scripts/parity-summary and scripts/test bounds
+every engine and network step. A child that ignores TERM must not survive the
+bound: the bound escalates to SIGKILL 10s after the deadline on every branch,
+so a stalled launch always exits 124 as a named failure instead of burning the
+engine command's whole deadline. These tests extract the function text from
+each changed script and run the real function against a TERM-ignoring child.
 """
 import os
 import re
@@ -33,11 +33,12 @@ def _extract(script: Path) -> str:
 class BoundMsEscalationTests(unittest.TestCase):
     """The bound must kill a TERM-ignoring child and exit 124."""
 
-    def _run_bound(self, script: Path, bound_ms: int, extra_path: str = None):
+    def _run_bound(self, script: Path, bound_ms: int, extra_path: str = None,
+                   child: str = IGNORE_TERM):
         fn = _extract(script)
         cmd = (
             f"{fn}\n"
-            f"bound_ms {bound_ms} bash -c '{IGNORE_TERM}'\n"
+            f"bound_ms {bound_ms} bash -c '{child}'\n"
             f"echo RC=$?\n"
         )
         env = dict(os.environ)
@@ -60,10 +61,25 @@ class BoundMsEscalationTests(unittest.TestCase):
     def test_parity_summary_escalates_to_sigkill(self):
         self._escalates("scripts/parity-summary")
 
+    def test_scripts_test_escalates_to_sigkill(self):
+        self._escalates("scripts/test")
+
     def test_node_fallback_branch_escapes_term_ignoring_child(self):
         """With no timeout(1) on PATH, the node spawnSync branch must still
-        end the bound (killSignal SIGKILL) and exit 124."""
+        end the bound (killSignal SIGKILL) and exit 124. The child also
+        writes a marker before it sleeps: a fallback whose argv is broken
+        launches nothing and exits 124 at once, so only the marker proves
+        the branch really ran the bounded command."""
         script = ROOT / "parity" / "run.sh"
+        self._node_fallback_runs_child(script)
+
+    def test_scripts_test_node_fallback_launches_the_bounded_command(self):
+        """Same contract for the scripts/test copy added beside the smoke
+        bound: with no timeout(1) on PATH the node branch must launch the
+        bounded child, not exit 124 without running it."""
+        self._node_fallback_runs_child(ROOT / "scripts" / "test")
+
+    def _node_fallback_runs_child(self, script: Path):
         with tempfile.TemporaryDirectory() as d:
             for exe in ("bash", "node"):
                 src = next(Path(p) for p in ("/bin/bash", "/usr/bin/bash")
@@ -73,8 +89,15 @@ class BoundMsEscalationTests(unittest.TestCase):
                 link = Path(d) / exe
                 if not link.exists() and src:
                     link.symlink_to(src)
-            r, elapsed = self._run_bound(script, 1000, extra_path=d)
+            # `:` and redirection are bash builtins and sleep(1) is named by
+            # absolute path: the restricted PATH has neither.
+            marker = Path(d) / "child-ran"
+            child = f'trap "" TERM; : > {marker}; /bin/sleep 120'
+            r, elapsed = self._run_bound(script, 1000, extra_path=d, child=child)
+            ran = marker.exists()
         self.assertIn("RC=124", r.stdout, f"exit: {r.returncode} {r.stderr}")
+        self.assertTrue(ran,
+                        "the node fallback exited 124 without running the bounded command")
         self.assertLess(elapsed, 40, "node fallback did not end the bound")
 
 

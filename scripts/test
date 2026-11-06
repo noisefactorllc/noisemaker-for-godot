@@ -205,16 +205,45 @@ run_engine_free() {
 	run_unittest "${engine_free[@]}"
 }
 
+# Engine launches are bounded like run.sh's bound_ms and parity-summary's
+# version probe: a Godot binary that hangs must fail named inside the
+# runner's engine-command deadline, not burn that deadline as a bare
+# command_timeout with no stage named. When no bound tool exists the
+# launch runs unbounded, exactly as before this bound existed.
+bound_ms () { # $1 = milliseconds; rest = command
+	local rc
+	if command -v timeout >/dev/null 2>&1; then timeout -k 10 "$(( $1 / 1000 ))" "${@:2}"; rc=$?
+	elif command -v gtimeout >/dev/null 2>&1; then gtimeout -k 10 "$(( $1 / 1000 ))" "${@:2}"; rc=$?
+	elif command -v node >/dev/null 2>&1; then BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS),killSignal:"SIGKILL"});process.exit(r.status===null?124:r.status)' "${@:2}"; rc=$?
+	else "${@:2}"; rc=$?
+	fi
+	[ "$rc" -eq 137 ] && rc=124
+	return "$rc"
+}
+
 run_godot_headless() {
 	require_python
 	[[ -n "${GODOT:-}" ]] || fail "--godot-headless needs GODOT=<path to a Godot 4.7 binary>"
 	[[ -x "$GODOT" ]] || fail "GODOT is not an executable file: $GODOT"
-	echo "godot: $("$GODOT" --headless --version 2>&1 | tail -n 1)"
+	local gv rc=0
+	gv="$(bound_ms 10000 "$GODOT" --headless --version 2>&1 | tail -n 1)" || rc=$?
+	if [ "$rc" -eq 124 ]; then
+		fail "the Godot version probe did not return within its 10s bound (stalled engine)"
+	elif [ "$rc" -ne 0 ]; then
+		printf '%s\n' "$gv"
+		fail "the Godot version probe exited nonzero"
+	fi
+	echo "godot: $gv"
 
 	echo "== compiler smoke (_smoke.gd)"
 	local smoke
-	if ! smoke="$("$GODOT" --headless --path godot \
-		--script res://addons/noisemaker/compiler/_smoke.gd 2>&1)"; then
+	rc=0
+	smoke="$(bound_ms 120000 "$GODOT" --headless --path godot \
+		--script res://addons/noisemaker/compiler/_smoke.gd 2>&1)" || rc=$?
+	if [ "$rc" -eq 124 ]; then
+		printf '%s\n' "$smoke"
+		fail "compiler smoke did not return within its 120s bound (stalled engine)"
+	elif [ "$rc" -ne 0 ]; then
 		printf '%s\n' "$smoke"
 		fail "compiler smoke exited nonzero"
 	fi

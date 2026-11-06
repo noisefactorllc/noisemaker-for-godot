@@ -23,7 +23,7 @@ bound_ms () { # $1 = milliseconds; rest = command
   # every branch so the stall always ends as a named exit.
   if command -v timeout >/dev/null 2>&1; then timeout -k 10 "$(( $1 / 1000 ))" "${@:2}"; rc=$?
   elif command -v gtimeout >/dev/null 2>&1; then gtimeout -k 10 "$(( $1 / 1000 ))" "${@:2}"; rc=$?
-  else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS),killSignal:"SIGKILL"});process.exit(r.status===null?124:r.status)' bound_ms "${@:2}"; rc=$?
+  else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS),killSignal:"SIGKILL"});process.exit(r.status===null?124:r.status)' "${@:2}"; rc=$?
   fi
   # The escalation kill makes timeout(1) exit 137 (128+SIGKILL), not 124;
   # the bound's named-failure contract is 124, so map the kill back.
