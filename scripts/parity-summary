@@ -51,7 +51,7 @@ bound_ms () { # $1 = milliseconds; rest = command
   # the bound stays exactly as large as requested.
   local planned="$1" remaining=""
   if [ -n "${NM_GATE_DEADLINE_MS:-}" ]; then
-    remaining=$(( NM_GATE_DEADLINE_MS - ( "$(now_ms)" - GATE_START_MS ) - 10000 ))
+    remaining=$(( NM_GATE_DEADLINE_MS - ( $(now_ms) - GATE_START_MS ) - 10000 ))
     if [ "$remaining" -lt 5000 ]; then
       echo "DIAG: the gate's engine deadline has too little time left for: ${*:2}" >&2
       return 124
@@ -171,7 +171,7 @@ diag "[GATE] start (deadline ${NM_GATE_DEADLINE_MS:-unset}ms, cases ${1:-all})"
 # reads the same clock below.
 render_bound_ms () { # prints the milliseconds a render may still use
   local remaining
-  remaining=$(( ${NM_ENGINE_DEADLINE_MS:-180000} - ( "$(now_ms)" - GATE_START_MS ) - 10000 ))
+  remaining=$(( ${NM_ENGINE_DEADLINE_MS:-180000} - ( $(now_ms) - GATE_START_MS ) - 10000 ))
   if [ "$remaining" -gt 170000 ]; then remaining=170000; fi
   if [ "$remaining" -lt 30000 ]; then remaining=0; fi
   echo "$remaining"
