@@ -57,6 +57,7 @@ const REFERENCE_ROOT = resolve(process.env.NM_REFERENCE_ROOT)
 
 const HARNESS = join(REFERENCE_ROOT, 'vendor', 'shade-mcp', 'harness', 'index.js')
 const EXPORT_GRAPH = join(__dirname, '..', 'tools', 'export-graph.mjs')
+const BROWSER_INSTALL_TIMEOUT_MS = 120000
 
 // The demo page's boot awaits a UI-helper module served from the project's CDN
 // (handfish.noisefactor.io). Some mint environments deny that fetch
@@ -134,10 +135,16 @@ playwright.chromium.launch = async function (launchOptions) {
   // before launching: idempotent, headless launches need only the headless
   // shell, and a non-headless launch needs the full build. Name the resolved
   // path when launch still fails so the cause stays visible.
+  // A host that provisions its own browser builds sets PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
+  // and may mount them read-only. The installer then waits on its lock in that
+  // directory until the mint's deadline kills it, so such a host gets no install.
+  // Any other install is bounded, so a stalled one fails named instead of hanging.
   const moduleDir = join(REFERENCE_ROOT, 'node_modules', 'playwright')
   const ensureChromiumBuild = () => {
+    if (process.env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD === '1') return
     const extra = merged.headless === false ? [] : ['--only-shell']
-    const res = spawnSync(process.execPath, [join(moduleDir, 'cli.js'), 'install', 'chromium', ...extra], { stdio: 'inherit' })
+    const res = spawnSync(process.execPath, [join(moduleDir, 'cli.js'), 'install', 'chromium', ...extra],
+      { stdio: 'inherit', timeout: BROWSER_INSTALL_TIMEOUT_MS, killSignal: 'SIGKILL' })
     if (res.error) nout(`[parity] browser build install failed: ${res.error.message}\n`)
     else markBrowserBinariesExecutable(process.env.PLAYWRIGHT_BROWSERS_PATH || '')
   }

@@ -188,6 +188,18 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_mint_never_installs_into_a_host_provisioned_browser_cache(self):
+        source = (REPO / "parity" / "export-and-render.mjs").read_text()
+        ensure = source[source.index("const ensureChromiumBuild = () => {"):source.index("ensureChromiumBuild()")]
+
+        # The skip precedes the installer, and any install that runs is bounded.
+        self.assertLess(
+            ensure.index("if (process.env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD === '1') return"),
+            ensure.index("'install', 'chromium'"),
+        )
+        self.assertIn("timeout: BROWSER_INSTALL_TIMEOUT_MS", ensure)
+        self.assertRegex(source, r"\nconst BROWSER_INSTALL_TIMEOUT_MS = [1-9][0-9]*\n")
+
     def test_exporter_waits_for_settled_graph_and_resets_full_pipeline_state(self):
         source = (REPO / "parity" / "export-and-render.mjs").read_text()
 
