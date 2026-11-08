@@ -112,9 +112,11 @@ mkdir -p "$ROOT/parity/out" 2>/dev/null || true
 # could outlive the engine command's deadline as a bare command_timeout
 # with no stage named.
 now_ms () { # prints epoch milliseconds; portable across GNU and BSD date
-  local s
-  s="$(date +%s%3N 2>/dev/null)"
-  case "$s" in *[!0-9]*) echo "$(( $(date +%s) * 1000 ))" ;; *) echo "$s" ;; esac
+  # Some date(1) builds drop the leading zeros of %3N, so a %s%3N clock can
+  # run backwards. Read bash's own clock where it has one, else whole seconds.
+  local s="${EPOCHREALTIME:-}"
+  s="${s//[!0-9]/}"
+  if [ "${#s}" -gt 10 ]; then echo "$(( s / 1000 ))"; else echo "$(( $(date +%s) * 1000 ))"; fi
 }
 GATE_START_MS="$(now_ms)"
 # Export the gate's deadline and start so child scripts (run.sh,

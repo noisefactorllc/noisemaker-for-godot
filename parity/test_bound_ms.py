@@ -159,5 +159,50 @@ class NodeFallbackLaunchTests(unittest.TestCase):
         self._launches_and_bounds("scripts/parity-summary", "bound_ms")
 
 
+# A date(1) whose %3N drops leading zeros (uutils before its 2026-10-24 fix)
+# makes a %s%3N clock run backwards. This stand-in reads seconds correctly
+# and returns a %s%3N value five seconds behind, so a clock that reads that
+# field is measurably wrong.
+FAULTY_DATE = """#!/bin/sh
+case "$1" in
+  +%s%3N) echo "$(( $(/bin/date +%s) - 5 ))512" ;;
+  *) exec /bin/date "$@" ;;
+esac
+"""
+
+
+class GateClockTests(unittest.TestCase):
+    """The gate clock must not read the %3N field of date(1)."""
+
+    def _faulty_date_path(self, d: str) -> str:
+        fake = Path(d) / "date"
+        fake.write_text(FAULTY_DATE)
+        fake.chmod(0o755)
+        return d + os.pathsep + "/usr/bin:/bin"
+
+    def test_parity_summary_clock_ignores_a_faulty_fractional_field(self):
+        fn = _extract_named(ROOT / "scripts" / "parity-summary", "now_ms")
+        with tempfile.TemporaryDirectory() as d:
+            r = subprocess.run(["bash", "-c", f"{fn}\nnow_ms\n"], capture_output=True,
+                               text=True, timeout=60, env={"PATH": self._faulty_date_path(d)})
+            real = time.time() * 1000
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertLess(abs(int(r.stdout.strip()) - real), 1500, r.stdout)
+
+    def test_comparator_provisioning_clock_ignores_a_faulty_fractional_field(self):
+        """With a deadline whose remaining time is below the provisioning
+        floor, the bound must refuse to launch; a clock that runs behind
+        finds time left and launches the command instead."""
+        fn = _extract_named(ROOT / "parity" / "ensure_compare_python.sh", "bound")
+        with tempfile.TemporaryDirectory() as d:
+            env = {"PATH": self._faulty_date_path(d),
+                   "NM_GATE_DEADLINE_MS": "60000",
+                   "NM_GATE_START_MS": str(int(time.time() * 1000) - 47000)}
+            r = subprocess.run(["bash", "-c", f"{fn}\nbound 20000 /bin/sh -c 'exit 3'\necho RC=$?\n"],
+                               capture_output=True, text=True, timeout=60, env=env)
+        self.assertIn("RC=124", r.stdout, f"exit: {r.returncode} {r.stderr}")
+        self.assertIn("too little time left", r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

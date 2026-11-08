@@ -33,8 +33,10 @@ bound () { # $1 = milliseconds; rest = command; escalates like run.sh's bound_ms
   # as a bare command_timeout with no stage named. Standalone (no gate clock)
   # the bound stays exactly as large as requested.
   if [ -n "${NM_GATE_DEADLINE_MS:-}" ] && [ -n "${NM_GATE_START_MS:-}" ]; then
-    now="$(date +%s%3N 2>/dev/null)"
-    case "$now" in *[!0-9]*) now=$(( $(date +%s) * 1000 )) ;; esac
+    # Same clock as the gate's now_ms: never the %3N field of date(1).
+    now="${EPOCHREALTIME:-}"
+    now="${now//[!0-9]/}"
+    if [ "${#now}" -gt 10 ]; then now=$(( now / 1000 )); else now=$(( $(date +%s) * 1000 )); fi
     remaining=$(( NM_GATE_DEADLINE_MS - ( now - NM_GATE_START_MS ) - 10000 ))
     if [ "$remaining" -lt 5000 ]; then
       echo "FAIL: the engine deadline has too little time left to provision the comparator environment" >&2
