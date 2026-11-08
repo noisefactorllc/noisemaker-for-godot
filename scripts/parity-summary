@@ -119,8 +119,10 @@ now_ms () { # prints epoch milliseconds; portable across GNU and BSD date
 GATE_START_MS="$(now_ms)"
 # Export the gate's deadline and start so child scripts (run.sh,
 # run_samples.sh and the comparator provisioning they source) can cap their
-# own fixed bounds at the deadline's remaining time too.
-NM_GATE_DEADLINE_MS="${NM_ENGINE_DEADLINE_MS:-180000}"
+# own fixed bounds at the deadline's remaining time too. Only a caller that
+# sets NM_ENGINE_DEADLINE_MS has a deadline; without one the gate runs every
+# case and each step keeps its own fixed bound.
+NM_GATE_DEADLINE_MS="${NM_ENGINE_DEADLINE_MS:-}"
 export NM_GATE_DEADLINE_MS NM_GATE_START_MS="$GATE_START_MS"
 COMPARE_PY_PID=""
 if ! python3 -c 'import numpy, PIL' >/dev/null 2>&1 \
@@ -165,13 +167,14 @@ fi
 # no stage named (observed as a bare command_timeout). This marker, or its
 # absence, makes the next attempt's evidence decisive about whether the gate
 # ever started.
-diag "[GATE] start (deadline ${NM_GATE_DEADLINE_MS:-unset}ms, cases ${1:-all})"
+diag "[GATE] start (deadline ${NM_GATE_DEADLINE_MS:-none}${NM_GATE_DEADLINE_MS:+ms}, cases ${1:-all})"
 # The gate clock was started above the comparator provisioning fork so every
 # background bound shares this deadline (see the comment there). render_bound
 # reads the same clock below.
 render_bound_ms () { # prints the milliseconds a render may still use
   local remaining
-  remaining=$(( ${NM_ENGINE_DEADLINE_MS:-180000} - ( $(now_ms) - GATE_START_MS ) - 10000 ))
+  if [ -z "$NM_GATE_DEADLINE_MS" ]; then echo 170000; return; fi
+  remaining=$(( NM_GATE_DEADLINE_MS - ( $(now_ms) - GATE_START_MS ) - 10000 ))
   if [ "$remaining" -gt 170000 ]; then remaining=170000; fi
   if [ "$remaining" -lt 30000 ]; then remaining=0; fi
   echo "$remaining"

@@ -244,10 +244,14 @@ echo "=== SAMPLES: $name $((run/every))/$((run/every)) pass ==="
         path.chmod(0o755)
 
     def _run(self, report_mode="write", mint_fail="0", rm_fail=False, case="a",
-             timed_near_sample="", timed_bad_sample=""):
+             timed_near_sample="", timed_bad_sample="", engine_deadline_ms=None):
         if rm_fail:
             self._executable("bin/rm", "#!/bin/sh\nexit 1\n")
-        env = {**os.environ,
+        env = {key: value for key, value in os.environ.items()
+               if key != "NM_ENGINE_DEADLINE_MS"}
+        if engine_deadline_ms is not None:
+            env["NM_ENGINE_DEADLINE_MS"] = engine_deadline_ms
+        env = {**env,
                "NM_REFERENCE_ROOT": str(self.root / "reference"),
                "GODOT": str(self.root / "bin/godot"),
                "PYTHON": sys.executable,
@@ -292,6 +296,36 @@ echo "=== SAMPLES: $name $((run/every))/$((run/every)) pass ==="
         self.assertEqual(report["tolerance"], 10.001)
         self.assertEqual(report["ssim_min"], 0.999)
         self.assertFalse((self.root / "parity/out/navierStokes.golden.png").exists())
+
+    def _record_render_bounds(self):
+        run_sh = self.root / "parity/run.sh"
+        body = run_sh.read_text().split("\n", 1)[1]
+        self._executable("parity/run.sh", "#!/bin/sh\n"
+                         'printf "%s %s\\n" "${NM_GATE_DEADLINE_MS:-none}" "$NM_RENDER_BOUND_MS"'
+                         ' > "$PARITY_FIXTURE_ROOT/parity/out/bounds.txt"\n' + body)
+
+    def _render_bounds(self):
+        return (self.root / "parity/out/bounds.txt").read_text().split()
+
+    def test_gate_without_an_engine_deadline_has_no_gate_deadline(self):
+        """A caller that names no engine deadline (the tests workflow, the
+        export kit, a local run) gets no gate-wide deadline, so a full run is
+        not cut short; each render keeps the fixed per-render bound."""
+        self._record_render_bounds()
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("[GATE] start (deadline none, cases a)", result.stdout)
+        self.assertEqual(self._render_bounds(), ["none", "170000"])
+
+    def test_engine_deadline_bounds_the_gate_when_the_caller_sets_one(self):
+        self._record_render_bounds()
+        result = self._run(engine_deadline_ms="60000")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("[GATE] start (deadline 60000ms, cases a)", result.stdout)
+        deadline, bound = self._render_bounds()
+        self.assertEqual(deadline, "60000")
+        self.assertGreater(int(bound), 0)
+        self.assertLessEqual(int(bound), 50000)
 
     def test_timed_case_accepts_near_sample_within_named_policy(self):
         (self.root / "parity/programs/navierStokes.dsl").write_text("noise(seed: 1).write(o0)\n")

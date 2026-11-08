@@ -9,6 +9,7 @@ each changed script and run the real function against a TERM-ignoring child.
 """
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import time
@@ -27,6 +28,15 @@ def _extract(script: Path) -> str:
     m = re.search(r"^bound_ms \(\) \{.*?^\}", src, re.S | re.M)
     if not m:
         raise unittest.SkipTest(f"no bound_ms in {script}")
+    return m.group(0)
+
+
+def _extract_named(script: Path, name: str) -> str:
+    """Return a bound function's text, also when it is defined indented."""
+    src = script.read_text()
+    m = re.search(rf"^([ \t]*){name} \(\) \{{.*?^\1\}}", src, re.S | re.M)
+    if not m:
+        raise AssertionError(f"no {name} function in {script}")
     return m.group(0)
 
 
@@ -99,6 +109,54 @@ class BoundMsEscalationTests(unittest.TestCase):
         self.assertTrue(ran,
                         "the node fallback exited 124 without running the bounded command")
         self.assertLess(elapsed, 40, "node fallback did not end the bound")
+
+
+class NodeFallbackLaunchTests(unittest.TestCase):
+    """With no timeout(1) or gtimeout(1) on PATH (a macOS host without
+    coreutils), each bound helper falls back to node's spawnSync. The
+    fallback must launch the bounded command and return its exit code, and
+    it must still end a stalled command with 124. A fallback that passes an
+    extra word before the command launches nothing and exits 124 at once."""
+
+    def _bound(self, script: Path, name: str, bound_ms: int, child: str):
+        fn = _extract_named(script, name)
+        node = shutil.which("node")
+        if not node:
+            raise unittest.SkipTest("node is not installed")
+        with tempfile.TemporaryDirectory() as d:
+            # PATH holds only a node launcher, written as a regular file.
+            launcher = Path(d) / "node"
+            launcher.write_text(f'#!/bin/sh\nexec "{node}" "$@"\n')
+            launcher.chmod(0o755)
+            marker = Path(d) / "child-ran"
+            body = child.replace("MARKER", str(marker))
+            cmd = f"{fn}\n{name} {bound_ms} /bin/sh -c '{body}'\necho RC=$?\n"
+            start = time.monotonic()
+            r = subprocess.run(["/bin/bash", "-c", cmd], capture_output=True,
+                               text=True, timeout=60, env={"PATH": d})
+            elapsed = time.monotonic() - start
+            ran = marker.exists()
+        return r, elapsed, ran
+
+    def _launches_and_bounds(self, rel: str, name: str):
+        script = ROOT / rel
+        r, _, ran = self._bound(script, name, 20000, ": > MARKER; exit 3")
+        self.assertIn("RC=3", r.stdout, f"exit: {r.returncode} {r.stderr}")
+        self.assertTrue(ran, "the node fallback did not run the bounded command")
+        r, elapsed, ran = self._bound(script, name, 1000,
+                                      'trap "" TERM; : > MARKER; exec /bin/sleep 120')
+        self.assertIn("RC=124", r.stdout, f"exit: {r.returncode} {r.stderr}")
+        self.assertTrue(ran, "the node fallback did not run the bounded command")
+        self.assertLess(elapsed, 40, "the node fallback did not end the bound")
+
+    def test_run_samples_node_fallback_launches_the_timed_render(self):
+        self._launches_and_bounds("parity/run_samples.sh", "bound_ms")
+
+    def test_comparator_provisioning_node_fallback_launches_the_install(self):
+        self._launches_and_bounds("parity/ensure_compare_python.sh", "bound")
+
+    def test_parity_summary_node_fallback_launches_the_command(self):
+        self._launches_and_bounds("scripts/parity-summary", "bound_ms")
 
 
 if __name__ == "__main__":

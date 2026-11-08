@@ -45,7 +45,7 @@ if [ "${SKIP_RENDER:-0}" != "1" ]; then
 	bound_ms () { # $1 = milliseconds; rest = command
 		if command -v timeout >/dev/null 2>&1; then timeout -k 10 "$(( $1 / 1000 ))" "${@:2}"; rc=$?
 		elif command -v gtimeout >/dev/null 2>&1; then gtimeout -k 10 "$(( $1 / 1000 ))" "${@:2}"; rc=$?
-		else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS),killSignal:"SIGKILL"});process.exit(r.status===null?124:r.status)' bound_ms "${@:2}"; rc=$?
+		else BOUND_MS="$1" node -e 'const{spawnSync}=require("child_process");const r=spawnSync(process.argv[1],process.argv.slice(2),{stdio:"inherit",timeout:Number(process.env.BOUND_MS),killSignal:"SIGKILL"});process.exit(r.status===null?124:r.status)' "${@:2}"; rc=$?
 		fi
 		if [ "$rc" -eq 137 ]; then rc=124; fi
 		return "$rc"
