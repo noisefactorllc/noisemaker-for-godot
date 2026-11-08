@@ -64,6 +64,16 @@ var _enums_std: Dictionary
 # per-plan scope context (read by the scope helpers)
 var _cur_particle_pipeline_id
 var _chain_scope_id: String
+# Per-plan private-state scoping (reference expander.js collectGlobalTextureUsers):
+# which distinct effect defs name each global_ texture, which effect defs already ran
+# in this chain, who owns each chain-scoped sizing param, and the current node's
+# owned textures / instance scope.
+var _global_texture_users: Dictionary
+var _seen_effects: Dictionary
+var _size_param_owners: Dictionary
+var _instance_scope_id: String
+var _owned_textures: Dictionary
+var _cur_node_id: String
 
 var _surface_ref_re: RegEx
 var _particle_tex_re: RegEx
@@ -128,13 +138,77 @@ func _scope_particle_tex(tex_name: String) -> String:
 		return "%s_%s" % [tex_name, _cur_particle_pipeline_id]
 	return tex_name
 
+# Particle scoping takes priority over private state and shared chain state.
 func _scope_chain_tex(tex_name: String) -> String:
 	var particle_result := _scope_particle_tex(tex_name)
 	if particle_result != tex_name:
 		return particle_result
 	if tex_name.begins_with("global_"):
-		return "%s_%s" % [tex_name, _chain_scope_id]
+		return "%s_%s" % [tex_name, _global_scope(tex_name)]
 	return tex_name
+
+# Find globals deliberately shared by different effects in a chain (reference
+# expander.js collectGlobalTextureUsers): for each global_ texture a chain's effect
+# defs reference, the set of distinct effect defs that name it.
+func _collect_global_texture_users(chain: Array) -> Dictionary:
+	var users := {}
+	var effects := {}
+	for step in chain:
+		if not (step is Dictionary):
+			continue
+		if step.get("builtin") == true:
+			continue
+		var step_args = step.get("args")
+		if step_args is Dictionary and step_args.get("_skip") == true:
+			continue
+		var effect = reg.get_effect(step.get("op"))
+		if effect != null:
+			effects[effect] = true
+	for effect in effects.keys():
+		var refs: Array = []
+		if effect.get("textures") is Dictionary:
+			refs.append_array(effect["textures"].keys())
+		if effect.get("textures3d") is Dictionary:
+			refs.append_array(effect["textures3d"].keys())
+		if effect.get("globals") is Dictionary:
+			for spec in effect["globals"].values():
+				refs.append(spec.get("default") if spec is Dictionary else null)
+		for key in ["outputTex", "outputTex3d", "outputGeo", "outputXyz", "outputVel", "outputRgba"]:
+			refs.append(effect.get(key))
+		for pass_ref in effect.get("passes", []):
+			if pass_ref is Dictionary:
+				if pass_ref.get("inputs") is Dictionary:
+					refs.append_array(pass_ref["inputs"].values())
+				if pass_ref.get("outputs") is Dictionary:
+					refs.append_array(pass_ref["outputs"].values())
+		for ref in refs:
+			if not (ref is String) or not ref.begins_with("global_"):
+				continue
+			if not users.has(ref):
+				users[ref] = {}
+			users[ref][effect] = true
+	return users
+
+# A global_ texture is this instance's private state when this effect owns it and it
+# is the only effect in the chain naming it (reference expander.js isPrivateGlobal).
+# Read-only globals can be external uploads, whose bindings retain chain IDs.
+func _is_private_global(tex_name: String) -> bool:
+	var users = _global_texture_users.get(tex_name)
+	return _owned_textures.has(tex_name) and users is Dictionary and users.size() == 1
+
+func _global_scope(tex_name: String) -> String:
+	return _instance_scope_id if _is_private_global(tex_name) else _chain_scope_id
+
+# The first node to size private state from a param keeps the legacy chain-scoped
+# name; any other node, of the same or another effect, gets its own
+# (reference expander.js claimSizeParam).
+func _claim_size_param(scoped_param: String, is_private: bool) -> String:
+	var owner = _size_param_owners.get(scoped_param)
+	if owner == null:
+		_size_param_owners[scoped_param] = _cur_node_id
+	if is_private and owner != null and owner != _cur_node_id:
+		return "%s_%s" % [scoped_param, _cur_node_id]
+	return scoped_param
 
 func _is_surface_arg(arg) -> bool:
 	if not (arg is Dictionary):
@@ -190,6 +264,9 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 		var pipeline_uniforms := {}
 		_chain_scope_id = "chain_%d" % plan_index
 		var volume_size_param := "volumeSize_%s" % _chain_scope_id
+		_global_texture_users = _collect_global_texture_users(plan.get("chain", []))
+		_seen_effects = {}
+		_size_param_owners = {}
 
 		for step in plan.get("chain", []):
 			var step_args = step.get("args", {})
@@ -302,6 +379,27 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 				continue
 
 			var node_id := "node_%s" % step["temp"]
+			_cur_node_id = node_id
+			# Preserve legacy IDs for the first instance. Repeated private state gets a
+			# node suffix; cooperating effects retain the shared chain scope
+			# (reference expander.js instanceScopeId).
+			var repeated: bool = _seen_effects.has(effect_def)
+			_seen_effects[effect_def] = true
+			_instance_scope_id = "%s_%s" % [_chain_scope_id, node_id] if repeated else _chain_scope_id
+			# Textures this effect writes; read-only globals are external uploads and
+			# keep chain-scoped bindings.
+			var owned := {}
+			if effect_def.get("textures") is Dictionary:
+				for k in effect_def["textures"]:
+					owned[k] = true
+			if effect_def.get("textures3d") is Dictionary:
+				for k in effect_def["textures3d"]:
+					owned[k] = true
+			for pass_ref in effect_def.get("passes", []):
+				if pass_ref is Dictionary and pass_ref.get("outputs") is Dictionary:
+					for ov in pass_ref["outputs"].values():
+						owned[ov] = true
+			_owned_textures = owned
 			var scoped_param_map := {}
 			var globals = effect_def.get("globals", {})
 			var textures = effect_def.get("textures")
@@ -358,10 +456,7 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 					var is_particle = _is_particle_tex(tex_name)
 					var should_scope_particle = is_particle and _cur_particle_pipeline_id != null
 					if tex_name.begins_with("global_"):
-						if should_scope_particle:
-							virtual_tex_id = "%s_%s" % [tex_name, _cur_particle_pipeline_id]
-						else:
-							virtual_tex_id = "%s_%s" % [tex_name, _chain_scope_id]
+						virtual_tex_id = _scope_chain_tex(tex_name)
 					else:
 						virtual_tex_id = "%s_%s" % [node_id, tex_name]
 					var should_scope_chain = tex_name.begins_with("global_") and not is_particle
@@ -784,8 +879,13 @@ func _resolve_export(id, visited: Dictionary):
 func _scope_dim_spec(dim_spec, scope_suffix: String, scoped_param_map: Dictionary, tex_name: String = ""):
 	if dim_spec is Dictionary and dim_spec.has("param"):
 		var original_param = dim_spec["param"]
-		var dimension_scope = _cur_particle_pipeline_id if (original_param == "stateSize" and _cur_particle_pipeline_id != null and not tex_name.begins_with("global_")) else scope_suffix
-		var scoped_param = "volumeSize_%s" % _chain_scope_id if original_param == "volumeSize" else "%s_%s" % [original_param, dimension_scope]
+		var scoped_param: String
+		if original_param == "volumeSize":
+			scoped_param = "volumeSize_%s" % _chain_scope_id
+		elif original_param == "stateSize" and _cur_particle_pipeline_id != null and not tex_name.begins_with("global_"):
+			scoped_param = "%s_%s" % [original_param, _cur_particle_pipeline_id]
+		else:
+			scoped_param = _chain_size_param("%s_%s" % [original_param, scope_suffix], dim_spec.get("inherit", false), tex_name)
 		# An inherited dimension reads the scope's value and never writes this
 		# effect's own value over it, so it records no mapping (upstream skips
 		# dimSpec.inherit when tracking scoped params).
@@ -796,12 +896,21 @@ func _scope_dim_spec(dim_spec, scope_suffix: String, scoped_param_map: Dictionar
 		return d
 	if dim_spec is Dictionary and dim_spec.has("screenDivide"):
 		var original_param = dim_spec["screenDivide"]
-		var scoped_param = "%s_%s" % [original_param, scope_suffix]
+		var scoped_param = _chain_size_param("%s_%s" % [original_param, scope_suffix], false, tex_name)
 		scoped_param_map[original_param] = scoped_param
 		var d = dim_spec.duplicate(true)
 		d["screenDivide"] = scoped_param
 		return d
 	return dim_spec
+
+# Reference expander.js chainSizeParam: particle-scoped and inherited dimensions keep
+# the plain chain-scoped name; other dimensions of private state get a node-scoped
+# name once another node already claimed the chain-scoped one.
+func _chain_size_param(scoped_param: String, inherit, tex_name: String) -> String:
+	if (_is_particle_tex(tex_name) and _cur_particle_pipeline_id != null) or inherit == true:
+		return scoped_param
+	var is_private_tex: bool = not tex_name.begins_with("global_") or _is_private_global(tex_name)
+	return _claim_size_param(scoped_param, is_private_tex)
 
 func _output_state_tex(tex_name, input_name: String, current, node_id: String, out_key: String):
 	if tex_name == input_name:
