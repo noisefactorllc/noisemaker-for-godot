@@ -311,6 +311,10 @@ func shouldDeferRender() -> bool:
 	return should_defer_render()
 
 
+# Reference pipeline.js reportSinkError: pass an isolated sink failure to the
+# sink that threw it. A sink opts in with an optional onError(error) method,
+# for example to end an output whose new size it cannot send. Rendering and
+# the other sinks continue either way.
 func _report_sink_error(error, sink) -> void:
 	if sink is Object and sink.has_method("onError"):
 		sink.call("onError", error)
