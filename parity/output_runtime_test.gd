@@ -220,9 +220,6 @@ func _test_backend_api() -> void:
 
 
 func _test_sink_error_reporting() -> void:
-	# Reference pipeline.js reportSinkError: the backend gives its SinkManager a
-	# reporter that passes each isolated sink failure to the throwing sink's
-	# optional onError. Sinks without onError see the same calls and counters.
 	var backend = Backend.new()
 	var reporting := ReportingSink.new()
 	var silent := FakeSink.new()
