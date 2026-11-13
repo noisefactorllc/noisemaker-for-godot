@@ -152,7 +152,7 @@ var _tile_offset := Vector2.ZERO
 # path, so the 90 isolation effects render byte-identically.
 var _delta_time := 0.0
 var _frame_index := 0
-var sink_manager := SinkManager.new()
+var sink_manager := SinkManager.new({"onError": _report_sink_error})
 var _export_queues := []   # FrameExportQueues this backend created (closed on teardown)
 var _closed := false
 # Textures THIS backend allocated (RIDs created by _make_tex, _make_sampled_float_tex,
@@ -309,6 +309,15 @@ func should_defer_render() -> bool:
 
 func shouldDeferRender() -> bool:
 	return should_defer_render()
+
+
+# Reference pipeline.js reportSinkError: pass an isolated sink failure to the
+# sink that threw it. A sink opts in with an optional onError(error) method,
+# for example to end an output whose new size it cannot send. Rendering and
+# the other sinks continue either way.
+func _report_sink_error(error, sink) -> void:
+	if sink is Object and sink.has_method("onError"):
+		sink.call("onError", error)
 
 
 func create_frame_export_queue(options := {}):

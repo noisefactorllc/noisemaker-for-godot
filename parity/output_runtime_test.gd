@@ -38,6 +38,17 @@ class FakeCamelSink extends RefCounted:
 	func close() -> void: pass
 
 
+class ReportingSink extends RefCounted:
+	var errors := []
+
+	func configure(_descriptor: Dictionary) -> void: pass
+	func submit(_texture, _timestamp: float):
+		return null
+	func onError(error) -> void:
+		errors.append(error)
+	func close() -> void: pass
+
+
 class FakeAdapter extends RefCounted:
 	var slots := []
 
@@ -87,6 +98,7 @@ func _init() -> void:
 	_test_sink_manager()
 	_test_frame_export_queue()
 	_test_backend_api()
+	_test_sink_error_reporting()
 	print("OUTPUT_RUNTIME_TEST: ", "PASS" if _ok else "FAIL")
 	quit(0 if _ok else 1)
 
@@ -193,6 +205,27 @@ func _test_backend_api() -> void:
 	_expect(backend.has_method("should_defer_render") and backend.has_method("shouldDeferRender"), "backend exposes sink deferral queries")
 	_expect(backend.has_method("create_frame_export_queue"), "backend exposes asynchronous frame export")
 	_expect(backend.has_method("close"), "backend exposes terminal sink cleanup")
+
+
+func _test_sink_error_reporting() -> void:
+	# Reference pipeline.js reportSinkError: the backend gives its SinkManager a
+	# reporter that passes each isolated sink failure to the throwing sink's
+	# optional onError. Sinks without onError see the same calls and counters.
+	var backend = Backend.new()
+	var reporting := ReportingSink.new()
+	var silent := FakeSink.new()
+	backend.add_sink(reporting)
+	backend.add_sink(silent)
+	backend.sink_manager.submit("frame-a", 1.0)
+	_expect(reporting.errors == ["Sink submit must return a boolean"], "the backend's reporter passes a sink failure to that sink's onError")
+	_expect(silent.submitted.size() == 1 and backend.sink_manager.stats[silent] == {"accepted": 1, "dropped": 0, "failed": 0}, "sinks without onError keep the same calls and counters")
+	_expect(backend.sink_manager.stats[reporting] == {"accepted": 0, "dropped": 0, "failed": 1}, "a reported failure is still counted as failed")
+
+	var bare := SinkManager.new()
+	var unwired := ReportingSink.new()
+	bare.add(unwired)
+	bare.submit("frame-b", 2.0)
+	_expect(unwired.errors.is_empty(), "a manager without a reporter does not call onError")
 
 
 func _expect(condition: bool, label: String) -> void:
