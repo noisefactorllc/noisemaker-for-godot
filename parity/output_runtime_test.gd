@@ -49,6 +49,18 @@ class ReportingSink extends RefCounted:
 	func close() -> void: pass
 
 
+class NullDeferSink extends RefCounted:
+	var errors := []
+
+	func configure(_descriptor: Dictionary) -> void: pass
+	func submit(_texture, _timestamp: float) -> bool: return true
+	func defer_render():
+		return null
+	func onError(error) -> void:
+		errors.append(error)
+	func close() -> void: pass
+
+
 class FakeAdapter extends RefCounted:
 	var slots := []
 
@@ -208,9 +220,6 @@ func _test_backend_api() -> void:
 
 
 func _test_sink_error_reporting() -> void:
-	# Reference pipeline.js reportSinkError: the backend gives its SinkManager a
-	# reporter that passes each isolated sink failure to the throwing sink's
-	# optional onError. Sinks without onError see the same calls and counters.
 	var backend = Backend.new()
 	var reporting := ReportingSink.new()
 	var silent := FakeSink.new()
@@ -226,6 +235,24 @@ func _test_sink_error_reporting() -> void:
 	bare.add(unwired)
 	bare.submit("frame-b", 2.0)
 	_expect(unwired.errors.is_empty(), "a manager without a reporter does not call onError")
+
+	var reports := []
+	var bare_defer := SinkManager.new({"onError": func(error, sink): reports.append([error, sink])})
+	var null_defer := NullDeferSink.new()
+	bare_defer.add(null_defer)
+	_expect(not bare_defer.should_defer_render(), "a failed defer_render does not defer")
+	_expect(reports == [["Sink deferRender must return a boolean", null_defer]], "the manager's reporter receives a failed defer_render with its sink")
+	_expect(bare_defer.stats[null_defer] == {"accepted": 0, "dropped": 0, "failed": 1}, "a failed defer_render is counted as failed")
+
+	var defer_backend = Backend.new()
+	var aborting_defer := NullDeferSink.new()
+	var healthy_defer := FakeSink.new()
+	defer_backend.add_sink(aborting_defer)
+	defer_backend.add_sink(healthy_defer)
+	_expect(not defer_backend.should_defer_render(), "the backend does not defer on a failed defer_render")
+	_expect(aborting_defer.errors == ["Sink deferRender must return a boolean"], "the backend's reporter passes a defer failure to that sink's onError")
+	_expect(defer_backend.sink_manager.stats[aborting_defer] == {"accepted": 0, "dropped": 0, "failed": 1}, "the backend counts a failed defer_render")
+	defer_backend.sink_manager.close()
 
 
 func _expect(condition: bool, label: String) -> void:

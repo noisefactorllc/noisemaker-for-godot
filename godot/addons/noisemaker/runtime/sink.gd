@@ -98,9 +98,13 @@ func should_defer_render() -> bool:
 			continue
 		var method_name: String = "defer_render" if has_snake else "deferRender"
 		var result = sink.call(method_name)
-		if result is bool and result:
-			deferred = true
-			break
+		if result is bool:
+			if result:
+				deferred = true
+				break
+		else:
+			registration["stats"]["failed"] += 1
+			_report("Sink deferRender must return a boolean", sink)
 	_iteration_depth -= 1
 	if _iteration_depth == 0:
 		_compact_registrations()
