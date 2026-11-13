@@ -896,7 +896,8 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
         env = {k: v for k, v in os.environ.items()
                if k not in ("DISPLAY", "WAYLAND_DISPLAY")}
         env["GODOT"] = str(renderer)
-        env["NM_RENDER_BOUND_MS"] = "1000"
+        # The bound covers xvfb-run's Xvfb startup as well as the render.
+        env["NM_RENDER_BOUND_MS"] = "30000"
 
         result = subprocess.run(
             ["bash", str(parity / "run.sh"), "chrome", "0", "0.999"],
