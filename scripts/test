@@ -5,12 +5,16 @@
 #   GODOT=<bin> scripts/test --godot-headless
 #                                   suites that need a Godot 4.7 binary under
 #                                   --headless (no GPU, no display)
+#   GODOT=<bin> scripts/test --godot-windowed
+#                                   the windowed suites in GODOT_WINDOWED: a
+#                                   Godot 4.7 binary with a window and a GPU
 #
 # Any failure, error, skip, or empty run exits nonzero.
 #
-# Not run by this script:
+# Not run by this script without --godot-windowed:
 #   - The windowed suites in GODOT_WINDOWED. They need a RenderingDevice,
 #     which is null under --headless, so they need a GPU and a window.
+# Not run by this script:
 #   - The compiler and definition parity gates (parity/check_*.mjs). They need
 #     a checkout of the reference engine through NM_REFERENCE_ROOT.
 set -euo pipefail
@@ -25,10 +29,12 @@ ENGINE_FREE=(
 	parity.test_artistic_matrix
 	parity.test_expand_acceptance
 	parity.test_export_kit_gate
+	parity.test_export_kit_workflow
 	parity.test_ensure_compare_python
 	parity.test_harness_contract
 	parity.test_kit_release
 	parity.test_parity_summary
+	parity.test_scripts_test_modes
 	parity.test_bound_ms
 	parity.test_doc_count_claims
 	parity.test_doc_version_claims
@@ -279,6 +285,24 @@ run_godot_headless() {
 	fi
 }
 
+# The windowed suites launch Godot with a window themselves (parity/windowed.py
+# bounds each launch). Like the other groups, an empty run, a skip or any
+# failure fails.
+run_godot_windowed() {
+	require_python
+	[[ -n "${GODOT:-}" ]] || fail "--godot-windowed needs GODOT=<path to a Godot 4.7 binary>"
+	[[ -x "$GODOT" ]] || fail "GODOT is not an executable file: $GODOT"
+	echo "== Godot windowed suites"
+	local godot_windowed=()
+	while IFS= read -r line; do godot_windowed+=("$line"); done < <(select_suites "${GODOT_WINDOWED[@]}" | shard_select)
+	clear_shard_env
+	if [[ "${#godot_windowed[@]}" -eq 0 ]]; then
+		echo "== Godot windowed suites: this shard has no suites to run"
+		exit 0
+	fi
+	run_unittest "${godot_windowed[@]}"
+}
+
 check_classification
 case "${1:-}" in
 	"")
@@ -287,7 +311,10 @@ case "${1:-}" in
 	--godot-headless)
 		run_godot_headless
 		;;
+	--godot-windowed)
+		run_godot_windowed
+		;;
 	*)
-		fail "unknown argument: $1 (usage: scripts/test [--godot-headless])"
+		fail "unknown argument: $1 (usage: scripts/test [--godot-headless | --godot-windowed])"
 		;;
 esac

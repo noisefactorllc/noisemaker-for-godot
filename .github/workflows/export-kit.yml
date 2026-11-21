@@ -121,6 +121,12 @@ jobs:
       - name: Run full rendered parity
         run: scripts/parity-summary
 
+      # The windowed suites need the same window, GPU and Godot build as the
+      # rendered parity; scripts/test fails on any failure, skip or empty run.
+      - name: Run the windowed suites
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: PATH="$PWD/parity/.venv/bin:$PATH" scripts/test --godot-windowed
+
   dispatch:
     needs: parity
     if: github.ref == 'refs/heads/main'
