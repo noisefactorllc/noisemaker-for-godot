@@ -17,10 +17,12 @@ MAIN = ROOT / "export-kit" / "kit" / "main.gd"
 
 
 def function_body(text: str, name: str):
-    """The indented lines of `func name(...)`, or None if it is not defined."""
+    """The indented lines of `func name(...)`, comments removed, or None if it is not defined."""
     match = re.search(
         rf"^func {name}\([^)]*\)(?:\s*->\s*\w+)?\s*:\n((?:(?:\t[^\n]*)?\n)*)", text, re.M)
-    return match.group(1) if match else None
+    if not match:
+        return None
+    return "\n".join(line.split("#", 1)[0].rstrip() for line in match.group(1).splitlines())
 
 
 class KitReleaseTests(unittest.TestCase):
@@ -38,21 +40,22 @@ class KitReleaseTests(unittest.TestCase):
         self.assertLess(close, free, "_release() frees the device before closing the backend")
 
     def test_every_path_after_setup_releases_before_it_ends(self):
+        # The release must sit at the top level of _ready(), after the last
+        # render and before any later return, so that no path after setup,
+        # successful or not, can skip it.
         body = function_body(self.text, "_ready")
         self.assertIsNotNone(body, "main.gd defines no _ready()")
         lines = body.splitlines()
         setup = next((i for i, line in enumerate(lines) if "_backend.setup(" in line), None)
         self.assertIsNotNone(setup, "_ready() does not set the backend up as _backend")
-        released = False
-        for line in lines[setup + 1:]:
-            code = line.split("#", 1)[0]
-            if "render_samples(" in code:
-                self.assertFalse(released, "_ready() renders after releasing the device")
-            if "_release()" in code:
-                released = True
-            if re.search(r"\breturn\b", code):
-                self.assertTrue(released, f"_ready() returns without releasing: {line.strip()}")
-        self.assertTrue(released, "_ready() ends without releasing the device")
+        renders = [i for i, line in enumerate(lines) if "render_samples(" in line]
+        self.assertTrue(renders, "_ready() does not render")
+        release = next((i for i in range(renders[-1] + 1, len(lines))
+                        if lines[i] == "\t_release()"), None)
+        self.assertIsNotNone(release, "_ready() has no top-level _release() after its last render")
+        for line in lines[setup + 1:release]:
+            self.assertIsNone(re.search(r"\breturn\b", line),
+                              f"_ready() returns before releasing: {line.strip()}")
 
     def test_leaving_the_tree_releases_as_well(self):
         body = function_body(self.text, "_exit_tree")

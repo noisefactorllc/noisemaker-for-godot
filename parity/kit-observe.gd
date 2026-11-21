@@ -3,7 +3,7 @@
 # Mirrors the worker kit-observe.gd contract: run against an installed kit
 # project, it loads the kit's main.tscn, records the displayed texture hash
 # across 120 process frames, writes the first displayed frame as a PNG, and
-# prints a summary line:
+# prints these lines:
 #
 #   NM_OBSERVE frames=<n> distinct=<d> first=<h0> last=<hN> transitions=<t>
 #   NM_RELEASED handles=<h> device_freed=<true|false>
