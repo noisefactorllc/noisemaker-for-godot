@@ -100,6 +100,15 @@ class KitPlaybackTests(unittest.TestCase):
             self.assertTrue(png.exists(), "observer wrote no first.png")
             self.assertGreater(png.stat().st_size, 0)
 
+    def test_the_kit_releases_its_device_once_the_stills_are_captured(self):
+        # The addon README: close the backend, then free the device.
+        with tempfile.TemporaryDirectory(prefix="nm-kit-") as tmp:
+            kit = Path(tmp) / "kit"
+            build_kit(kit, frames=120, sample_every=20, playback_fps=30)
+            run = observe(kit, Path(tmp) / "first.png")
+            assert_engine_clean(self, run)
+            self.assertIn("NM_RELEASED handles=0 device_freed=true", run["output"], run["output"][-4000:])
+
     def test_playback_fps_changes_the_stated_behavior(self):
         with tempfile.TemporaryDirectory(prefix="nm-kit-") as tmp:
             slow = Path(tmp) / "slow"

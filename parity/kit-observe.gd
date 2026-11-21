@@ -6,6 +6,12 @@
 # prints a summary line:
 #
 #   NM_OBSERVE frames=<n> distinct=<d> first=<h0> last=<hN> transitions=<t>
+#   NM_RELEASED handles=<h> device_freed=<true|false>
+#
+# NM_RELEASED reads the kit's _backend once playback is under way: the kit
+# closes its backend (no tracked handles) and frees its RenderingDevice when
+# the stills are captured. It prints `NM_RELEASED backend=none` when the kit
+# kept no backend.
 #
 # Usage (non-headless; RenderingDevice needs a real window):
 #   $GODOT --path "$KIT" --script <this-file> --position 5000,5000 -- "$OUT/first.png"
@@ -60,4 +66,11 @@ func _on_frame() -> void:
 				transitions += 1
 		print("NM_OBSERVE frames=", _hashes.size(), " distinct=", distinct.size(),
 				" first=", _hashes[0], " last=", _hashes[-1], " transitions=", transitions)
+		print("NM_RELEASED ", _released())
 		quit(0)
+
+func _released() -> String:
+	var backend = _node.get("_backend")
+	if backend == null:
+		return "backend=none"
+	return "handles=%d device_freed=%s" % [backend.tracked_handle_count(), not is_instance_valid(backend.rd)]

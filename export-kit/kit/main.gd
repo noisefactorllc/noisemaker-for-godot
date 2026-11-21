@@ -23,6 +23,10 @@ const PLAYBACK_FPS := 5
 var _stills: Array = []
 var _index := 0
 var _accumulator := 0.0
+# The device and backend are needed only while the program renders: the stills
+# are Images, so _release() lets both go as soon as they are captured.
+var _rd: RenderingDevice = null
+var _backend: Backend = null
 
 func _ready() -> void:
 	var dsl := FileAccess.get_file_as_string("res://program.dsl")
@@ -46,22 +50,23 @@ func _ready() -> void:
 		$Status.text = "Failed: the program is invalid (see the engine console for the NM_COMPILE_DIAG diagnostic)."
 		return
 
-	var rd := RenderingServer.create_local_rendering_device()
-	if rd == null:
+	_rd = RenderingServer.create_local_rendering_device()
+	if _rd == null:
 		push_error("RenderingDevice unavailable")
 		$Status.text = "Failed: RenderingDevice unavailable (needs a window and Forward+)."
 		return
 
-	var backend := Backend.new()
-	backend.setup(rd, "res://addons/noisemaker", Vector2i(SIZE, SIZE))
+	_backend = Backend.new()
+	_backend.setup(_rd, "res://addons/noisemaker", Vector2i(SIZE, SIZE))
 	# One still every SAMPLE_EVERY frames of simulated 60 fps time. Keep FRAMES
 	# a multiple of SAMPLE_EVERY so the final evolved frame is sampled; if no
 	# interval boundary falls inside the run (e.g. FRAMES=30, SAMPLE_EVERY=60,
 	# or FRAMES=1 for still-only programs), sample once at the final frame so
 	# the loop still shows the evolved state rather than the seed.
-	_stills = backend.render_samples(graph, FRAMES, SAMPLE_EVERY)
+	_stills = _backend.render_samples(graph, FRAMES, SAMPLE_EVERY)
 	if _stills.is_empty():
-		_stills = backend.render_samples(graph, FRAMES, max(FRAMES, 1))
+		_stills = _backend.render_samples(graph, FRAMES, max(FRAMES, 1))
+	_release()
 	if _stills.is_empty():
 		push_error("render produced no frames")
 		$Status.text = "Failed: rendering produced no frames (see the engine console)."
@@ -69,6 +74,19 @@ func _ready() -> void:
 
 	$Status.text = ""
 	_show_frame(0)
+
+func _exit_tree() -> void:
+	_release()
+
+# Closes the backend, which frees the handles it owns, then frees the device.
+# The addon's README requires this order: freeing the device first leaks
+# backend handles. Safe to call more than once.
+func _release() -> void:
+	if _backend != null:
+		_backend.close()
+	if _rd != null:
+		_rd.free()
+		_rd = null
 
 func _process(delta: float) -> void:
 	if _stills.size() < 2:
