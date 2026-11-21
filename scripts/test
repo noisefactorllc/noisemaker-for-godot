@@ -285,9 +285,9 @@ run_godot_headless() {
 	fi
 }
 
-# The windowed suites launch Godot with a window themselves (parity/windowed.py
-# bounds each launch). Like the other groups, an empty run, a skip or any
-# failure fails.
+# The windowed suites launch Godot with a window themselves, each launch with
+# its own timeout. As in the other groups, a skip, any failure or a run of no
+# tests fails, and a shard that holds none of the group's suites exits 0.
 run_godot_windowed() {
 	require_python
 	[[ -n "${GODOT:-}" ]] || fail "--godot-windowed needs GODOT=<path to a Godot 4.7 binary>"

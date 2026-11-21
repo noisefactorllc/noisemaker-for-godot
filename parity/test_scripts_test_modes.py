@@ -10,6 +10,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -25,7 +26,7 @@ def run_script(*args, godot=None):
     # scripts/test checks the python3 on PATH; use the interpreter running this suite.
     env["PATH"] = os.pathsep.join([str(Path(sys.executable).parent), env.get("PATH", "")])
     return subprocess.run([str(SCRIPT), *args], cwd=ROOT, env=env,
-                          capture_output=True, text=True, timeout=60)
+                          capture_output=True, text=True, timeout=180)
 
 
 class WindowedModeTests(unittest.TestCase):
@@ -39,6 +40,30 @@ class WindowedModeTests(unittest.TestCase):
         result = run_script("--godot-windowed", godot=str(ROOT / "no-such-godot"))
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("GODOT is not an executable file", result.stderr)
+
+    def test_windowed_mode_runs_every_windowed_suite_and_fails_when_godot_fails(self):
+        # A stand-in Godot that exits 1 makes every windowed suite fail. The
+        # mode must run them all, report a non-empty run and exit 1.
+        text = SCRIPT.read_text()
+        group = re.search(r"^GODOT_WINDOWED=\(\n(.*?)^\)", text, re.S | re.M)
+        self.assertIsNotNone(group, "scripts/test defines no GODOT_WINDOWED group")
+        entries = group.group(1).split()
+        self.assertTrue(entries)
+        with tempfile.TemporaryDirectory() as tmp:
+            stub = Path(tmp) / "godot"
+            stub.write_text("#!/bin/sh\nexit 1\n")
+            stub.chmod(0o755)
+            result = run_script("--godot-windowed", godot=str(stub))
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 1, output[-4000:])
+        ran = re.search(r"^SUMMARY: ran=(\d+) ", output, re.M)
+        self.assertIsNotNone(ran, output[-4000:])
+        self.assertGreater(int(ran.group(1)), 0)
+        for entry in entries:
+            module = entry.split(".")[1]
+            # A suite that cannot import shows as unittest's _FailedTest.
+            self.assertRegex(output, rf"\((?:parity\.{module}\.|unittest\.loader\._FailedTest\.{module}\))",
+                             f"{entry} did not run")
 
     def test_windowed_mode_runs_the_windowed_group_through_run_unittest(self):
         text = SCRIPT.read_text()
