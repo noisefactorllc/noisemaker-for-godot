@@ -66,6 +66,15 @@ class WindowedStepTests(unittest.TestCase):
     def test_nothing_in_the_parity_job_soft_fails(self):
         self.assertNotIn("continue-on-error", "\n".join(self.parity))
 
+    def test_nothing_can_hide_a_failed_windowed_run(self):
+        commands = [line for line in self.windowed[0].splitlines() if "scripts/test --godot-windowed" in line]
+        self.assertEqual(len(commands), 1)
+        command = commands[0].split("scripts/test --godot-windowed", 1)
+        for token in ("||", "|", ";", "&", "set +e"):
+            self.assertNotIn(token, command[0] + command[1], f"the windowed command must not contain {token!r}")
+        self.assertNotRegex("\n".join(self.parity), r"(?m)^\s+shell:", "the job keeps the default fail-fast shell")
+        self.assertNotRegex(self.windowed[0], r"(?m)^\s+(?:-\s+)?if:(?!\s*github\.event_name == 'schedule')")
+
 
 if __name__ == "__main__":
     unittest.main()
