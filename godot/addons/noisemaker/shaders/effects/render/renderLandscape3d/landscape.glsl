@@ -129,20 +129,12 @@ vec3 isosurfaceNormal(vec3 p, vec3 fallback) {
     return fallback;
 }
 
-// A voxel that stops the voxel ray. Cells outside the volume are empty.
 bool voxelOccupied(ivec3 cell) {
     if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, ivec3(int(volumeSize))))) return false;
     float density = texelFetch(analyticalGeo, ivec2(cell.x, cell.y + cell.z * int(volumeSize)), 0).a;
     return density > 0.0 && density >= threshold;
 }
 
-// A ray through a voxel edge crosses two boundaries at one distance and enters
-// the cell beyond the edge, where two of its faces meet. Rounding decides
-// whether the crossings compare equal. Where a neighboring voxel covers one of
-// those faces, the rays on either side of the edge show the other one, so the
-// cell shows the first face that its neighbors leave exposed. `toward` is the
-// ray's step along each axis, and `normal` the face of the first crossed axis
-// in y, x, z order.
 vec3 exposedFace(ivec3 cell, bvec3 crossed, ivec3 toward, vec3 normal) {
     if (int(crossed.x) + int(crossed.y) + int(crossed.z) < 2) return normal;
     if (crossed.y && !voxelOccupied(cell - ivec3(0, toward.y, 0))) return vec3(0.0, -float(toward.y), 0.0);
