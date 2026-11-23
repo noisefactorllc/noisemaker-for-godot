@@ -51,6 +51,7 @@ GODOT_HEADLESS=(
 )
 GODOT_WINDOWED=(
 	parity.test_device_limits
+	parity.test_port_behavior_live
 	parity.test_frame_export.FrameExportTests.test_async_readback_preserves_metadata_and_premultiplies
 	parity.test_kit_playback
 	parity.test_lifecycle.LiveLifecycleTests

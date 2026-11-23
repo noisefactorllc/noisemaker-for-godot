@@ -23,6 +23,8 @@ func _init() -> void:
 	var batch_manifest_path := ""
 	var out_path := ""
 	var size := 256
+	var width := 0             # >0 overrides the frame width (height defaults to size)
+	var height := 0            # >0 overrides the frame height
 	var run_seconds := 0       # >0 => timed-sampling mode for stateful sims
 	var sample_every_sec := 5
 	var texture_pooling := false
@@ -43,6 +45,10 @@ func _init() -> void:
 				out_path = a[i + 1]; i += 2
 			"--size":
 				size = int(a[i + 1]); i += 2
+			"--width":
+				width = int(a[i + 1]); i += 2
+			"--height":
+				height = int(a[i + 1]); i += 2
 			"--run-seconds":
 				run_seconds = int(a[i + 1]); i += 2
 			"--sample-every":
@@ -67,7 +73,7 @@ func _init() -> void:
 		printerr("usage: -- (--dsl <dsl> | --graph <json>) --out <png> [--size 256] [--run-seconds N --sample-every S] | --batch-manifest <json>")
 		quit(1); return
 	var ok := _render_request(graph_path, dsl_path, out_path, size, run_seconds, sample_every_sec,
-			texture_pooling, media_fixture, render_scale, tiles, tile_margin)
+			texture_pooling, media_fixture, render_scale, tiles, tile_margin, width, height)
 	quit(0 if ok else 1)
 
 
@@ -88,7 +94,9 @@ func _run_batch(manifest_path: String) -> void:
 			str(request.get("out", "")), int(request.get("size", 256)),
 			int(request.get("run_seconds", 0)), int(request.get("sample_every", 5)),
 			bool(request.get("texture_pooling", false)),
-			bool(request.get("media_fixture", false)))
+			bool(request.get("media_fixture", false)),
+			int(request.get("render_scale", 1)), Vector2i.ZERO, 0,
+			int(request.get("width", 0)), int(request.get("height", 0)))
 		print("NM_BATCH name=", request.get("name", "unknown"), " ok=", ok)
 		all_ok = all_ok and ok
 	quit(0 if all_ok else 1)
@@ -97,7 +105,8 @@ func _run_batch(manifest_path: String) -> void:
 func _render_request(graph_path: String, dsl_path: String, out_path: String, size: int,
 		run_seconds: int, sample_every_sec: int, texture_pooling: bool = false,
 		media_fixture: bool = false, render_scale: int = 1,
-		tiles: Vector2i = Vector2i.ZERO, tile_margin: int = 0) -> bool:
+		tiles: Vector2i = Vector2i.ZERO, tile_margin: int = 0,
+		width: int = 0, height: int = 0) -> bool:
 	if (graph_path == "" and dsl_path == "") or out_path == "":
 		printerr("bad render request: graph/dsl and out are required")
 		return false
@@ -145,7 +154,9 @@ func _render_request(graph_path: String, dsl_path: String, out_path: String, siz
 		rd.free()
 		return tiled_ok
 
-	var full_px := Vector2i(size * render_scale, size * render_scale)
+	var frame_w := size if width <= 0 else width
+	var frame_h := size if height <= 0 else height
+	var full_px := Vector2i(frame_w * render_scale, frame_h * render_scale)
 	var backend := Backend.new()
 	backend.setup(rd, "res://addons/noisemaker", full_px)
 	if render_scale != 1:
