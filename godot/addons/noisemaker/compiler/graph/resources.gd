@@ -23,14 +23,46 @@ static func _touch(lifetime: Dictionary, tex_id, index: int) -> void:
 		if index > l[1]:
 			l[1] = index
 
+static func _build_input_aliases(passes: Array) -> Dictionary:
+	var aliases := {}
+	var written := {}
+	var node_output := RegEx.create_from_string("^node_\\d+_out$")
+	for p in passes:
+		if not p.get("outputs"):
+			continue
+		for tex_id in p["outputs"].values():
+			if tex_id is String:
+				written[tex_id] = true
+	for index in range(passes.size()):
+		var p: Dictionary = passes[index]
+		var node_id = p.get("nodeId")
+		if not p.get("inputs") or not node_id:
+			continue
+		for tex_id in p["inputs"].values():
+			if not (tex_id is String) or written.has(tex_id) or aliases.has(tex_id):
+				continue
+			if tex_id != node_id + "_inputTex" and tex_id != node_id + "_inputColor":
+				continue
+			for previous in range(index - 1, -1, -1):
+				if not passes[previous].get("outputs"):
+					continue
+				for upstream in passes[previous]["outputs"].values():
+					if upstream is String and upstream != node_id + "_out" and node_output.search(upstream) != null:
+						aliases[tex_id] = upstream
+						break
+				if aliases.has(tex_id):
+					break
+	return aliases
+
 static func _analyze_liveness(passes: Array) -> Dictionary:
 	var lifetime := {}  # texId -> [start, end]
+	var aliases := _build_input_aliases(passes)
 	for index in range(passes.size()):
 		var p: Dictionary = passes[index]
 		var inputs = p.get("inputs")
 		if inputs != null:
 			for tex in inputs.values():
-				_touch(lifetime, tex, index)
+				_touch(lifetime, aliases.get(tex, tex), index)
 		var outputs = p.get("outputs")
 		if outputs != null:
 			for tex in outputs.values():
@@ -39,6 +71,7 @@ static func _analyze_liveness(passes: Array) -> Dictionary:
 
 static func allocate_resources(passes: Array) -> Dictionary:
 	var lifetime := _analyze_liveness(passes)
+	var aliases := _build_input_aliases(passes)
 	var allocations := {}     # texId -> "phys_N" (insertion-ordered)
 	var free_list: Array = [] # list of [phys_id, available_after]
 	var physical_count := 0
@@ -74,7 +107,8 @@ static func allocate_resources(passes: Array) -> Dictionary:
 		var inputs = p.get("inputs")
 		if inputs != null:
 			var released := {}
-			for tex_id in inputs.values():
+			for input_id in inputs.values():
+				var tex_id = aliases.get(input_id, input_id)
 				if released.has(tex_id):
 					continue
 				released[tex_id] = true

@@ -332,6 +332,9 @@ func _resolve_call(call: Dictionary) -> Dictionary:
 				for k in call["kwargs"].keys():
 					merged_kw[k] = call["kwargs"][k]
 			var merged := {"type": "Call", "name": val.get("name"), "args": merged_args}
+			var loc = call.get("loc", val.get("loc"))
+			if loc != null:
+				merged["loc"] = loc
 			if merged_kw != null:
 				merged["kwargs"] = merged_kw
 			if call.get("namespace") != null:
@@ -411,6 +414,8 @@ func _substitute(node, resolving: Array = []):
 			for a in c.get("args", []):
 				mapped_args.push_back(_substitute(a, resolving))
 			var mapped_call := {"type": "Call", "name": c.get("name"), "args": mapped_args}
+			if c.has("loc"):
+				mapped_call["loc"] = c["loc"]
 			if c.get("kwargs") is Dictionary:
 				var kw := {}
 				for k in c["kwargs"].keys():
@@ -423,6 +428,8 @@ func _substitute(node, resolving: Array = []):
 		for a in node.get("args", []):
 			mapped_args.push_back(_substitute(a, resolving))
 		var mapped_call := {"type": "Call", "name": node.get("name"), "args": mapped_args}
+		if node.has("loc"):
+			mapped_call["loc"] = node["loc"]
 		if node.get("kwargs") is Dictionary:
 			var kw := {}
 			for k in node["kwargs"].keys():
@@ -911,6 +918,11 @@ func _resolve_args(call: Dictionary, original: Dictionary, spec: Dictionary, op_
 		else:
 			args[arg_key] = _resolve_numeric_arg(node, def, dname, call, spec, args)
 		i += 1
+
+	if call_args.size() > spec_args.size():
+		var extra = call_args[spec_args.size()]
+		_push_diag("S009", extra if extra != null else call,
+			"Too many positional arguments for %s(): '%s' takes %d" % [call.get("name"), call.get("name"), spec_args.size()])
 
 	# _skip meta-argument
 	if kw != null and kw.has("_skip"):

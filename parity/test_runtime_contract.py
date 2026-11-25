@@ -1088,5 +1088,89 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertIn("SHADER_DIAGNOSTICS_TEST: PASS", result.stdout, result.stdout + result.stderr)
 
 
+    def test_parser_locations_accept_tokens_without_source_coordinates(self):
+        script = r'''
+            extends SceneTree
+            const Lexer = preload("res://addons/noisemaker/compiler/lang/lexer.gd")
+            const Parser = preload("res://addons/noisemaker/compiler/lang/parser.gd")
+            func _init():
+                for coordinates in [{}, {"line": 7}, {"col": 4}, {"line": 7, "col": 4}]:
+                    var tokens = []
+                    for token in Lexer.lex("search synth\nlet x = foo(2)"):
+                        var entry = {"type": token.type, "lexeme": token.lexeme}
+                        entry.merge(coordinates)
+                        tokens.append(entry)
+                    var parser = Parser.new()
+                    var ast = parser.parse_tokens(tokens)
+                    if parser._err:
+                        print("TOKEN_LOCATION_TEST: parse failed")
+                        quit(1)
+                        return
+                    var call = ast.vars[0].expr
+                    if call.get("loc") != coordinates or call.args[0].get("loc") != coordinates:
+                        print("TOKEN_LOCATION_TEST: ", call)
+                        quit(1)
+                        return
+                print("TOKEN_LOCATION_TEST: PASS")
+                quit(0)
+        '''
+        result = self._run_godot_script(script)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("SCRIPT ERROR", result.stderr)
+        self.assertIn("TOKEN_LOCATION_TEST: PASS", result.stdout)
+
+    def test_pipeline_input_aliases_extend_lifetimes_and_release_once(self):
+        script = r'''
+            extends SceneTree
+            const Resources = preload("res://addons/noisemaker/compiler/graph/resources.gd")
+            func _init():
+                var passes = [
+                    {"nodeId": "node_0", "outputs": {"color": "node_0_out"}},
+                    {"nodeId": "node_1", "inputs": {"a": "node_1_inputColor", "b": "node_1_inputTex"}, "outputs": {"color": "node_1_out"}},
+                    {"nodeId": "node_2", "inputs": {"a": "node_1_out"}, "outputs": {"color": "node_2_out", "extra": "node_2_extra"}},
+                    {"nodeId": "node_3", "inputs": null, "outputs": null}
+                ]
+                var lifetimes = Resources._analyze_liveness(passes)
+                var slots = Resources.allocate_resources(passes)
+                if lifetimes.get("node_0_out") != [0, 1] or lifetimes.has("node_1_inputColor") or lifetimes.has("node_1_inputTex"):
+                    print("ALIAS_TEST: invalid lifetimes ", lifetimes)
+                    quit(1)
+                    return
+                if slots.get("node_2_out") != slots.get("node_0_out") or slots.get("node_2_extra") == slots.get("node_2_out"):
+                    print("ALIAS_TEST: invalid reuse ", slots)
+                    quit(1)
+                    return
+                print("ALIAS_TEST: PASS")
+                quit(0)
+        '''
+        result = self._run_godot_script(script)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("ALIAS_TEST: PASS", result.stdout)
+
+    def test_alias_resolution_preserves_written_and_external_textures(self):
+        script = r'''
+            extends SceneTree
+            const Resources = preload("res://addons/noisemaker/compiler/graph/resources.gd")
+            func _init():
+                var passes = [
+                    {"nodeId": "node_0", "outputs": {"color": "node_0_out"}},
+                    {"nodeId": "node_1", "inputs": {"image": "node_1_overlayTex"}, "outputs": {"color": "node_1_out", "local": "node_1_inputColor"}},
+                    {"nodeId": "node_1", "inputs": {"local": "node_1_inputColor", "external": "imageTex_step_0", "foreign": "node_9_inputTex"}, "outputs": {"color": "node_1_out"}},
+                    {"nodeId": "node_1", "inputs": {"color": "node_1_inputTex"}, "outputs": {"color": "node_1_out"}}
+                ]
+                var lifetimes = Resources._analyze_liveness(passes)
+                var expected = {"node_0_out": [0, 3], "node_1_out": [1, 3], "node_1_inputColor": [1, 2], "node_1_overlayTex": [1, 1], "imageTex_step_0": [2, 2], "node_9_inputTex": [2, 2]}
+                if lifetimes != expected:
+                    print("ALIAS_SCOPE_TEST: ", lifetimes)
+                    quit(1)
+                    return
+                print("ALIAS_SCOPE_TEST: PASS")
+                quit(0)
+        '''
+        result = self._run_godot_script(script)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("ALIAS_SCOPE_TEST: PASS", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

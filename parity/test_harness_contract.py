@@ -5,6 +5,7 @@ import os
 import hashlib
 import importlib.util
 import json
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -801,7 +802,9 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
                 target = os.path.join(element, name)
                 if os.path.isfile(target) and os.access(target, os.X_OK):
                     try:
-                        os.symlink(target, shim / name)
+                        launcher = shim / name
+                        launcher.write_text(f'#!/bin/sh\nexec {shlex.quote(target)} "$@"\n')
+                        launcher.chmod(0o755)
                     except OSError:
                         pass
         return str(shim)

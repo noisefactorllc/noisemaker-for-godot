@@ -34,6 +34,7 @@ const _TABLE := {
 	"S006": ["Starter chain missing write() call", "error", "semantic"],
 	"S007": ["Deprecated parameter alias", "warning", "semantic"],
 	"S008": ["Deprecated effect", "warning", "semantic"],
+	"S009": ["Too many positional arguments", "warning", "semantic"],
 	"R001": ["Runtime error", "error", "runtime"],
 }
 

@@ -912,6 +912,17 @@ func _parse_subchain_call() -> Dictionary:
 		node["subchainArgumentDiagnostics"] = arg_diagnostics
 	return node
 
+func _skip_comments() -> void:
+	while _peek().type == "COMMENT":
+		_advance()
+
+func _loc_of(token) -> Dictionary:
+	var loc := {}
+	for prop in ["line", "col"]:
+		if prop in token:
+			loc[prop] = _get_token_prop(token, prop)
+	return loc
+
 func _parse_call():
 	var name_token = _expect("IDENT", "Expected identifier")
 	# Inline namespace syntax (e.g., nd.noise()) is forbidden.
@@ -931,8 +942,10 @@ func _parse_call():
 	var keyword := false
 	var positional := false
 	var allow_mixed: bool = name_token.lexeme == "midi" or name_token.lexeme == "audio"
+	_skip_comments()
 	if _peek().type != "RPAREN":
 		while true:
+			_skip_comments()
 			if _peek().type == "IDENT" and _type_at(current + 1) == "COLON":
 				if positional and not allow_mixed:
 					var t = _peek()
@@ -953,15 +966,17 @@ func _parse_call():
 				args.push_back(_parse_arg())
 				if _err:
 					return {}
+			_skip_comments()
 			if _peek().type != "COMMA":
 				break
 			_advance()
+			_skip_comments()
 			if _peek().type == "RPAREN":
 				break
 	_expect("RPAREN", "Expect ')'")
 	if _err:
 		return {}
-	var call := {"type": "Call", "name": name_token.lexeme, "args": args}
+	var call := {"type": "Call", "name": name_token.lexeme, "args": args, "loc": _loc_of(name_token)}
 	if keyword:
 		call["kwargs"] = kwargs
 
@@ -1025,7 +1040,7 @@ func _parse_additive():
 		var right = _parse_multiplicative()
 		var l := _to_number(node)
 		var r := _to_number(right)
-		node = {"type": "Number", "value": (l + r if op == "PLUS" else l - r)}
+		node = {"type": "Number", "value": (l + r if op == "PLUS" else l - r), "loc": node.get("loc")}
 	return node
 
 func _parse_multiplicative():
@@ -1035,7 +1050,7 @@ func _parse_multiplicative():
 		var right = _parse_unary()
 		var l := _to_number(node)
 		var r := _to_number(right)
-		node = {"type": "Number", "value": (l * r if op == "STAR" else l / r)}
+		node = {"type": "Number", "value": (l * r if op == "STAR" else l / r), "loc": node.get("loc")}
 	return node
 
 func _parse_unary():
@@ -1045,7 +1060,7 @@ func _parse_unary():
 	if _peek().type == "MINUS":
 		_advance()
 		var val = _parse_unary()
-		return {"type": "Number", "value": -_to_number(val)}
+		return {"type": "Number", "value": -_to_number(val), "loc": val.get("loc")}
 	return _parse_primary()
 
 func _parse_primary():
@@ -1053,10 +1068,10 @@ func _parse_primary():
 	match token.type:
 		"NUMBER":
 			_advance()
-			return {"type": "Number", "value": token.lexeme.to_float()}
+			return {"type": "Number", "value": token.lexeme.to_float(), "loc": _loc_of(token)}
 		"STRING":
 			_advance()
-			return {"type": "String", "value": token.lexeme}
+			return {"type": "String", "value": token.lexeme, "loc": _loc_of(token)}
 		"HEX":
 			_advance()
 			var hex: String = token.lexeme.substr(1)
@@ -1077,16 +1092,22 @@ func _parse_primary():
 				g = float(hex.substr(2, 2).hex_to_int())
 				b = float(hex.substr(4, 2).hex_to_int())
 				a = float(hex.substr(6, 2).hex_to_int()) / 255.0
-			return {"type": "Color", "value": [r / 255.0, g / 255.0, b / 255.0, a]}
+			return {"type": "Color", "value": [r / 255.0, g / 255.0, b / 255.0, a], "loc": _loc_of(token)}
 		"LBRACKET":
 			var start_token = token
 			_advance()
 			var elements: Array = []
+			_skip_comments()
 			if _peek().type != "RBRACKET":
 				elements.push_back(_parse_arg())
+				_skip_comments()
 				while _peek().type == "COMMA":
 					_advance()
+					_skip_comments()
+					if _peek().type == "RBRACKET":
+						break
 					elements.push_back(_parse_arg())
+					_skip_comments()
 			if _peek().type != "RBRACKET":
 				var t = _peek()
 				var msg := "Expected ']' %s" % [_format_coords(t)]
@@ -1115,14 +1136,14 @@ func _parse_primary():
 			return {"type": "Func", "src": token.lexeme}
 		"TRUE":
 			_advance()
-			return {"type": "Boolean", "value": true}
+			return {"type": "Boolean", "value": true, "loc": _loc_of(token)}
 		"FALSE":
 			_advance()
-			return {"type": "Boolean", "value": false}
+			return {"type": "Boolean", "value": false, "loc": _loc_of(token)}
 		"IDENT":
 			if token.lexeme == "Math" and _type_at(current + 1) == "DOT" and _type_at(current + 2) == "IDENT" and _tok(current + 2) != null and _tok(current + 2).lexeme == "PI":
 				_advance(); _advance(); _advance()
-				return {"type": "Number", "value": PI}
+				return {"type": "Number", "value": PI, "loc": _loc_of(token)}
 			if _type_at(current + 1) == "LPAREN" or _has_call_after_dot(current):
 				var chain = _parse_chain("expression")
 				return chain[0] if chain.size() == 1 else {"type": "Chain", "chain": chain}
@@ -1199,6 +1220,7 @@ func _to_number(node) -> float:
 func _parse_kwarg(obj: Dictionary) -> void:
 	var key = _expect("IDENT", "Expected identifier").lexeme
 	_expect("COLON", "Expect ':'")
+	_skip_comments()
 	if not EXPR_START.has(_peek().type):
 		var t = _peek()
 		var msg := "Expected expression after '=' %s" % [_format_coords(t)]

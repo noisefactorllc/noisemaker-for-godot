@@ -9,6 +9,7 @@ each changed script and run the real function against a TERM-ignoring child.
 """
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -96,9 +97,10 @@ class BoundMsEscalationTests(unittest.TestCase):
                            if Path(p).exists()) if exe == "bash" else \
                     subprocess.run(["sh", "-c", "command -v node"],
                                    capture_output=True, text=True).stdout.strip()
-                link = Path(d) / exe
-                if not link.exists() and src:
-                    link.symlink_to(src)
+                launcher = Path(d) / exe
+                if src:
+                    launcher.write_text(f'#!/bin/sh\nexec {shlex.quote(str(src))} "$@"\n')
+                    launcher.chmod(0o755)
             # `:` and redirection are bash builtins and sleep(1) is named by
             # absolute path: the restricted PATH has neither.
             marker = Path(d) / "child-ran"

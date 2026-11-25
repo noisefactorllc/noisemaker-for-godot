@@ -986,15 +986,15 @@ class CompilerAutomationTests(unittest.TestCase):
                 self.assertIn("start", diag["span"])
                 self.assertIn("end", diag["span"])
 
-    def test_number_coercion_diagnostics_represent_unavailable_locations_explicitly(self):
+    def test_number_coercion_diagnostics_use_available_source_locations(self):
         cases = [
-            ("binary add left number right output", "search synth\nlet x = 1 + o0"),
-            ("binary add left call right number", "search synth\nlet x = diagProbe() + 1"),
+            ("binary add left number right output", "search synth\nlet x = 1 + o0", None),
+            ("binary add left call right number", "search synth\nlet x = diagProbe() + 1", {"line": 2, "column": 9}),
         ]
-        programs = {f"to_num_{idx}.dsl": src for idx, (_, src) in enumerate(cases)}
+        programs = {f"to_num_{idx}.dsl": src for idx, (_, src, _) in enumerate(cases)}
         for dump_script in ("_parse_dump.gd", "_validate_dump.gd"):
             dumped = self._dump(dump_script, programs)
-            for idx, (name, _) in enumerate(cases):
+            for idx, (name, _, location) in enumerate(cases):
                 key = f"to_num_{idx}.dsl"
                 res = dumped[key]
                 self.assertFalse(res["ok"], f"Expected {name} to fail in {dump_script}")
@@ -1004,7 +1004,7 @@ class CompilerAutomationTests(unittest.TestCase):
                 self.assertEqual(diag["stage"], "parser")
                 self.assertEqual(diag["severity"], "error")
                 self.assertEqual(diag["message"], "Expected number")
-                self.assertEqual(diag["location"], None)
+                self.assertEqual(diag["location"], location)
                 self.assertEqual(diag["span"], None)
 
     def test_valid_call_forms_compile(self):
@@ -1086,6 +1086,72 @@ class CompilerAutomationTests(unittest.TestCase):
         self.assertIsInstance(cell_pass["viewport"], dict)
         self.assertEqual(cell_pass["viewport"]["width"], {"param": "volumeSize", "default": 64})
         self.assertEqual(cell_pass["viewport"]["height"], {"param": "volumeSize", "power": 2, "default": 4096})
+
+
+    def test_comments_and_trailing_array_comma_preserve_arguments(self):
+        source = """search synth
+noise(/* before key */ scaleX: /* before value */ [10, /* element */ 20,],
+    // next keyword
+    seed: 7 /* before close */).write(o0)
+render(o0)
+"""
+        output = self._dump("_validate_dump.gd", {"comments.dsl": source})["comments.dsl"]
+        self.assertTrue(output["ok"], output)
+        self.assertEqual(output["out"]["diagnostics"], [])
+        args = output["out"]["plans"][0]["chain"][0]["args"]
+        self.assertEqual(args["scaleX"], [10, 20])
+        self.assertEqual(args["seed"], 7)
+
+    def test_call_and_literal_source_locations_survive_arithmetic(self):
+        source = 'search synth\nsolid(#804020, -1 + 2 * 3).write(o0)\nrender(o0)\n'
+        output = self._dump("_parse_dump.gd", {"locations.dsl": source})["locations.dsl"]
+        self.assertTrue(output["ok"], output)
+        call = output["ast"]["plans"][0]["chain"][0]
+        self.assertEqual(call.get("loc"), {"line": 2, "col": 1})
+        self.assertEqual(call["args"][0].get("loc"), {"line": 2, "col": 7})
+        self.assertEqual(call["args"][1]["value"], 5)
+        self.assertEqual(call["args"][1].get("loc"), {"line": 2, "col": 17})
+
+    def test_excess_positionals_warn_without_rejecting_the_program(self):
+        source = 'search synth\nsolid(#804020, 0.5, 9).write(o0)\nrender(o0)\n'
+        output = self._dump("_validate_dump.gd", {"excess.dsl": source})["excess.dsl"]
+        self.assertTrue(output["ok"], output)
+        diagnostics = output["out"]["diagnostics"]
+        self.assertEqual(len(diagnostics), 1, diagnostics)
+        self.assertEqual(diagnostics[0]["code"], "S009")
+        self.assertEqual(diagnostics[0]["severity"], "warning")
+        self.assertEqual(diagnostics[0]["location"], {"line": 2, "column": 21})
+        self.assertEqual(output["out"]["plans"][0]["chain"][0]["args"]["alpha"], 0.5)
+
+    def test_let_call_diagnostics_use_the_call_site(self):
+        source = 'search synth, points\nlet follow = flow(fieldTex: o1)\nnoise().follow().write(o0)\nrender(o0)\n'
+        output = self._dump("_validate_dump.gd", {"alias.dsl": source})["alias.dsl"]
+        self.assertTrue(output["ok"], output)
+        diagnostics = output["out"]["diagnostics"]
+        self.assertEqual(len(diagnostics), 1, diagnostics)
+        self.assertEqual(diagnostics[0]["code"], "S007", diagnostics)
+        self.assertEqual(diagnostics[0].get("location"), {"line": 3, "column": 9})
+
+    def test_stable_let_positionals_keep_their_parameter_indexes(self):
+        source = 'search synth\nlet paint = solid(alpha: 0.25)\npaint(#804020, 0.75).write(o0)\nrender(o0)\n'
+        output = self._dump("_validate_dump.gd", {"indexes.dsl": source})["indexes.dsl"]
+        self.assertTrue(output["ok"], output)
+        self.assertEqual(output["out"]["diagnostics"], [])
+        args = output["out"]["plans"][0]["chain"][0]["args"]
+        self.assertEqual(args["alpha"], 0.25)
+        for value, expected in zip(args["color"], [128 / 255, 64 / 255, 32 / 255, 1]):
+            self.assertAlmostEqual(value, expected)
+
+    def test_experimental_mixed_and_object_arguments_remain_rejected(self):
+        programs = {
+            "mixed.dsl": 'search synth\nsolid(#fff, alpha: 0.5).write(o0)\nrender(o0)\n',
+            "object.dsl": 'search synth\nsolid({r: 1}).write(o0)\nrender(o0)\n',
+        }
+        outputs = self._dump("_parse_dump.gd", programs)
+        for name, output in outputs.items():
+            with self.subTest(name=name):
+                self.assertFalse(output["ok"], output)
+                self.assertEqual(output["diagnostic"]["severity"], "error")
 
 
 if __name__ == "__main__":
