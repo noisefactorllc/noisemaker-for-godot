@@ -40,6 +40,7 @@ ENGINE_FREE=(
 	parity.test_doc_version_claims
 	parity.test_shader_coverage
 	parity.test_windowed
+	parity.test_workflow_contract
 )
 GODOT_HEADLESS=(
 	parity.test_capture_quantization

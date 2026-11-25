@@ -1,6 +1,6 @@
 name: Tests
 
-# Runs the repository test entrypoint on every push to main.
+# Runs the repository test entrypoint on every push to main or 2.x.
 # engine-free: scripts/test (no Godot, no GPU).
 # godot-headless: scripts/test --godot-headless against a pinned, checksum-verified
 # official Godot 4.7 Linux build. Windowed suites need a GPU and do not run here.
@@ -21,7 +21,7 @@ on:
       - '.github/FUNDING.yml'
       - '.github/dependabot.yml'
       - '.editorconfig'
-    branches: [main]
+    branches: [main, 2.x]
   workflow_dispatch:
 
 permissions:
