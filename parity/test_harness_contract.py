@@ -785,7 +785,7 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
         self.assertIn("UNIVERSE MISMATCH", result.stdout)
         self.assertIn("chrome", result.stdout)
 
-    def _shim_path_without_xvfb(self):
+    def _shim_path_without_xvfb(self, system="Linux"):
         """A PATH directory holding every host executable except xvfb-run
         and Xvfb, so a test can reach the no-wrapper branch of run.sh's
         window-session guard on hosts that ship xvfb-run."""
@@ -795,7 +795,7 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
             if not element or not os.path.isdir(element):
                 continue
             for name in os.listdir(element):
-                if name in ("xvfb-run", "Xvfb"):
+                if name in ("xvfb-run", "Xvfb", "uname"):
                     continue
                 if (shim / name).exists():
                     continue
@@ -807,6 +807,9 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
                         launcher.chmod(0o755)
                     except OSError:
                         pass
+        uname = shim / "uname"
+        uname.write_text(f'#!/bin/sh\nprintf "%s\\n" {shlex.quote(system)}\n')
+        uname.chmod(0o755)
         return str(shim)
 
     def _run_with_fake_renderer(self, renderer_exit):
@@ -861,7 +864,7 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
         )
         renderer.chmod(0o755)
         env = {k: v for k, v in os.environ.items()
-               if k not in ("DISPLAY", "WAYLAND_DISPLAY")}
+               if k not in ("DISPLAY", "WAYLAND_DISPLAY", "NM_WINDOW_CMD")}
         env["PATH"] = self._shim_path_without_xvfb()
         env["GODOT"] = str(renderer)
         env["NM_RENDER_BOUND_MS"] = "1000"
@@ -897,8 +900,12 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
         )
         renderer.chmod(0o755)
         env = {k: v for k, v in os.environ.items()
-               if k not in ("DISPLAY", "WAYLAND_DISPLAY")}
+               if k not in ("DISPLAY", "WAYLAND_DISPLAY", "NM_WINDOW_CMD")}
         env["GODOT"] = str(renderer)
+        env["PATH"] = self._shim_path_without_xvfb()
+        xvfb = Path(env["PATH"]) / "xvfb-run"
+        xvfb.write_text('#!/bin/sh\n[ "$1" != -a ] || shift\nDISPLAY=:fixture exec "$@"\n')
+        xvfb.chmod(0o755)
         # The bound covers xvfb-run's Xvfb startup as well as the render.
         env["NM_RENDER_BOUND_MS"] = "30000"
 
@@ -912,6 +919,29 @@ assert.deepEqual(cleared, [], 'failed partial overlay must not be accepted')
         display = (self.tmp / "renderer-display").read_text()
         self.assertTrue(display, "the render must run under a virtual display")
         self.assertNotEqual(result.returncode, 124, result.stdout + result.stderr)
+
+    def test_darwin_launches_directly_without_a_display_variable(self):
+        parity = self.tmp / "parity"
+        (parity / "out").mkdir(parents=True)
+        shutil.copy2(REPO / "parity" / "run.sh", parity / "run.sh")
+        shutil.copy2(REPO / "parity" / "ensure_compare_python.sh",
+                     parity / "ensure_compare_python.sh")
+        for suffix in ("graph.json", "golden.png"):
+            (parity / "out" / f"chrome.{suffix}").touch()
+        renderer = self.tmp / "fake-godot"
+        renderer.write_text(f'#!/bin/sh\ntouch {shlex.quote(str(self.tmp / "launched"))}\n')
+        renderer.chmod(0o755)
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("DISPLAY", "WAYLAND_DISPLAY", "NM_WINDOW_CMD")}
+        env.update(PATH=self._shim_path_without_xvfb("Darwin"),
+                   GODOT=str(renderer), NM_RENDER_BOUND_MS="1000")
+        result = subprocess.run(
+            ["bash", str(parity / "run.sh"), "chrome", "0", "0.999"],
+            env=env, capture_output=True, text=True, timeout=10,
+        )
+        self.assertTrue((self.tmp / "launched").exists(), result.stdout + result.stderr)
+        self.assertNotEqual(result.returncode, 124, result.stdout + result.stderr)
+        self.assertNotIn("no window session", result.stdout + result.stderr)
 
     def test_gate_render_guard_skipped_when_a_window_session_exists(self):
         """With a window session the guard must not fire: the render proceeds

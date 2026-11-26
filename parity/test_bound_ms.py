@@ -9,6 +9,7 @@ each changed script and run the real function against a TERM-ignoring child.
 """
 import os
 import re
+import signal
 import shlex
 import shutil
 import subprocess
@@ -76,8 +77,8 @@ class BoundMsEscalationTests(unittest.TestCase):
         self._escalates("scripts/test")
 
     def test_node_fallback_branch_escapes_term_ignoring_child(self):
-        """With no timeout(1) on PATH, the node spawnSync branch must still
-        end the bound (killSignal SIGKILL) and exit 124. The child also
+        """With no timeout(1) on PATH, the Node fallback must still
+        end the bound with SIGKILL and exit 124. The child also
         writes a marker before it sleeps: a fallback whose argv is broken
         launches nothing and exits 124 at once, so only the marker proves
         the branch really ran the bounded command."""
@@ -115,7 +116,7 @@ class BoundMsEscalationTests(unittest.TestCase):
 
 class NodeFallbackLaunchTests(unittest.TestCase):
     """With no timeout(1) or gtimeout(1) on PATH (a macOS host without
-    coreutils), each bound helper falls back to node's spawnSync. The
+    coreutils), each bound helper falls back to Node. The
     fallback must launch the bounded command and return its exit code, and
     it must still end a stalled command with 124. A fallback that passes an
     extra word before the command launches nothing and exits 124 at once."""
@@ -159,6 +160,96 @@ class NodeFallbackLaunchTests(unittest.TestCase):
 
     def test_parity_summary_node_fallback_launches_the_command(self):
         self._launches_and_bounds("scripts/parity-summary", "bound_ms")
+
+    def test_node_fallback_stops_descendants_before_closing_output(self):
+        node = shutil.which("node")
+        self.assertIsNotNone(node)
+        helpers = [
+            ("parity/run.sh", "bound_ms"),
+            ("parity/run_samples.sh", "bound_ms"),
+            ("scripts/parity-summary", "bound_ms"),
+            ("scripts/test", "bound_ms"),
+            ("parity/ensure_compare_python.sh", "bound"),
+        ]
+        for rel, name in helpers:
+            with self.subTest(helper=rel), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                launcher = root / "node"
+                launcher.write_text(f'#!/bin/sh\nexec {shlex.quote(node)} "$@"\n')
+                launcher.chmod(0o755)
+                pid_file = root / "descendant.pid"
+                child = (f'trap "" TERM; /bin/sleep 120 & '
+                         f'echo $! > {shlex.quote(str(pid_file))}; wait')
+                command = (f'{_extract_named(ROOT / rel, name)}\n'
+                           f'{name} 200 /bin/sh -c {shlex.quote(child)}\n'
+                           'echo RC=$?\n')
+                try:
+                    result = subprocess.run(
+                        ["/bin/bash", "-c", command], env={"PATH": tmp},
+                        capture_output=True, text=True, timeout=3,
+                    )
+                    self.assertIn("RC=124", result.stdout, result.stderr)
+                    self.assertTrue(pid_file.exists(), "the child must actually start")
+                    pid = int(pid_file.read_text())
+                    status = subprocess.run(
+                        ["/bin/ps", "-p", str(pid), "-o", "stat="],
+                        capture_output=True, text=True,
+                    ).stdout.strip()
+                    self.assertTrue(not status or status.startswith("Z"),
+                                    f"descendant {pid} remains active: {status}")
+                finally:
+                    if pid_file.exists():
+                        try:
+                            os.kill(int(pid_file.read_text()), 9)
+                        except ProcessLookupError:
+                            pass
+
+    def test_node_fallback_stops_its_group_when_interrupted(self):
+        node = shutil.which("node")
+        self.assertIsNotNone(node)
+        for sig in [signal.SIGINT, signal.SIGTERM]:
+            with self.subTest(signal=sig), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                wrapper_pid = root / "wrapper.pid"
+                leader_pid = root / "leader.pid"
+                descendant_pid = root / "descendant.pid"
+                launcher = root / "node"
+                launcher.write_text(
+                    f'#!/bin/sh\necho $$ > {shlex.quote(str(wrapper_pid))}\n'
+                    f'exec {shlex.quote(node)} "$@"\n')
+                launcher.chmod(0o755)
+                child = (f'echo $$ > {shlex.quote(str(leader_pid))}; '
+                         'trap "" TERM INT; /bin/sleep 120 & '
+                         f'echo $! > {shlex.quote(str(descendant_pid))}; wait')
+                command = (f'{_extract(ROOT / "parity/run.sh")}\n'
+                           f'bound_ms 20000 /bin/sh -c {shlex.quote(child)}\nexit $?\n')
+                process = subprocess.Popen(
+                    ["/bin/bash", "-c", command], env={"PATH": tmp},
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                try:
+                    deadline = time.monotonic() + 3
+                    while not descendant_pid.exists() and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    self.assertTrue(descendant_pid.exists(), "the descendant must start")
+                    os.kill(int(wrapper_pid.read_text()), sig)
+                    stdout, stderr = process.communicate(timeout=3)
+                    self.assertEqual(process.returncode, 128 + sig, stdout + stderr)
+                    for pid_file in [leader_pid, descendant_pid]:
+                        status = subprocess.run(
+                            ["/bin/ps", "-p", pid_file.read_text().strip(), "-o", "stat="],
+                            capture_output=True, text=True,
+                        ).stdout.strip()
+                        self.assertTrue(not status or status.startswith("Z"), status)
+                finally:
+                    for pid_file in [wrapper_pid, leader_pid, descendant_pid]:
+                        if pid_file.exists():
+                            try:
+                                os.kill(int(pid_file.read_text()), signal.SIGKILL)
+                            except ProcessLookupError:
+                                pass
+                    if process.poll() is None:
+                        process.kill()
+                    process.communicate(timeout=3)
 
 
 # A date(1) whose %3N drops leading zeros (uutils before its 2026-10-24 fix)

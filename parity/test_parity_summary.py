@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -184,7 +185,15 @@ class ParitySummaryFreshArtifactTests(unittest.TestCase):
         shutil.copy2(SCRIPT, self.root / "scripts/parity-summary")
         shutil.copy2(ROOT / "parity/sweep.sh", self.root / "parity/sweep.sh")
         (self.root / "parity/programs/a.dsl").write_text("noise(seed: 1).write(o0)\n")
-        self._executable("bin/node", """#!/bin/sh
+        node = shutil.which("node")
+        self.assertIsNotNone(node, "the timeout-wrapper fixture needs Node")
+        self._executable("bin/node", "#!/bin/sh\n"
+                         f'if [ "$1" = -e ]; then exec {shlex.quote(node)} "$@"; fi\n' + """
+case "$1" in
+  *node_modules/playwright/cli.js) exit "${MINT_FAIL:-0}" ;;
+  */parity/export-and-render.mjs) ;;
+  *) echo "unexpected fake-node invocation: $*" >&2; exit 2 ;;
+esac
 case=${2##*/}
 case=${case%.dsl}
 printf '{}' > "$3/$case.graph.json"
