@@ -140,6 +140,7 @@ var _effect_defs := {}
 var _synth_cache := {}      # "ns/fn" -> synthesized layout
 var render_surface_tex := ""
 var _time := 0.25
+var _has_time_reference := false
 var _render_scale := 1.0
 # Tiled-export context (the reference's calculateTileGrid): when set, fullResolution
 # reports the full render size and tileOffset the current tile canvas's origin in
@@ -147,9 +148,7 @@ var _render_scale := 1.0
 # ZERO disables tiling (fullResolution == screen, tileOffset == 0).
 var _tile_full_resolution := Vector2i.ZERO
 var _tile_offset := Vector2.ZERO
-# Timed-sampling mode (stateful-sim parity, reference 30s/5s): real per-frame deltaTime
-# and frame index, threaded into _engine_value. Both stay 0 on the default single-frame
-# path, so the 90 isolation effects render byte-identically.
+# Normalized frame delta and frame index, threaded into _engine_value.
 var _delta_time := 0.0
 var _frame_index := 0
 var sink_manager := SinkManager.new({"onError": _report_sink_error})
@@ -2731,11 +2730,18 @@ func _has_feedback(graph: Dictionary) -> bool:
 				return true
 	return false
 
+func _update_render_time(normalized_time: float) -> void:
+	_delta_time = normalized_time - _time if _has_time_reference else 0.0
+	if _delta_time < 0.0:
+		_delta_time += 1.0
+	_time = normalized_time
+	_has_time_reference = true
+
 func render(graph: Dictionary, normalized_time: float = 0.25, presentation_timestamp: float = -1.0) -> void:
 	if _closed:
 		push_error("Noisemaker backend is closed")
 		return
-	_time = normalized_time
+	_update_render_time(normalized_time)
 	allocate_textures(graph)
 	# Feedback/state graphs (read-before-write, or any double-buffered surface) need the
 	# reference's settle count (8 frames at the pinned time, reference/04 §10). Otherwise a
@@ -2744,6 +2750,8 @@ func render(graph: Dictionary, normalized_time: float = 0.25, presentation_times
 	_passes_executed = 0
 	_passes_skipped = 0
 	for _frame in frames:
+		if _frame > 0:
+			_update_render_time(normalized_time)
 		_begin_frame()
 		for p in graph.get("passes", []):
 			if _should_skip_pass(p):
@@ -2774,7 +2782,7 @@ func render(graph: Dictionary, normalized_time: float = 0.25, presentation_times
 
 # Timed multi-sample render for stateful sims (reference 30s/5s sampling). Steps a real
 # per-frame deltaTime (1/600 normalized = one 60fps frame in the 10s loop) so fluid/feedback
-# sims actually EVOLVE — the single-frame render() pins deltaTime=0, freezing them at the seed.
+# sims evolve independently of wall-clock timing.
 # Snapshots the render surface every `sample_every` frames; returns the sampled Images in order.
 func render_samples(graph: Dictionary, total_frames: int, sample_every: int) -> Array:
 	if _closed:
@@ -2785,6 +2793,7 @@ func render_samples(graph: Dictionary, total_frames: int, sample_every: int) -> 
 	var samples := []
 	for frame in range(1, total_frames + 1):
 		_time = fposmod(float(frame) * dt, 1.0)
+		_has_time_reference = true
 		_delta_time = dt
 		_frame_index = frame
 		_begin_frame()

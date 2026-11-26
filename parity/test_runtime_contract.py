@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """GPU-free Godot regression tests for runtime contracts."""
 
+import json
 import os
 import subprocess
 import tempfile
@@ -25,6 +26,116 @@ class RuntimeContractTests(unittest.TestCase):
                 text=True,
                 timeout=30,
             )
+
+    def test_let_bound_colors_keep_components_through_keyword_overrides(self):
+        result = self._run_godot_script('''
+            extends SceneTree
+            const Registry = preload("res://addons/noisemaker/compiler/lang/effect_registry.gd")
+            const Lexer = preload("res://addons/noisemaker/compiler/lang/lexer.gd")
+            const Parser = preload("res://addons/noisemaker/compiler/lang/parser.gd")
+            const Validator = preload("res://addons/noisemaker/compiler/lang/validator.gd")
+            func _init():
+                var reg = Registry.new()
+                reg.load_all()
+                reg._register_effect({"namespace": "synth", "func": "rgbprobe", "globals": {
+                    "r": {"type": "float", "default": 0.0},
+                    "g": {"type": "float", "default": 0.0},
+                    "b": {"type": "float", "default": 0.0},
+                    "a": {"type": "float", "default": 0.9}},
+                    "passes": [{"program": "main", "inputs": {"inputTex": "inputTex"}}]})
+                var cases = {}
+                for call in ["t()", "t(_skip: false)", 't(_id: "x")', "t(r: 0.25)", "t(g: 0.25)", "t(b: 0.25)"]:
+                    var source = "search synth\\nlet t = rgbprobe(#804020)\\nnoise()." + call + ".write(o0)\\nrender(o0)"
+                    cases[call] = Validator.new(reg).validate(Parser.new().parse_tokens(Lexer.lex(source)))
+                var extra = {
+                    "nested": "let t = rgbprobe(#804020)\\nlet u = t(g: 0.25)\\nnoise().u()",
+                    "indexed": 'let t = rgbprobe(#804020, 0.5, 0.6, 0.7)\\nnoise().t(_id: "x")',
+                    "boundary": "let t = rgbprobe(g: 0.25)\\nnoise().t(#804020)"}
+                for label in extra:
+                    var source = "search synth\\n" + extra[label] + ".write(o0)\\nrender(o0)"
+                    cases[label] = Validator.new(reg).validate(Parser.new().parse_tokens(Lexer.lex(source)))
+                print("COLOR_TEST:", JSON.stringify(cases))
+                quit(0)
+        ''')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        line = next(line for line in result.stdout.splitlines() if line.startswith("COLOR_TEST:"))
+        for call, output in json.loads(line.removeprefix("COLOR_TEST:")).items():
+            if call == "boundary":
+                self.assertEqual([diag["code"] for diag in output["diagnostics"]], ["S002"], call)
+            else:
+                self.assertEqual(output["diagnostics"], [], call)
+            args = next(step["args"] for step in output["plans"][0]["chain"] if step["op"] == "synth.rgbprobe")
+            expected = [0x80 / 255, 0x40 / 255, 0x20 / 255]
+            if call in ["t(r: 0.25)", "t(g: 0.25)", "t(b: 0.25)"]:
+                expected[["r", "g", "b"].index(call[2])] = 0.25
+            elif call == "nested":
+                expected[1] = 0.25
+            elif call == "boundary":
+                expected = [0, 0.25, 0]
+            for component, value in zip(["r", "g", "b"], expected):
+                self.assertAlmostEqual(args[component], value, msg=call)
+            self.assertAlmostEqual(args["a"], 0.7 if call == "indexed" else 0.9, msg=call)
+
+    def test_storage_texture_targets_are_scoped_and_allocated(self):
+        result = self._run_godot_script('''
+            extends SceneTree
+            const Registry = preload("res://addons/noisemaker/compiler/lang/effect_registry.gd")
+            const Orchestrator = preload("res://addons/noisemaker/compiler/graph/orchestrator.gd")
+            func _init():
+                var reg = Registry.new()
+                reg.load_all()
+                var cases = {}
+                for target in ["work", "outputTex"]:
+                    var definition = {"namespace": "synth", "func": "storageProbe", "starter": true,
+                        "globals": {}, "passes": [{"program": "fill", "type": "compute",
+                        "storageTextures": {"outputBuffer": target}}]}
+                    if target == "work":
+                        definition["textures"] = {"work": {"width": "100%", "height": "100%", "format": "rgba8unorm"}}
+                        definition["outputTex"] = "work"
+                    reg._register_effect(definition)
+                    for suffix in ["", ".invert()"]:
+                        cases[target + suffix] = Orchestrator.new(reg).build_graph("search synth, filter\\nstorageProbe()" + suffix + ".write(o0)\\nrender(o0)")
+                print("STORAGE_TEST:", JSON.stringify(cases))
+                quit(0)
+        ''')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        line = next(line for line in result.stdout.splitlines() if line.startswith("STORAGE_TEST:"))
+        for label, graph in json.loads(line.removeprefix("STORAGE_TEST:")).items():
+            self.assertNotIn("compileError", graph, label)
+            first = graph["passes"][0]
+            target = first["storageTextures"]["outputBuffer"]
+            expected = "node_0_work" if label.startswith("work") else "node_0_out" if label.endswith("invert()") else "global_o0"
+            self.assertEqual(target, expected, label)
+            self.assertEqual(first["outputs"], first["storageTextures"])
+            if not target.startswith("global_"):
+                self.assertIn("storage", graph["textures"][target]["usage"], label)
+            if label.endswith("invert()"):
+                self.assertIn(target, graph["passes"][1]["inputs"].values(), label)
+
+    def test_normalized_frame_delta_handles_zero_and_loop_seams(self):
+        result = self._run_godot_script('''
+            extends SceneTree
+            const Backend = preload("res://addons/noisemaker/runtime/nm_backend.gd")
+            func _init():
+                var backend = Backend.new()
+                if not backend.has_method("_update_render_time"):
+                    print("FRAME_TIME_TEST: missing normalized frame clock")
+                    quit(1)
+                    return
+                var deltas = []
+                for time in [0.0, 0.1, 0.95, 0.025, 0.025, 0.0]:
+                    backend._update_render_time(time)
+                    deltas.append(backend._engine_value("deltaTime")[0])
+                print("FRAME_TIME_TEST:", JSON.stringify(deltas))
+                quit(0)
+        ''')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        line = next(line for line in result.stdout.splitlines() if line.startswith("FRAME_TIME_TEST:"))
+        actual = json.loads(line.removeprefix("FRAME_TIME_TEST:"))
+        expected = [0, 0.1, 0.85, 0.075, 0, 0.975]
+        self.assertEqual(len(actual), len(expected))
+        for value, target in zip(actual, expected):
+            self.assertAlmostEqual(value, target)
 
     def test_boolean_definition_defines_emit_glsl_bool_literals(self):
         script = textwrap.dedent(

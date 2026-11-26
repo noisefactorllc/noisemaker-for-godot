@@ -215,5 +215,20 @@ class LandscapeEdgeFaceTests(unittest.TestCase):
         self.assertIn("NM_EDGE_FACE_PROBE: PASS cases=8", log, log)
 
 
+@unittest.skipUnless(GODOT.exists(), f"Godot binary not found: {GODOT}")
+class RuntimeTargetTests(unittest.TestCase):
+    def test_frame_clock_and_storage_targets_reach_rendered_pixels(self):
+        result = run_windowed(
+            [str(GODOT), "--path", str(REPO / "godot"),
+             "--script", str(REPO / "parity" / "runtime_targets_probe.gd"),
+             "--position", "5000,5000"],
+            capture_output=True, text=True, timeout=90,
+        )
+        log = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, log)
+        self.assertNotIn("SCRIPT ERROR", log, log)
+        self.assertIn("NM_RUNTIME_TARGETS: PASS", log, log)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -62,6 +62,50 @@ class CompilerAutomationTests(unittest.TestCase):
             payload = json.loads(marker_line[len(marker) :])
             return {Path(path).name: payload[str(path)] for path in paths}
 
+    def test_element_ids_survive_validation_without_becoming_uniforms(self):
+        source = '''search synth, filter, synth3d
+noise(_id: "pond").invert(_id: "flip").write(o1, _id: "out")
+read(surface: o1, _id: "again").write(o0)
+noise3d().write3d(vol0, geo0, _id: "volume")
+read3d(tex3d: vol0, geo: geo0, _id: "readVolume").write(o2)
+render(o0)
+'''
+        validated = self._dump("_validate_dump.gd", {"ids.dsl": source})["ids.dsl"]
+        self.assertTrue(validated["ok"], validated)
+        self.assertEqual(validated["out"]["diagnostics"], [])
+        steps = [step for plan in validated["out"]["plans"] for step in plan["chain"]]
+        self.assertEqual(
+            [(step["op"], step["args"]["_id"]) for step in steps if "_id" in step["args"]],
+            [("synth.noise", "pond"), ("filter.invert", "flip"), ("_write", "out"),
+             ("_read", "again"), ("_write3d", "volume"), ("_read3d", "readVolume")],
+        )
+        graph = self._dump("_graph_dump.gd", {"ids.dsl": source})["ids.dsl"]
+        self.assertTrue(graph["ok"], graph)
+        for render_pass in graph["out"]["passes"]:
+            self.assertNotIn("_id", render_pass.get("uniforms", {}))
+
+    def test_invalid_element_ids_are_ignored_without_diagnostics(self):
+        programs = {
+            f"id-{index}.dsl": f'search synth\nnoise(_id: {value}).write(o0, _id: 7)\nrender(o0)'
+            for index, value in enumerate(['5', '"9a"', '"a-b"', '""', 'pond', '"_a"'])
+        }
+        for result in self._dump("_validate_dump.gd", programs).values():
+            self.assertTrue(result["ok"], result)
+            self.assertEqual(result["out"]["diagnostics"], [])
+            for plan in result["out"]["plans"]:
+                for step in plan["chain"]:
+                    self.assertNotIn("_id", step["args"])
+
+    def test_read_chain_argument_reports_the_value_location(self):
+        source = 'search synth, filter, mixer\nnoise().write(o1)\nnoise().blendMode(tex: read(o1).invert()).write(o0)\nrender(o0)'
+        result = self._dump("_validate_dump.gd", {"read-chain.dsl": source})["read-chain.dsl"]
+        self.assertTrue(result["ok"], result)
+        errors = result["out"]["diagnostics"]
+        self.assertEqual(len(errors), 1, errors)
+        self.assertEqual(errors[0]["severity"], "error")
+        self.assertIn("tex", errors[0]["message"])
+        self.assertEqual(errors[0]["location"], {"line": 3, "column": 24})
+
     def test_selected_descriptors_survive_validation(self):
         source = r'''
             search synth

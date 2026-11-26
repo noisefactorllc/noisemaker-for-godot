@@ -521,6 +521,8 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 			# SECOND PASS: non-surface args
 			if step_args is Dictionary:
 				for arg_name in step_args:
+					if arg_name == "_id":
+						continue
 					var arg = step_args[arg_name]
 					if _is_surface_arg(arg):
 						continue
@@ -627,6 +629,8 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 				# map uniforms from step.args
 				if step_args is Dictionary:
 					for arg_name in step_args:
+						if arg_name == "_id":
+							continue
 						var arg = step_args[arg_name]
 						if _is_surface_arg(arg):
 							continue
@@ -709,6 +713,44 @@ func expand(compilation_result: Dictionary, options: Dictionary = {}) -> Diction
 						_map_input(pass_obj, uniform_name, pdef_inputs[uniform_name], current_input, current_input3d, current_input_geo, current_input_xyz, current_input_vel, current_input_rgba, effect_def, step, step_args, node_id, plan)
 
 				# map outputs
+				var storage_targets = pass_def.get("storageTextures")
+				if storage_targets is Dictionary:
+					pass_obj["storageTextures"] = {}
+					for binding in storage_targets:
+						var tex_ref: String = storage_targets[binding]
+						var virtual_tex: String
+						if tex_ref == "outputTex":
+							var step_index: int = plan["chain"].find(step)
+							var next_step = plan["chain"][step_index + 1] if step_index + 1 < plan["chain"].size() else null
+							var last_pass: bool = i == effect_passes.size() - 1
+							var inline_write = next_step.get("args", {}).get("tex") if last_pass and next_step is Dictionary and next_step.get("builtin") and next_step.get("op") == "_write" else null
+							if inline_write is Dictionary and inline_write.get("name") != "none":
+								var prefix := "feedback" if inline_write.get("kind") == "feedback" else "global"
+								virtual_tex = prefix + "_" + str(inline_write["name"])
+								_last_written_surface = inline_write["name"]
+							elif step_index == plan["chain"].size() - 1 and last_pass and plan.get("write") != null:
+								var written = plan["write"]
+								var name = written.get("name") if written is Dictionary else written
+								var prefix := "feedback" if written is Dictionary and written.get("kind") == "feedback" else "global"
+								virtual_tex = prefix + "_" + str(name)
+								_last_written_surface = name
+							else:
+								virtual_tex = node_id + "_out"
+							_texture_map[node_id + "_out"] = virtual_tex
+						elif tex_ref.begins_with("global_"):
+							virtual_tex = _scope_chain_tex(tex_ref)
+						else:
+							virtual_tex = node_id + "_" + tex_ref
+							if _texture_specs.has(virtual_tex):
+								var spec: Dictionary = _texture_specs[virtual_tex]
+								var usage: Array = spec.get("usage", ["render", "sample", "copySrc", "copyDst"]).duplicate()
+								if not usage.has("storage"):
+									usage.append("storage")
+								spec["usage"] = usage
+						pass_obj["storageTextures"][binding] = virtual_tex
+					if not (pass_def.get("outputs") is Dictionary):
+						pass_obj.erase("outputs")
+
 				var pdef_outputs = pass_def.get("outputs")
 				if pdef_outputs is Dictionary:
 					var is_last_step = step == plan["chain"][plan["chain"].size() - 1]

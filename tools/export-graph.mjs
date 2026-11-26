@@ -244,7 +244,7 @@ function normalizePass (pass, programs, defineMap) {
     program: pass.program ?? null,
     defines: isBlit ? {} : definesForPass(pass, programs),
     inputs: pass.inputs || {},
-    outputs: pass.outputs || {},
+    outputs: Object.keys(pass.outputs || {}).length ? pass.outputs : (pass.storageTextures || {}),
     uniforms: { ...(pass.uniforms || {}) },
     uniformSpecs: pass.uniformSpecs || {}
   }
@@ -273,6 +273,7 @@ function normalizePass (pass, programs, defineMap) {
   if (pass.repeat !== undefined) out.repeat = pass.repeat
   if (pass.clear !== undefined) out.clear = pass.clear
   if (pass.conditions !== undefined) out.conditions = pass.conditions
+  if (pass.storageTextures !== undefined) out.storageTextures = pass.storageTextures
 
   // Metadata.
   out.effectKey = pass.effectKey ?? null

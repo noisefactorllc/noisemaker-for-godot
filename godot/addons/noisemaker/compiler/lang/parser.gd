@@ -732,10 +732,14 @@ func _parse_write_call() -> Dictionary:
 			var msg := "write() requires an explicit surface reference (e.g., o0, o1, xyz0, vel0, rgba0, mesh0, none) %s" % [_format_coords(t)]
 			_record_diagnostic("P005", msg, t)
 			return {}
+		var element_id = _parse_write_id()
 		_expect("RPAREN", "Expect ')'")
 		if _err:
 			return {}
-		return {"type": "Write", "surface": surface, "loc": {"line": token_line, "col": token_col}}
+		var node := {"type": "Write", "surface": surface, "loc": {"line": token_line, "col": token_col}}
+		if element_id != null:
+			node["_id"] = element_id
+		return node
 	elif token_type == "WRITE3D":
 		_advance()  # consume 'write3d'
 		_expect("LPAREN", "Expect '('")
@@ -772,14 +776,27 @@ func _parse_write_call() -> Dictionary:
 			var msg2 := "Expected geo reference in write3d() %s" % [_format_coords(t2)]
 			_record_diagnostic("P005", msg2, t2)
 			return {}
+		var element_id = _parse_write_id()
 		_expect("RPAREN", "Expect ')'")
 		if _err:
 			return {}
-		return {"type": "Write3D", "tex3d": tex3d, "geo": geo, "loc": {"line": token_line, "col": token_col}}
+		var node := {"type": "Write3D", "tex3d": tex3d, "geo": geo, "loc": {"line": token_line, "col": token_col}}
+		if element_id != null:
+			node["_id"] = element_id
+		return node
 	var t_fallback = _peek()
 	var fallback_msg := "Expected write or write3d %s" % [_format_coords(t_fallback)]
 	_record_diagnostic("P005", fallback_msg, t_fallback)
 	return {}
+
+func _parse_write_id():
+	if _peek().type != "COMMA" or _type_at(current + 1) != "IDENT" \
+			or _tok(current + 1).lexeme != "_id" or _type_at(current + 2) != "COLON":
+		return null
+	_advance()
+	var kwargs := {}
+	_parse_kwarg(kwargs)
+	return kwargs.get("_id")
 
 const SUBCHAIN_KEYS := ["name", "id"]
 
@@ -1006,6 +1023,8 @@ func _parse_call():
 		var sk = kwargs.get("_skip")
 		if sk is Dictionary and sk.get("type") == "Boolean" and sk.get("value") == true:
 			node["_skip"] = true
+		if kwargs.has("_id"):
+			node["_id"] = kwargs["_id"]
 		return node
 	if lexeme == "read3d":
 		var tex3d = _arg(args, 0)
@@ -1018,6 +1037,8 @@ func _parse_call():
 		var sk = kwargs.get("_skip")
 		if sk is Dictionary and sk.get("type") == "Boolean" and sk.get("value") == true:
 			node["_skip"] = true
+		if kwargs.has("_id"):
+			node["_id"] = kwargs["_id"]
 		return node
 	return call
 

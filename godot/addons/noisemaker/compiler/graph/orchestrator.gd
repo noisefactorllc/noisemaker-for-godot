@@ -103,7 +103,7 @@ func _extract_texture_specs(passes: Array, texture_specs: Dictionary) -> Diction
 			"width": effect_spec.get("width") if effect_spec.get("width") != null else "screen",
 			"height": effect_spec.get("height") if effect_spec.get("height") != null else "screen",
 			"format": effect_spec.get("format") if effect_spec.get("format") != null else "rgba16f",
-			"usage": ["render", "sample", "copySrc", "copyDst"],
+			"usage": effect_spec["usage"].duplicate() if effect_spec.get("usage") != null else ["render", "sample", "copySrc", "copyDst"],
 		}
 		if effect_spec.get("is3D"):
 			var depth = effect_spec.get("depth")
@@ -138,6 +138,19 @@ func _extract_texture_specs(passes: Array, texture_specs: Dictionary) -> Diction
 				if textures.has(tex_id):
 					continue
 				textures[tex_id] = {"width": "screen", "height": "screen", "format": "rgba16f", "usage": ["render", "sample", "copySrc", "copyDst"]}
+	for p in passes:
+		var storage_targets = p.get("storageTextures")
+		if not (storage_targets is Dictionary):
+			continue
+		for tex_id in storage_targets.values():
+			if not (tex_id is String) or tex_id.begins_with("global_"):
+				continue
+			if textures.has(tex_id):
+				var usage: Array = textures[tex_id]["usage"]
+				if not usage.has("storage"):
+					usage.append("storage")
+			else:
+				textures[tex_id] = {"width": "screen", "height": "screen", "format": "rgba16f", "usage": ["render", "sample", "storage", "copySrc", "copyDst"]}
 	return textures
 
 # ---------------------------------------------------------------- source hash (compiler.js)
@@ -229,7 +242,7 @@ func _normalize_pass(p: Dictionary, programs: Dictionary, define_map: Dictionary
 		"program": p.get("program"),
 		"defines": {} if is_blit else _defines_for_pass(p, programs),
 		"inputs": p.get("inputs", {}),
-		"outputs": p.get("outputs", {}),
+		"outputs": p["outputs"] if p.get("outputs") is Dictionary and not p["outputs"].is_empty() else p.get("storageTextures", {}),
 		"uniforms": (p.get("uniforms", {}) as Dictionary).duplicate(true),
 		"uniformSpecs": p.get("uniformSpecs", {}),
 	}
@@ -246,7 +259,7 @@ func _normalize_pass(p: Dictionary, programs: Dictionary, define_map: Dictionary
 					out["uniforms"].erase(global_key)
 
 	# optional execution modifiers (only when present)
-	for opt_key in ["drawMode", "count", "countUniform", "drawBuffers", "blend", "repeat", "clear", "conditions"]:
+	for opt_key in ["drawMode", "count", "countUniform", "drawBuffers", "blend", "repeat", "clear", "conditions", "storageTextures"]:
 		if p.has(opt_key):
 			out[opt_key] = p[opt_key]
 

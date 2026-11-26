@@ -337,6 +337,15 @@ func _resolve_call(call: Dictionary) -> Dictionary:
 				merged["loc"] = loc
 			if merged_kw != null:
 				merged["kwargs"] = merged_kw
+				if not merged_args.is_empty():
+					var has_bound_keyword := false
+					for key in val.get("kwargs", {}):
+						if key != "_skip" and key != "_id":
+							has_bound_keyword = true
+					var color_limit: int = merged_args.size()
+					if has_bound_keyword:
+						color_limit = val.get("positionalsByIndex", {}).get("colorSplatLimit", val.get("args", []).size())
+					merged["positionalsByIndex"] = {"colorSplatLimit": color_limit}
 			if call.get("namespace") != null:
 				merged["namespace"] = call["namespace"].duplicate()
 			elif val.get("namespace") != null:
@@ -410,18 +419,7 @@ func _substitute(node, resolving: Array = []):
 	if t == "Chain":
 		var mapped: Array = []
 		for c in node["chain"]:
-			var mapped_args: Array = []
-			for a in c.get("args", []):
-				mapped_args.push_back(_substitute(a, resolving))
-			var mapped_call := {"type": "Call", "name": c.get("name"), "args": mapped_args}
-			if c.has("loc"):
-				mapped_call["loc"] = c["loc"]
-			if c.get("kwargs") is Dictionary:
-				var kw := {}
-				for k in c["kwargs"].keys():
-					kw[k] = _substitute(c["kwargs"][k], resolving)
-				mapped_call["kwargs"] = kw
-			mapped.push_back(_resolve_call(mapped_call))
+			mapped.push_back(_substitute(c, resolving))
 		return {"type": "Chain", "chain": mapped}
 	if t == "Call":
 		var mapped_args: Array = []
@@ -430,6 +428,8 @@ func _substitute(node, resolving: Array = []):
 		var mapped_call := {"type": "Call", "name": node.get("name"), "args": mapped_args}
 		if node.has("loc"):
 			mapped_call["loc"] = node["loc"]
+		if node.has("positionalsByIndex"):
+			mapped_call["positionalsByIndex"] = node["positionalsByIndex"]
 		if node.get("kwargs") is Dictionary:
 			var kw := {}
 			for k in node["kwargs"].keys():
@@ -612,6 +612,12 @@ func _compile_chain_statement(stmt: Dictionary):
 		plan["leadingComments"] = stmt["leadingComments"]
 	return plan
 
+func _keep_element_id(node, args: Dictionary) -> void:
+	if node is Dictionary and node.get("type") == "String" and not node.has("_varRef") \
+			and node.get("value") is String \
+			and RegEx.create_from_string("^[A-Za-z][A-Za-z0-9_]*$").search(node["value"]) != null:
+		args["_id"] = node["value"]
+
 # The chain flattener. Returns the final temp index (or null). Appends steps to `chain`.
 func _process_chain(calls, input, chain: Array, states: Array, write_name, allow_starterless: bool):
 	var current = input
@@ -630,6 +636,7 @@ func _process_chain(calls, input, chain: Array, states: Array, write_name, allow
 			var step_args := {"tex": surface}
 			if original.get("_skip") == true:
 				step_args["_skip"] = true
+			_keep_element_id(original.get("_id"), step_args)
 			var step := {"op": "_read", "args": step_args, "from": null, "temp": idx, "builtin": true}
 			if original.has("leadingComments"):
 				step["leadingComments"] = original["leadingComments"]
@@ -650,6 +657,7 @@ func _process_chain(calls, input, chain: Array, states: Array, write_name, allow
 			var step_args := {"tex3d": tex3d, "geo": geo}
 			if original.get("_skip") == true:
 				step_args["_skip"] = true
+			_keep_element_id(original.get("_id"), step_args)
 			var step := {"op": "_read3d", "args": step_args, "from": null, "temp": idx, "builtin": true}
 			if original.has("leadingComments"):
 				step["leadingComments"] = original["leadingComments"]
@@ -666,7 +674,9 @@ func _process_chain(calls, input, chain: Array, states: Array, write_name, allow
 				_push_diag("S005", original, "write() requires an input - cannot be first in chain")
 				continue
 			var idx := _temp_index; _temp_index += 1
-			var step := {"op": "_write", "args": {"tex": surface}, "from": current, "temp": idx, "builtin": true}
+			var step_args := {"tex": surface}
+			_keep_element_id(original.get("_id"), step_args)
+			var step := {"op": "_write", "args": step_args, "from": current, "temp": idx, "builtin": true}
 			if original.has("leadingComments"):
 				step["leadingComments"] = original["leadingComments"]
 			chain.push_back(step)
@@ -683,7 +693,9 @@ func _process_chain(calls, input, chain: Array, states: Array, write_name, allow
 				_push_diag("S005", original, "write3d() requires an input - cannot be first in chain")
 				continue
 			var idx := _temp_index; _temp_index += 1
-			var step := {"op": "_write3d", "args": {"tex3d": tex3d, "geo": geo}, "from": current, "temp": idx, "builtin": true}
+			var step_args := {"tex3d": tex3d, "geo": geo}
+			_keep_element_id(original.get("_id"), step_args)
+			var step := {"op": "_write3d", "args": step_args, "from": current, "temp": idx, "builtin": true}
 			if original.has("leadingComments"):
 				step["leadingComments"] = original["leadingComments"]
 			chain.push_back(step)
@@ -835,25 +847,37 @@ func _resolve_args(call: Dictionary, original: Dictionary, spec: Dictionary, op_
 	var seen := {}
 	var spec_args: Array = spec.get("args", []) if spec.get("args") is Array else []
 	var call_args = call.get("args", [])
+	var color_splat_limit: int = call.get("positionalsByIndex", {}).get("colorSplatLimit", call_args.size())
+	var splat_values := {}
 	var i := 0
 	while i < spec_args.size():
 		var def = spec_args[i]
 		var dname = def.get("name")
+		# A stored color fills its indexed r/g/b slots; a keyword replaces only its own component.
+		if i < color_splat_limit and def.get("type") != "color" and dname == "r" and _spec_name(spec_args, i + 1) == "g" and _spec_name(spec_args, i + 2) == "b":
+			var positional = _substitute(_arg(call_args, i))
+			if positional is Dictionary and positional.get("type") == "Color":
+				var components = positional["value"]
+				splat_values = {"r": components[0], "g": components[1], "b": components[2]}
+		if not (kw != null and kw.has(dname)) and splat_values.has(dname):
+			args[dname] = splat_values[dname]
+			i += 1
+			continue
 		var node = kw[dname] if (kw != null and kw.has(dname)) else _arg(call_args, i)
 		node = _substitute(node)
 		var arg_key = dname
-
-		# Color spread: a bare Color into consecutive r/g/b numeric params.
-		if kw == null and node is Dictionary and node.get("type") == "Color" and def.get("type") != "color" and dname == "r" and _spec_name(spec_args, i + 1) == "g" and _spec_name(spec_args, i + 2) == "b":
-			var cv = node.get("value")
-			args[arg_key] = cv[0]
-			args[spec_args[i + 1].get("name")] = cv[1]
-			args[spec_args[i + 2].get("name")] = cv[2]
-			i += 3
-			continue
-
 		if kw != null and kw.has(dname):
 			seen[dname] = true
+		if node is Dictionary and node.get("type") == "Chain":
+			var only_calls := true
+			for entry in node.get("chain", []):
+				if entry.get("type") != "Call":
+					only_calls = false
+			if not only_calls:
+				_push_diag("S001", node["chain"][0], "Chain for argument '%s' in %s() may contain only effect calls" % [dname, call.get("name")])
+				args[arg_key] = null
+				i += 1
+				continue
 
 		# Array literal — additive numeric input form.
 		if node is Dictionary and node.get("type") == "ArrayLiteral":
@@ -923,6 +947,10 @@ func _resolve_args(call: Dictionary, original: Dictionary, spec: Dictionary, op_
 		var extra = call_args[spec_args.size()]
 		_push_diag("S009", extra if extra != null else call,
 			"Too many positional arguments for %s(): '%s' takes %d" % [call.get("name"), call.get("name"), spec_args.size()])
+
+	if kw != null and kw.has("_id"):
+		_keep_element_id(kw["_id"], args)
+		seen["_id"] = true
 
 	# _skip meta-argument
 	if kw != null and kw.has("_skip"):
