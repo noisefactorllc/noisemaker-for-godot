@@ -899,14 +899,12 @@ func _resolve_args(call: Dictionary, original: Dictionary, spec: Dictionary, op_
 		if dtype == "surface":
 			_resolve_surface_arg(node, def, args, arg_key, call, chain, states, write_name)
 		elif node is Dictionary and node.get("type") == "Call" and node.get("args") is Array \
-				and node["args"].size() == (2 if node.get("name") == "vec2" else 4) \
+				and node["args"].size() == (2 if node.get("name") == "vec2" else (3 if node.get("name") == "vec3" else 4)) \
 				and ((dtype == "vec2" and node.get("name") == "vec2") \
-					or (dtype == "color" and node.get("name") == "vec4" and def.get("default") is Array and def["default"].size() == 4)):
-			# vec2(x, y) on a vec2 parameter, and vec4(x, y, z, w) on a
-			# vec4 parameter (the registry registers vec4 parameters as
-			# `color`; their default keeps its four components). Any other
-			# form, including a wrong component count, takes the branches
-			# below.
+					or (dtype == "color" and not node.has("kwargs") and (node.get("name") == "vec3" or node.get("name") == "vec4"))):
+			# vec2(x, y) on a vec2 parameter. Color constructors preserve the
+			# supplied components, independently of the parameter's default
+			# length. Invalid constructor arity takes the branches below.
 			var value: Array = []
 			for a in node["args"]:
 				if a.get("type") == "Number":

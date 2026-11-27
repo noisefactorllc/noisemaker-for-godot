@@ -1197,6 +1197,46 @@ render(o0)
                 self.assertFalse(output["ok"], output)
                 self.assertEqual(output["diagnostic"]["severity"], "error")
 
+    def test_color_vector_constructors_preserve_components_and_bad_arity_falls_back(self):
+        source = r'''
+            search synth, filter
+            solid(color: vec3(0.3, 0.2, 0.25)).write(o0)
+            solid(color: vec4(0.3, 0.2, 0.25, 0.4)).write(o1)
+            solid(color: [0.2, 0.4, 0.6]).tint(color: vec3(0.3, 0.2, 0.25), alpha: 1, mode: 0).write(o2)
+            solid(color: vec2(0.3, 0.2)).write(o3)
+            solid(color: vec3(0.3, 0.2)).write(o4)
+            solid(color: vec3(0.3, 0.2, 0.25, 0.4)).write(o5)
+            solid(color: vec4(0.3, 0.2, 0.25)).write(o6)
+            solid(color: vec4(0.3, 0.2, 0.25, 0.4, 1)).write(o7)
+            render(o0)
+        '''
+        output = self._dump("_validate_dump.gd", {"color_ctors.dsl": source})["color_ctors.dsl"]
+
+        self.assertTrue(output["ok"])
+        self.assertEqual([diag["code"] for diag in output["out"]["diagnostics"]], ["S002"] * 5)
+        plans = output["out"]["plans"]
+        self.assertEqual(plans[0]["chain"][0]["args"]["color"], [0.3, 0.2, 0.25])
+        self.assertEqual(plans[1]["chain"][0]["args"]["color"], [0.3, 0.2, 0.25, 0.4])
+        self.assertEqual(plans[2]["chain"][1]["args"]["color"], [0.3, 0.2, 0.25])
+        for index in range(3, 8):
+            self.assertEqual(plans[index]["chain"][0]["args"]["color"], [0.5, 0.5, 0.5])
+
+    def test_constructor_kwargs_forms_are_rejected_at_parse(self):
+        # Upstream's mixed positional/keyword constructor arguments
+        # (vec3(0.3, 0.2, 0.25, bogus: 1)) are the lang.mixedArguments
+        # experimental form: the port rejects every mixed-argument call at
+        # parse, so these never reach the validator's kwargs guard.
+        programs = {
+            "vec3_kwargs.dsl": 'search synth\nsolid(color: vec3(0.3, 0.2, 0.25, bogus: 1)).write(o0)\nrender(o0)\n',
+            "vec4_kwargs.dsl": 'search synth\nsolid(color: vec4(0.3, 0.2, 0.25, 0.4, bogus: 1)).write(o0)\nrender(o0)\n',
+        }
+        outputs = self._dump("_parse_dump.gd", programs)
+        for name, output in outputs.items():
+            with self.subTest(name=name):
+                self.assertFalse(output["ok"], output)
+                self.assertEqual(output["diagnostic"]["code"], "P007")
+                self.assertEqual(output["diagnostic"]["severity"], "error")
+
 
 if __name__ == "__main__":
     unittest.main()

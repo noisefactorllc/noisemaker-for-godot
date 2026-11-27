@@ -84,6 +84,10 @@ select_suites() {
 		path="parity/${module}.py"
 		matched=0
 		for c in "${changed[@]}"; do
+			# A changed test module always runs: it carries its own cases.
+			[[ "$c" == "$path" ]] && matched=1
+		done
+		for c in "${changed[@]}"; do
 			if grep -qF -e "$c" -e "$(basename "$c")" "$path"; then
 				matched=1
 				break
