@@ -707,6 +707,63 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertIn("BLEND_CASE_TEST: PASS", result.stdout, result.stdout + result.stderr)
         self.assertNotIn("unknown blend factor", result.stdout + result.stderr)
 
+    def test_blend_factor_pairs_preserve_zero_and_color_aliases(self):
+        result = self._run_godot_script('''
+            extends SceneTree
+            const Backend = preload("res://addons/noisemaker/runtime/nm_backend.gd")
+            func _init():
+                var backend = Backend.new()
+                var factors = {
+                    "ONE": RenderingDevice.BLEND_FACTOR_ONE,
+                    "ZERO": RenderingDevice.BLEND_FACTOR_ZERO,
+                    "SRC_COLOR": RenderingDevice.BLEND_FACTOR_SRC_COLOR,
+                    "DST_COLOR": RenderingDevice.BLEND_FACTOR_DST_COLOR,
+                    "ONE_MINUS_SRC_COLOR": RenderingDevice.BLEND_FACTOR_ONE_MINUS_SRC_COLOR,
+                    "ONE_MINUS_DST_COLOR": RenderingDevice.BLEND_FACTOR_ONE_MINUS_DST_COLOR,
+                    "SRC_ALPHA": RenderingDevice.BLEND_FACTOR_SRC_ALPHA,
+                    "ONE_MINUS_SRC_ALPHA": RenderingDevice.BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                    "DST_ALPHA": RenderingDevice.BLEND_FACTOR_DST_ALPHA,
+                    "ONE_MINUS_DST_ALPHA": RenderingDevice.BLEND_FACTOR_ONE_MINUS_DST_ALPHA}
+                for name in factors:
+                    for spelling in [name, name.to_lower().replace("_", "-")]:
+                        for slot in [0, 1]:
+                            var pair = ["ZERO", "ZERO"]
+                            pair[slot] = spelling
+                            var resolved = backend._resolve_blend({"blend": pair})
+                            var actual = [resolved.src, resolved.dst]
+                            if not resolved.enable or actual[slot] != factors[name] or actual[1 - slot] != RenderingDevice.BLEND_FACTOR_ZERO:
+                                print("BLEND_FACTORS_TEST: mismatch ", pair, " ", resolved)
+                                quit(1); return
+                print("BLEND_FACTORS_TEST: PASS")
+                quit(0)
+        ''')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("BLEND_FACTORS_TEST: PASS", result.stdout)
+        self.assertNotIn("unknown blend factor", result.stdout + result.stderr)
+
+    def test_triangle_screen_count_uses_mesh_or_one_triangle(self):
+        result = self._run_godot_script('''
+            extends SceneTree
+            const Backend = preload("res://addons/noisemaker/runtime/nm_backend.gd")
+            func _init():
+                var backend = Backend.new()
+                for dimensions in [{}, {"mesh": Vector2i(3, 2)}]:
+                    backend._tex_dims = dimensions
+                    for count in ["auto", "screen", "input"]:
+                        var pass_spec = {"drawMode": "triangles", "count": count,
+                            "inputs": {"meshPositions": "mesh"},
+                            "countUniform": "vertices", "uniforms": {"vertices": 0}}
+                        var actual = backend._resolve_count(pass_spec)
+                        var expected = 3 if dimensions.is_empty() else 6
+                        if actual != expected:
+                            print("TRIANGLE_COUNT_TEST: ", count, " expected=", expected, " actual=", actual)
+                            quit(1); return
+                print("TRIANGLE_COUNT_TEST: PASS")
+                quit(0)
+        ''')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("TRIANGLE_COUNT_TEST: PASS", result.stdout)
+
     def test_synthesized_mat3_uniform_uses_three_std140_columns(self):
         script = """
             extends SceneTree

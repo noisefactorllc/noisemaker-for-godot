@@ -5,7 +5,19 @@ const Orchestrator = preload("res://addons/noisemaker/compiler/graph/orchestrato
 const ADDON := "res://addons/noisemaker"
 
 class ProbeBackend extends "res://addons/noisemaker/runtime/nm_backend.gd":
+	func _load_vertex(ns: String, fn: String, prog: String) -> String:
+		if fn == "blendProbe":
+			return """#version 450
+const vec2 corners[6] = vec2[6](vec2(-1,-1), vec2(1,-1), vec2(-1,1),
+    vec2(-1,1), vec2(1,-1), vec2(1,1));
+void main() { gl_Position = vec4(corners[gl_VertexIndex], 0, 1); }
+"""
+		return super._load_vertex(ns, fn, prog)
+
 	func _load_fragment(ns: String, fn: String, prog: String) -> String:
+		if fn == "blendProbe":
+			var colour := "0.5, 0.25, 0.125, 0.25" if prog == "base" else "0.25, 0.5, 0.75, 0.5"
+			return "#version 450\nlayout(location = 0) out vec4 fragColor;\nvoid main() { fragColor = vec4(" + colour + "); }"
 		if fn == "clockProbe":
 			return "#version 450\nlayout(location = 0) out vec4 fragColor;\nvoid main() { fragColor = vec4(deltaTime, time, 0.0, 1.0); }"
 		if fn == "storageProbe":
@@ -40,6 +52,32 @@ func _render(reg, backend, source: String, time: float, expected: Color, label: 
 	backend.render(graph, time)
 	return _check_pixels(backend, expected, label)
 
+func _check_blending(reg, backend) -> bool:
+	var source := Color(0.25, 0.5, 0.75, 0.5)
+	var destination := Color(0.5, 0.25, 0.125, 0.25)
+	var cases := [
+		[["ONE", "ZERO"], source],
+		[["one", "zero"], source],
+		[["ONE", "ONE"], source + destination],
+		[["SRC_COLOR", "ZERO"], source * source],
+		[["src-color", "zero"], source * source],
+		[["ZERO", "DST_COLOR"], destination * destination],
+		[["zero", "dst-color"], destination * destination],
+		[["ONE_MINUS_SRC_COLOR", "ZERO"], source * (Color(1, 1, 1, 1) - source)],
+		[["one-minus-src-color", "zero"], source * (Color(1, 1, 1, 1) - source)],
+		[["ZERO", "ONE_MINUS_DST_COLOR"], destination * (Color(1, 1, 1, 1) - destination)],
+		[["zero", "one-minus-dst-color"], destination * (Color(1, 1, 1, 1) - destination)]]
+	for item in cases:
+		_register(reg, backend, {"namespace": "synth", "func": "blendProbe", "globals": {},
+			"passes": [
+				{"program": "base", "outputs": {"fragColor": "outputTex"}},
+				{"program": "overlay", "drawMode": "billboards", "count": 1,
+					"outputs": {"fragColor": "outputTex"}, "blend": item[0]}]})
+		if not _render(reg, backend, "blendProbe()", 0.25, item[1], "blend " + str(item[0])):
+			return false
+	print("NM_BLEND_FACTORS: PASS")
+	return true
+
 func _init() -> void:
 	var rd := RenderingServer.create_local_rendering_device()
 	if rd == null:
@@ -69,6 +107,7 @@ func _init() -> void:
 		for suffix in ["", ".copyProbe()"]:
 			ok = _render(reg, backend, "solid(color: #404040)" + suffix, 0.25, Color(64.0 / 255, 64.0 / 255, 64.0 / 255, 1), "recompile precondition") and ok
 			ok = _render(reg, backend, "storageProbe()" + suffix, 0.25, Color(1, 0.5, 0.25, 1), target + suffix) and ok
+	ok = _check_blending(reg, backend) and ok
 	backend.close()
 	rd.free()
 	print("NM_RUNTIME_TARGETS: ", "PASS" if ok else "FAIL")

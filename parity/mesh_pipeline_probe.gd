@@ -49,17 +49,17 @@ render(o0)
 		quit(1)
 		return
 
-	# Two overlapping CCW triangles on the left (near white, then far black), followed by
-	# one clockwise white triangle on the right. Correct LESS depth keeps the near triangle;
-	# correct back-face culling rejects the clockwise triangle.
+	# Overlapping CCW triangles on the left test depth. The clockwise triangle on the
+	# right tests culling; a later CCW copy makes the resolved mesh count observable.
 	var positions := PackedFloat32Array([
 		-0.9, -0.6, -1.0, 1.0,  -0.1, -0.6, -1.0, 1.0,  -0.5, 0.6, -1.0, 1.0,
 		-0.9, -0.6,  1.0, 1.0,  -0.1, -0.6,  1.0, 1.0,  -0.5, 0.6,  1.0, 1.0,
 		 0.1, -0.6,  0.0, 1.0,   0.5,  0.6,  0.0, 1.0,   0.9, -0.6,  0.0, 1.0,
+		 0.1, -0.6,  0.0, 1.0,   0.9, -0.6,  0.0, 1.0,   0.5,  0.6,  0.0, 1.0,
 	])
 	var normals := PackedFloat32Array()
 	normals.resize(positions.size())
-	for vertex in 9:
+	for vertex in positions.size() / 4:
 		normals[vertex * 4 + 2] = -1.0 if vertex >= 3 and vertex < 6 else 1.0
 
 	var position_id := str(triangle_pass["inputs"]["meshPositions"])
@@ -69,26 +69,40 @@ render(o0)
 	textures[normal_id] = _float_texture(backend, normals)
 	backend.set("_textures", textures)
 	var dimensions: Dictionary = backend.get("_tex_dims")
-	dimensions[position_id] = Vector2i(9, 1)
-	dimensions[normal_id] = Vector2i(9, 1)
+	dimensions[position_id] = Vector2i(12, 1)
+	dimensions[normal_id] = Vector2i(12, 1)
 	backend.set("_tex_dims", dimensions)
 
-	backend.call("_begin_frame")
-	for pass_spec in graph["passes"]:
-		backend.execute_pass(pass_spec)
-		backend.call("_update_frame_bindings", pass_spec)
-	backend.call("_end_frame")
-	rd.submit()
-	rd.sync()
+	for mode in ["depth-cull", "auto", "screen", "fallback"]:
+		triangle_pass["count"] = 9 if mode == "depth-cull" else "screen" if mode == "fallback" else mode
+		triangle_pass["countUniform"] = "vertices"
+		triangle_pass["uniforms"]["vertices"] = 0
+		if mode == "fallback":
+			dimensions.erase(position_id)
+			backend.set("_tex_dims", dimensions)
+		backend.call("_begin_frame")
+		for pass_spec in graph["passes"]:
+			if not backend.execute_pass(pass_spec):
+				printerr("MESH_PIPELINE_TEST: pass failed ", mode)
+				quit(1); return
+			backend.call("_update_frame_bindings", pass_spec)
+		backend.call("_end_frame")
+		rd.submit()
+		rd.sync()
 
-	var image: Image = backend.call("_snapshot_surface")
-	var left := image.get_pixel(18, 32)
-	var right := image.get_pixel(46, 32)
-	var depth_ok: bool = left.r > 0.9 and left.g > 0.9 and left.b > 0.9
-	var cull_ok: bool = abs(right.r - 0.1) < 0.02 and abs(right.g - 0.2) < 0.02 and abs(right.b - 0.3) < 0.02
-	if depth_ok and cull_ok:
-		print("MESH_PIPELINE_TEST: PASS left=", left, " right=", right)
-		quit(0)
-	else:
-		printerr("MESH_PIPELINE_TEST: FAIL left=", left, " right=", right)
-		quit(1)
+		var image: Image = backend.call("_snapshot_surface")
+		var left := image.get_pixel(18, 32)
+		var right := image.get_pixel(46, 32)
+		var depth_ok: bool = left.r > 0.9 and left.g > 0.9 and left.b > 0.9
+		var right_ok: bool
+		if mode == "auto" or mode == "screen":
+			right_ok = right.r > 0.9 and right.g > 0.9 and right.b > 0.9
+		else:
+			right_ok = abs(right.r - 0.1) < 0.02 and abs(right.g - 0.2) < 0.02 and abs(right.b - 0.3) < 0.02
+		if not depth_ok or not right_ok:
+			printerr("MESH_PIPELINE_TEST: FAIL ", mode, " left=", left, " right=", right)
+			quit(1); return
+		print("MESH_PIPELINE_TEST: PASS ", mode, " left=", left, " right=", right)
+	backend.close()
+	rd.free()
+	quit(0)

@@ -1569,7 +1569,7 @@ func _get_shader(cache_key: String, vert_src: String, frag_src: String) -> RID:
 # per-pass `blend: ['src','dst']` array (e.g. pointsBillboardRender's alpha deposit
 # 'ONE'/'ONE_MINUS_SRC_ALPHA') names a WebGL blendFunc pair; map both color and alpha.
 func _blend_factor(name: String) -> int:
-	match name.to_upper():
+	match name.to_upper().replace("-", "_"):
 		"ONE":
 			return RenderingDevice.BLEND_FACTOR_ONE
 		"ZERO":
@@ -1686,6 +1686,8 @@ func _resolve_count(p: Dictionary) -> int:
 					src_id = t
 					break
 		var d: Vector2i = _tex_dims.get(src_id, Vector2i(0, 0))
+		if p.get("drawMode") == "triangles" and (d.x <= 0 or d.y <= 0):
+			return 3
 		return d.x * d.y
 	return max(0, int(c))
 
