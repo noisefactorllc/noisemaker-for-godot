@@ -1222,10 +1222,6 @@ render(o0)
             self.assertEqual(plans[index]["chain"][0]["args"]["color"], [0.5, 0.5, 0.5])
 
     def test_constructor_kwargs_forms_are_rejected_at_parse(self):
-        # Upstream's mixed positional/keyword constructor arguments
-        # (vec3(0.3, 0.2, 0.25, bogus: 1)) are the lang.mixedArguments
-        # experimental form: the port rejects every mixed-argument call at
-        # parse, so these never reach the validator's kwargs guard.
         programs = {
             "vec3_kwargs.dsl": 'search synth\nsolid(color: vec3(0.3, 0.2, 0.25, bogus: 1)).write(o0)\nrender(o0)\n',
             "vec4_kwargs.dsl": 'search synth\nsolid(color: vec4(0.3, 0.2, 0.25, 0.4, bogus: 1)).write(o0)\nrender(o0)\n',
