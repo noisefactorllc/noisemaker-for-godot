@@ -1234,6 +1234,60 @@ render(o0)
                 self.assertEqual(output["diagnostic"]["severity"], "error")
 
 
+    def test_keyword_table_inherited_names_lex_as_identifiers(self):
+        names = ["toString", "valueOf", "constructor", "hasOwnProperty", "__proto__"]
+        lexemes = self._dump("_lex_dump.gd", {f"{name}.lex.dsl": name for name in names})
+        for name in names:
+            with self.subTest(name=name):
+                self.assertEqual([token["type"] for token in lexemes[f"{name}.lex.dsl"]], ["IDENT", "EOF"])
+
+    def test_a_member_segment_through_an_inherited_name_lexes_as_identifiers(self):
+        lexemes = self._dump("_lex_dump.gd", {"member.lex.dsl": "oscKind.toString"})
+        self.assertEqual(
+            [token["type"] for token in lexemes["member.lex.dsl"]],
+            ["IDENT", "DOT", "IDENT", "EOF"],
+        )
+
+    def test_reserved_words_still_lex_as_keywords(self):
+        source = "let render write write3d true false if elif else break continue return search subchain"
+        lexemes = self._dump("_lex_dump.gd", {"reserved.lex.dsl": source})
+        self.assertEqual(
+            [token["type"] for token in lexemes["reserved.lex.dsl"]],
+            [
+                "LET", "RENDER", "WRITE", "WRITE3D", "TRUE", "FALSE", "IF", "ELIF",
+                "ELSE", "BREAK", "CONTINUE", "RETURN", "SEARCH", "SUBCHAIN", "EOF",
+            ],
+        )
+
+    def test_keyword_table_inherited_names_bind_as_let_variables(self):
+        names = ["toString", "valueOf", "constructor", "hasOwnProperty", "__proto__"]
+        programs = {
+            f"bind_{name}.dsl": f"search synth\nlet {name} = 2\nnoise(scaleX: {name}).write(o0)\nrender(o0)\n"
+            for name in names
+        }
+        outputs = self._dump("_validate_dump.gd", programs)
+        for name in names:
+            with self.subTest(name=name):
+                output = outputs[f"bind_{name}.dsl"]
+                self.assertTrue(output["ok"], output)
+                self.assertEqual(output["out"]["diagnostics"], [])
+                bound = output["out"]["plans"][0]["chain"][0]["args"]["scaleX"]
+                self.assertEqual(bound["_varRef"], name)
+                self.assertEqual(bound["value"], 2)
+
+    def test_an_unknown_inherited_member_reaches_condition_validation(self):
+        source = "search synth\nnoise().write(o0)\nif (oscKind.toString) { noise().write(o1) }\nrender(o0)\n"
+        output = self._dump("_validate_dump.gd", {"cond.dsl": source})["cond.dsl"]
+        self.assertTrue(output["ok"], output)
+        self.assertEqual(
+            [
+                {"code": diag["code"], "severity": diag["severity"], "message": diag["message"]}
+                for diag in output["out"]["diagnostics"]
+            ],
+            [{"code": "S001", "severity": "error", "message": "Unknown enum path: 'oscKind.toString'"}],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
 
