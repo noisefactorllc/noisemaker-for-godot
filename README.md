@@ -124,7 +124,8 @@ it runs in-engine, and executes the graph on Godot's `RenderingDevice`.
 - Seven compiler gates (`parity/check_*.mjs`) compare each compiler stage and the effect definitions
   with the reference.
 - `scripts/parity-summary` renders every program in `parity/ledger.json` and compares it with a golden
-  minted from the reference at the pinned revision, at tolerance 2.001 and SSIM 0.98. It needs a GPU.
+  minted from the reference at the pinned revision, using tolerance 2.001 and SSIM 0.98 as the default
+  bound, with per-program bounds defined in `parity/sweep.sh` `tol_for`. It needs a GPU.
 
 The goldens are not committed; the harness mints them from the reference. See
 **[parity/README.md](parity/README.md)**. `reference/01`–`10` are the engine specs shared across all
