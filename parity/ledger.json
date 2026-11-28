@@ -6496,6 +6496,26 @@
     }
   },
   {
+    "program": "synth3dCellularAutomata3dAge",
+    "effect": "synth3d/cellularAutomata3d",
+    "mode": "volumeSize: x32, colorMode: age",
+    "golden": "parity/out/synth3dCellularAutomata3dAge.golden.png",
+    "candidate": "parity/out/synth3dCellularAutomata3dAge.candidate.png",
+    "verdict": "PASS",
+    "max_abs_diff": 0.9999999403953552,
+    "mean_abs_diff": 7.629394076502649e-06,
+    "ssim": 1.0,
+    "passed": true,
+    "skipped": false,
+    "policy": {
+      "tolerance": 2.001,
+      "ssim_min": 0.98,
+      "strict_tolerance": 2.001,
+      "strict_ssim_min": 0.98,
+      "reason": "strict RGBA8 float round-trip allowance"
+    }
+  },
+  {
     "program": "synth3dFlythrough3d",
     "effect": "synth3d/flythrough3d",
     "mode": "default",
